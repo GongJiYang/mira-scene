@@ -1,0 +1,28 @@
+Working...
+S1 已完整实现并通过全部验收命令。
+
+**交付**
+- 单仓：`package.json`、`pnpm-workspace.yaml`、`tsconfig.base.json`、`.gitignore`、`pnpm-lock.yaml`
+- 契约包 `packages/protocol/src/`：7 组枚举、`beatSchema`、`sceneStateSchema`、`parseBeatLenient`（永不抛错、逐字段降级 + warning）、11 种消息的信封 discriminated union + `parseClientMessage` / `parseServerMessage`、`isTurnIdAcceptable`
+- 客户端 `apps/client/src/state/`：`initialState`、纯 `reducer`、`nextBeatToPlay`；Vite + React 页面仅显示 `Mira — S1 skeleton`
+- 测试 4 文件 82 例：S1 §2.3 的 9 项核心场景全部覆盖；协议包每种消息 type 各有合法/非法用例
+- 报告：`docs/tasks/stage-1-report.md`（文件清单、输出摘要、不一致处、歧义）
+
+**验证（实测）**
+```
+pnpm install    → Already up to date
+pnpm test       → 4 files / 82 tests passed
+pnpm typecheck  → protocol + client 均 Done
+vite build      → 28 modules, 成功
+dev 页面        → Chromium 标题/body = "Mira — S1 skeleton"，console errors 0
+```
+`pnpm dev` 可启动（本机 5173/5174 被无关服务占用时自动改用 5175；冒烟用 `vite --port 5199` 隔离验证）。
+
+**需架构侧注意的偏差/歧义**（详见报告 §4–§5）
+- `pnpm-workspace.yaml` 增加 `allowBuilds: esbuild: true`：pnpm 11 默认拦截 esbuild postinstall，否则 `pnpm install` 直接失败；未新增依赖。
+- `parseBeatLenient` 对 say/seq/media/story 的修正也写 warning（按「每处修正都写一条 warning」总述）。
+- `turn_end → idle` 不清 subtitle —— 任务表未规定，按字面实现，与 `BEAT_AUDIO_ENDED` 分支存在不对称。
+- 测试 8 与 §2.2「queue 空且 speaking → idle」在单 beat 播放中场景相互矛盾；当前按 §2.2 实现，测试用「仍有待播 beat」场景覆盖。
+- media 生命周期、error 状态清理范围未定义；`SUBMIT_TEXT` 未携带 text（纯 reducer 不负责传输）。
+
+未 commit；`docs/architecture/` 未修改。

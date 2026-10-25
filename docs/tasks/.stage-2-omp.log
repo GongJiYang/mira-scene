@@ -1,0 +1,25 @@
+Working...
+S2 完成。`pnpm install` / `pnpm test`（123 例，含 S1 的 86 例）/ `pnpm typecheck` / `pnpm smoke` 全绿；`pnpm dev` 无 `.env` 可跑通；报告已写 `docs/tasks/stage-2-report.md`。
+
+## 交付
+
+**服务端** `apps/server`：`node:http` + `ws`（仅 `/ws` 升级、`GET /health`）、`config/ports/log/story/session`、`adapters/mock/{mockLlm,mockStt,mockTts}`、`scripts/smoke.ts`。端口全带 `AbortSignal`；轮次发送守卫（`signal.aborted || turnId !== lastTurnId`），TTS 并发合成、按 seq 串行发送；冒烟含「未结束即打断 → 2s 内无旧轮消息」断言。
+
+**客户端核心** `apps/client/src/core`：zustand store（S1 state + dispatch；connection/mic/debug 独立 slice）、WS 客户端（退避重连、sessionStorage）、MediaRecorder（mime 顺序、<300ms 丢弃、权限错误）、AudioContext（手势解锁、解码后复核 turnId、token 变化即停）、纯函数 `pickNextPlayable`、controller 四意图。**视图模型** `src/view/useStageViewModel.ts` + 纯文字占位 UI。
+
+## 验证证据
+
+- 测试覆盖 §1.8 全部 10 项 + `audio_input→transcript`，§2.8 全部 5 项。
+- 浏览器：文字输入 → `thinking→speaking`、字幕与 visual 同步、`audio ready t1#0`、按时回到 idle；断句时长与 WAV 时长一致（8 字=1.44s），证明解码/播放/onended 真实发生。
+- 打断：turn2 speaking 时输入 → 120ms 后 turn3 thinking、字幕清空，最终只有 `turn_end t1/t3`，无 t2。
+- 剧情：probe→reveal 轮出现 `[media: video letter_reveal]`、`sad/close_up/rain_stop`。
+
+## 需要你裁定的三点（已在报告 §5.6、§6）
+
+1. **刷新恢复会话**：客户端 `session` 消息需把 `currentTurnId` 提升到 `max(本地, 服务端 turnId)`，否则 D12 单调性被破坏（实测被 `stale_turn` 拒绝）。未改 reducer，只初始化计数器。
+2. **短按 PTT / 麦克风失败**：`PTT_UP` 已 dispatch 但不发送输入 → 服务端无轮次 → UI 永久 `thinking`（§2.3 丢弃 + §2.5 无条件 dispatch 的组合结果）。
+3. **TTS 失败**：按 §1.4「任何环节报错」走 `turn_failed`，未用 D10 的纯字幕降级（属 S5）。
+
+限制：自动化面听不到实际声音；本机 Chromium 无麦克风设备（`OverconstrainedError`），音频上行用运行时 stub 验证（仓库无 stub 代码）。
+
+未 commit；`packages/protocol`、`src/state/reducer.ts`、`docs/architecture/` 均未改。

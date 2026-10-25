@@ -1,0 +1,19 @@
+Working...
+完成。
+
+**实现**（`apps/client/src/state/reducer.ts`）：`applyBeatEnded` 改为三分支：
+
+| 条件 | 结果 |
+|---|---|
+| turnId 不匹配 | 丢弃（原引用） |
+| queue 非空 | 保持 `speaking(seq)`，返回原引用 |
+| queue 空 + turnEnded | `toIdle`（idle / queue=[] / subtitle=null） |
+| queue 空 + 未 turnEnded | `thinking` + subtitle=null |
+
+`markTurnEnded` 未改。原失败测试的路径变为 `ENDED(1) → thinking → turn_end → idle`，未触碰该测试。
+
+**测试**（`apps/client/test/reducer.test.ts`）：仅新增 1 例——最后一句 ENDED 后 `turnEnded=false`、`phase={kind:"thinking"}`、`subtitle=null`、`queue=[]`；同轮再收 beat + `STARTED(1)` 后 `speaking(1)`、`subtitle="第二句"`。
+
+**验证**：`pnpm test` 86 passed（4 files，client 23 例）；`pnpm typecheck` 两包 Done。报告已追加「## 第二次修复记录」；未 commit，未动 `docs/architecture/` 与 `packages/protocol/`。
+
+残余（说明未定义，报告中已列）：ENDED→thinking 不清 media、不动 audioStopToken；report §5 旧歧义仍未裁定。

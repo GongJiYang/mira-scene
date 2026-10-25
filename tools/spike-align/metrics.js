@@ -1,0 +1,1520 @@
+// 由 align.py 生成, 勿手改
+window.SPIKE_METRICS = {
+  "master": {
+    "w": 1024,
+    "h": 1536,
+    "path": "assets/parts/master_clean.png",
+    "raw": "assets/raw/master.png",
+    "defringe": {
+      "opaque_alpha": 250,
+      "edge_px": 65937,
+      "replaced_px": 17857,
+      "unreplaced_px": 48080,
+      "inward_px": 3
+    }
+  },
+  "composition": {
+    "characterClipBottom": 1288,
+    "tableTopMinCover": 1288
+  },
+  "params": {
+    "sift_features": 4000,
+    "sift_contrast": 0.008,
+    "ratio": 0.75,
+    "ransac_px": 3.0,
+    "patch_thresh": 12.0,
+    "patch_dilate": 3,
+    "patch_close": 15,
+    "patch_feather_sigma": 4.0,
+    "feather_lo": 0.18,
+    "feather_hi": 0.55,
+    "face_box": [
+      300,
+      320,
+      720,
+      600
+    ],
+    "local_max_px": 20.0,
+    "ring_in": 8,
+    "ring_out": 16,
+    "color_max_de": 3.0,
+    "seam_range": [
+      740,
+      820
+    ],
+    "seam_feather": 48,
+    "cover_min": 0.8
+  },
+  "seam": {
+    "y": 806,
+    "grad": 10.906
+  },
+  "patches": [
+    {
+      "name": "x_eyelid_half",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3939,
+      "kp_diff_pass2": 3154,
+      "pass1": {
+        "good": 947,
+        "inliers": 865,
+        "reproj": 1.052
+      },
+      "pass2": {
+        "good": 764,
+        "inliers": 669,
+        "reproj": 1.0
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.8757,
+      "reproj_px": 1.0,
+      "scale_global": 1.00011,
+      "rotation_deg_global": -0.0097,
+      "translation_global": [
+        -0.19,
+        0.28
+      ],
+      "scale": 0.9996,
+      "rotation_deg": -0.0224,
+      "translation": [
+        -0.05,
+        0.78
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 146,
+        "good": 172,
+        "reproj": 0.928,
+        "applied": true,
+        "correction_px": 0.282,
+        "corner_dev_px": [
+          0.28,
+          0.23,
+          0.18,
+          0.09
+        ],
+        "center_delta": [
+          -0.01,
+          0.16
+        ],
+        "scale": 0.99949,
+        "rotation_deg": -0.0126
+      },
+      "stable_mad": 4.377,
+      "stable_edge_p90_px": 1.0,
+      "flat_noise_de": 1.483,
+      "stable_px": 940475,
+      "region": "eyelid",
+      "region_ref_box": [
+        312,
+        332,
+        710,
+        475
+      ],
+      "region_box": [
+        312,
+        332,
+        710,
+        475
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 6794,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 1.7,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 1071,
+        "px_skin": 228,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 2.655,
+        "de_flat": 1.79,
+        "de_skin": 1.104,
+        "shift_lab": [
+          -0.35,
+          0.29,
+          -0.46
+        ],
+        "shift_de": 0.652,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 3.651,
+      "mask_de_after": 3.689,
+      "mask_flat_px": 29261,
+      "mask_flat_de_before": 1.136,
+      "mask_flat_de_after": 1.031,
+      "mask_bias_before": 0.47,
+      "mask_bias_after": 0.293,
+      "strong_px": 1068,
+      "ghost_px": 0,
+      "ghost_ratio": 0.0,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 4.68,
+        "residual_de": 0.0
+      },
+      "id": "eyelid_half",
+      "out": "assets/parts/eyelid_half.png",
+      "prefix": "eyelid"
+    },
+    {
+      "name": "x_eyelid_closed",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3937,
+      "kp_diff_pass2": 3152,
+      "pass1": {
+        "good": 639,
+        "inliers": 254,
+        "reproj": 1.804
+      },
+      "pass2": {
+        "good": 507,
+        "inliers": 202,
+        "reproj": 1.655
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3984,
+      "reproj_px": 1.655,
+      "scale_global": 1.04418,
+      "rotation_deg_global": 0.4045,
+      "translation_global": [
+        -134.59,
+        29.26
+      ],
+      "scale": 1.05086,
+      "rotation_deg": 0.2369,
+      "translation": [
+        -140.04,
+        23.27
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 86,
+        "good": 129,
+        "reproj": 1.555,
+        "applied": true,
+        "correction_px": 6.708,
+        "corner_dev_px": [
+          5.71,
+          6.71,
+          3.76,
+          5.15
+        ],
+        "center_delta": [
+          -0.06,
+          -5.14
+        ],
+        "scale": 1.0064,
+        "rotation_deg": -0.1675
+      },
+      "stable_mad": 11.857,
+      "stable_edge_p90_px": 7.991,
+      "flat_noise_de": 2.175,
+      "stable_px": 750947,
+      "region": "eyelid",
+      "region_ref_box": [
+        312,
+        332,
+        710,
+        475
+      ],
+      "region_box": [
+        312,
+        332,
+        710,
+        475
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 19131,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 1.7,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 829,
+        "px_skin": 167,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 4.729,
+        "de_flat": 2.013,
+        "de_skin": 1.19,
+        "shift_lab": [
+          -0.8,
+          0.49,
+          -0.01
+        ],
+        "shift_de": 0.932,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 8.209,
+      "mask_de_after": 8.173,
+      "mask_flat_px": 28283,
+      "mask_flat_de_before": 2.111,
+      "mask_flat_de_after": 1.739,
+      "mask_bias_before": 1.61,
+      "mask_bias_after": 1.153,
+      "strong_px": 6754,
+      "ghost_px": 0,
+      "ghost_ratio": 0.0,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 11.03,
+        "residual_de": 0.0
+      },
+      "id": "eyelid_closed",
+      "out": "assets/parts/eyelid_closed.png",
+      "prefix": "eyelid"
+    },
+    {
+      "name": "x_brow_sad",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3933,
+      "kp_diff_pass2": 3132,
+      "pass1": {
+        "good": 737,
+        "inliers": 319,
+        "reproj": 1.819
+      },
+      "pass2": {
+        "good": 563,
+        "inliers": 241,
+        "reproj": 1.425
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.4281,
+      "reproj_px": 1.425,
+      "scale_global": 1.11414,
+      "rotation_deg_global": -0.0741,
+      "translation_global": [
+        -178.14,
+        37.47
+      ],
+      "scale": 1.11325,
+      "rotation_deg": 0.0389,
+      "translation": [
+        -175.97,
+        32.84
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 137,
+        "good": 187,
+        "reproj": 1.648,
+        "applied": true,
+        "correction_px": 4.19,
+        "corner_dev_px": [
+          4.1,
+          3.21,
+          4.19,
+          3.32
+        ],
+        "center_delta": [
+          0.79,
+          -3.61
+        ],
+        "scale": 0.9992,
+        "rotation_deg": 0.113
+      },
+      "stable_mad": 12.816,
+      "stable_edge_p90_px": 7.194,
+      "flat_noise_de": 2.316,
+      "stable_px": 833502,
+      "region": "brow",
+      "region_ref_box": [
+        310,
+        300,
+        712,
+        432
+      ],
+      "region_box": [
+        310,
+        300,
+        712,
+        432
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 8783,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 1.8233,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 845,
+        "px_skin": 189,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 4.721,
+        "de_flat": 1.851,
+        "de_skin": 1.253,
+        "shift_lab": [
+          -0.72,
+          0.59,
+          -0.18
+        ],
+        "shift_de": 0.95,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 4.851,
+      "mask_de_after": 4.762,
+      "mask_flat_px": 28469,
+      "mask_flat_de_before": 1.785,
+      "mask_flat_de_after": 1.164,
+      "mask_bias_before": 1.323,
+      "mask_bias_after": 0.306,
+      "strong_px": 499,
+      "ghost_px": 0,
+      "ghost_ratio": 0.0,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 5.7,
+        "residual_de": 0.01
+      },
+      "id": "brow_sad",
+      "out": "assets/parts/brow_sad.png",
+      "prefix": "brow"
+    },
+    {
+      "name": "x_brow_raised",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3939,
+      "kp_diff_pass2": 3086,
+      "pass1": {
+        "good": 568,
+        "inliers": 225,
+        "reproj": 1.709
+      },
+      "pass2": {
+        "good": 436,
+        "inliers": 161,
+        "reproj": 1.558
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3693,
+      "reproj_px": 1.558,
+      "scale_global": 1.03296,
+      "rotation_deg_global": 0.1221,
+      "translation_global": [
+        -133.91,
+        41.95
+      ],
+      "scale": 1.03763,
+      "rotation_deg": 0.3451,
+      "translation": [
+        -134.55,
+        35.29
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 87,
+        "good": 137,
+        "reproj": 1.415,
+        "applied": true,
+        "correction_px": 3.717,
+        "corner_dev_px": [
+          3.72,
+          2.97,
+          2.59,
+          1.31
+        ],
+        "center_delta": [
+          0.64,
+          -2.26
+        ],
+        "scale": 1.00452,
+        "rotation_deg": 0.223
+      },
+      "stable_mad": 12.805,
+      "stable_edge_p90_px": 7.991,
+      "flat_noise_de": 2.693,
+      "stable_px": 744072,
+      "region": "brow",
+      "region_ref_box": [
+        310,
+        300,
+        712,
+        432
+      ],
+      "region_box": [
+        310,
+        284,
+        712,
+        432
+      ],
+      "region_grow_steps": 1,
+      "mask_px": 98990,
+      "mask_bbox": [
+        310,
+        284,
+        711,
+        603
+      ],
+      "mask_change_px": 25335,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 1.6638,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 12287,
+        "px_flat": 803,
+        "px_skin": 197,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 4.703,
+        "de_flat": 2.025,
+        "de_skin": 1.433,
+        "shift_lab": [
+          -0.34,
+          0.8,
+          0.23
+        ],
+        "shift_de": 0.898,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 8.393,
+      "mask_de_after": 8.28,
+      "mask_flat_px": 28007,
+      "mask_flat_de_before": 1.988,
+      "mask_flat_de_after": 1.415,
+      "mask_bias_before": 1.489,
+      "mask_bias_after": 0.58,
+      "strong_px": 6430,
+      "ghost_px": 0,
+      "ghost_ratio": 0.0,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 11481,
+      "master_edge_cover": 0.9848,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 11.45,
+        "residual_de": 0.24
+      },
+      "id": "brow_raised",
+      "out": "assets/parts/brow_raised.png",
+      "prefix": "brow"
+    },
+    {
+      "name": "x_mouth_small",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3943,
+      "kp_diff_pass2": 3086,
+      "pass1": {
+        "good": 750,
+        "inliers": 174,
+        "reproj": 1.927
+      },
+      "pass2": {
+        "good": 529,
+        "inliers": 121,
+        "reproj": 1.698
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.2287,
+      "reproj_px": 1.698,
+      "scale_global": 1.0549,
+      "rotation_deg_global": -0.4842,
+      "translation_global": [
+        -154.83,
+        67.89
+      ],
+      "scale": 1.06423,
+      "rotation_deg": -0.2478,
+      "translation": [
+        -156.54,
+        51.85
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 128,
+        "good": 197,
+        "reproj": 1.578,
+        "applied": true,
+        "correction_px": 11.979,
+        "corner_dev_px": [
+          11.98,
+          11.31,
+          9.44,
+          8.58
+        ],
+        "center_delta": [
+          2.53,
+          -9.8
+        ],
+        "scale": 1.00884,
+        "rotation_deg": 0.2365
+      },
+      "stable_mad": 19.017,
+      "stable_edge_p90_px": 12.384,
+      "flat_noise_de": 4.506,
+      "stable_px": 788845,
+      "region": "mouth",
+      "region_ref_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 7415,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 2.9726,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 848,
+        "px_skin": 184,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 5.497,
+        "de_flat": 2.089,
+        "de_skin": 1.474,
+        "shift_lab": [
+          0.9,
+          -0.31,
+          -0.72
+        ],
+        "shift_de": 1.188,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 4.573,
+      "mask_de_after": 4.614,
+      "mask_flat_px": 28399,
+      "mask_flat_de_before": 1.224,
+      "mask_flat_de_after": 1.202,
+      "mask_bias_before": 0.735,
+      "mask_bias_after": 0.671,
+      "strong_px": 397,
+      "ghost_px": 2,
+      "ghost_ratio": 0.005,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 4.91,
+        "residual_de": 0.01
+      },
+      "id": "mouth_small",
+      "out": "assets/parts/mouth_small.png",
+      "prefix": "mouth"
+    },
+    {
+      "name": "x_mouth_open",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3950,
+      "kp_diff_pass2": 3088,
+      "pass1": {
+        "good": 668,
+        "inliers": 196,
+        "reproj": 1.631
+      },
+      "pass2": {
+        "good": 470,
+        "inliers": 143,
+        "reproj": 1.73
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3043,
+      "reproj_px": 1.73,
+      "scale_global": 1.05919,
+      "rotation_deg_global": 0.1609,
+      "translation_global": [
+        -138.43,
+        21.18
+      ],
+      "scale": 1.02736,
+      "rotation_deg": 0.2879,
+      "translation": [
+        -114.71,
+        33.03
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 156,
+        "good": 199,
+        "reproj": 1.549,
+        "applied": true,
+        "correction_px": 10.61,
+        "corner_dev_px": [
+          10.61,
+          5.44,
+          10.38,
+          4.97
+        ],
+        "center_delta": [
+          3.29,
+          0.06
+        ],
+        "scale": 0.96995,
+        "rotation_deg": 0.127
+      },
+      "stable_mad": 19.256,
+      "stable_edge_p90_px": 13.591,
+      "flat_noise_de": 4.671,
+      "stable_px": 720289,
+      "region": "mouth",
+      "region_ref_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 5210,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 2.9726,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 744,
+        "px_skin": 188,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 5.008,
+        "de_flat": 1.923,
+        "de_skin": 1.39,
+        "shift_lab": [
+          -0.29,
+          0.7,
+          -0.85
+        ],
+        "shift_de": 1.137,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 4.866,
+      "mask_de_after": 4.809,
+      "mask_flat_px": 27879,
+      "mask_flat_de_before": 1.71,
+      "mask_flat_de_after": 1.288,
+      "mask_bias_before": 1.243,
+      "mask_bias_after": 0.618,
+      "strong_px": 386,
+      "ghost_px": 0,
+      "ghost_ratio": 0.0,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 4.31,
+        "residual_de": 0.01
+      },
+      "id": "mouth_open",
+      "out": "assets/parts/mouth_open.png",
+      "prefix": "mouth"
+    },
+    {
+      "name": "x_mouth_o",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3929,
+      "kp_diff_pass2": 2974,
+      "pass1": {
+        "good": 594,
+        "inliers": 207,
+        "reproj": 1.806
+      },
+      "pass2": {
+        "good": 427,
+        "inliers": 131,
+        "reproj": 1.926
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3068,
+      "reproj_px": 1.926,
+      "scale_global": 0.88741,
+      "rotation_deg_global": 0.6609,
+      "translation_global": [
+        -22.21,
+        46.38
+      ],
+      "scale": 0.92029,
+      "rotation_deg": 0.5199,
+      "translation": [
+        -44.89,
+        20.92
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 107,
+        "good": 188,
+        "reproj": 1.531,
+        "applied": true,
+        "correction_px": 19.01,
+        "corner_dev_px": [
+          19.01,
+          18.07,
+          10.97,
+          9.25
+        ],
+        "center_delta": [
+          -1.91,
+          -11.49
+        ],
+        "scale": 1.03705,
+        "rotation_deg": -0.141
+      },
+      "stable_mad": 14.4,
+      "stable_edge_p90_px": 6.197,
+      "flat_noise_de": 2.534,
+      "stable_px": 589877,
+      "region": "mouth",
+      "region_ref_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 6096,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 2.9726,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 643,
+        "px_skin": 181,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 6.404,
+        "de_flat": 3.458,
+        "de_skin": 3.806,
+        "shift_lab": [
+          2.53,
+          1.35,
+          2.2
+        ],
+        "shift_de": 3.616,
+        "correction": "applied",
+        "pass": false
+      },
+      "mask_de_before": 6.691,
+      "mask_de_after": 5.879,
+      "mask_flat_px": 26431,
+      "mask_flat_de_before": 3.729,
+      "mask_flat_de_after": 1.739,
+      "mask_bias_before": 3.497,
+      "mask_bias_after": 1.167,
+      "strong_px": 26,
+      "ghost_px": 0,
+      "ghost_ratio": 0.0,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 4.28,
+        "residual_de": 0.01
+      },
+      "id": "mouth_o",
+      "out": "assets/parts/mouth_o.png",
+      "prefix": "mouth"
+    },
+    {
+      "name": "x_mouth_smile",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3945,
+      "kp_diff_pass2": 3026,
+      "pass1": {
+        "good": 651,
+        "inliers": 216,
+        "reproj": 1.821
+      },
+      "pass2": {
+        "good": 454,
+        "inliers": 167,
+        "reproj": 1.732
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3678,
+      "reproj_px": 1.732,
+      "scale_global": 1.00461,
+      "rotation_deg_global": 0.0407,
+      "translation_global": [
+        -114.98,
+        40.06
+      ],
+      "scale": 1.004,
+      "rotation_deg": 0.2753,
+      "translation": [
+        -113.61,
+        29.05
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 118,
+        "good": 191,
+        "reproj": 1.328,
+        "applied": true,
+        "correction_px": 9.729,
+        "corner_dev_px": [
+          9.49,
+          7.77,
+          9.73,
+          8.07
+        ],
+        "center_delta": [
+          -0.73,
+          -8.71
+        ],
+        "scale": 0.99939,
+        "rotation_deg": 0.2346
+      },
+      "stable_mad": 16.578,
+      "stable_edge_p90_px": 11.394,
+      "flat_noise_de": 3.651,
+      "stable_px": 694413,
+      "region": "mouth",
+      "region_ref_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 8435,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 2.9726,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 800,
+        "px_skin": 193,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 6.295,
+        "de_flat": 2.343,
+        "de_skin": 2.068,
+        "shift_lab": [
+          1.77,
+          0.18,
+          -0.52
+        ],
+        "shift_de": 1.857,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 5.299,
+      "mask_de_after": 4.856,
+      "mask_flat_px": 27883,
+      "mask_flat_de_before": 2.097,
+      "mask_flat_de_after": 1.362,
+      "mask_bias_before": 1.843,
+      "mask_bias_after": 0.84,
+      "strong_px": 380,
+      "ghost_px": 3,
+      "ghost_ratio": 0.0079,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 5.96,
+        "residual_de": 0.01
+      },
+      "id": "mouth_smile",
+      "out": "assets/parts/mouth_smile.png",
+      "prefix": "mouth"
+    },
+    {
+      "name": "x_mouth_sad",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3945,
+      "kp_diff_pass2": 3156,
+      "pass1": {
+        "good": 792,
+        "inliers": 174,
+        "reproj": 1.795
+      },
+      "pass2": {
+        "good": 593,
+        "inliers": 137,
+        "reproj": 1.809
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.231,
+      "reproj_px": 1.809,
+      "scale_global": 1.11045,
+      "rotation_deg_global": 0.0979,
+      "translation_global": [
+        -180.3,
+        57.45
+      ],
+      "scale": 1.11624,
+      "rotation_deg": 0.6408,
+      "translation": [
+        -180.42,
+        37.59
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 112,
+        "good": 193,
+        "reproj": 1.73,
+        "applied": true,
+        "correction_px": 13.925,
+        "corner_dev_px": [
+          13.93,
+          10.13,
+          12.79,
+          8.5
+        ],
+        "center_delta": [
+          -0.39,
+          -11.2
+        ],
+        "scale": 1.00521,
+        "rotation_deg": 0.543
+      },
+      "stable_mad": 18.307,
+      "stable_edge_p90_px": 11.984,
+      "flat_noise_de": 3.571,
+      "stable_px": 847754,
+      "region": "mouth",
+      "region_ref_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_box": [
+        408,
+        446,
+        614,
+        604
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 96752,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 7368,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 2.9726,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 11768,
+        "px_flat": 754,
+        "px_skin": 203,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 6.022,
+        "de_flat": 2.556,
+        "de_skin": 2.003,
+        "shift_lab": [
+          1.53,
+          -0.33,
+          -0.8
+        ],
+        "shift_de": 1.757,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 5.16,
+      "mask_de_after": 5.072,
+      "mask_flat_px": 28066,
+      "mask_flat_de_before": 1.419,
+      "mask_flat_de_after": 1.398,
+      "mask_bias_before": 0.988,
+      "mask_bias_after": 0.876,
+      "strong_px": 229,
+      "ghost_px": 3,
+      "ghost_ratio": 0.0131,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 10987,
+      "master_edge_cover": 0.9997,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 4.97,
+        "residual_de": 0.01
+      },
+      "id": "mouth_sad",
+      "out": "assets/parts/mouth_sad.png",
+      "prefix": "mouth"
+    },
+    {
+      "name": "x_blush",
+      "kind": "expr",
+      "kp_master": 3889,
+      "kp_diff": 3935,
+      "kp_diff_pass2": 3083,
+      "pass1": {
+        "good": 705,
+        "inliers": 146,
+        "reproj": 2.055
+      },
+      "pass2": {
+        "good": 517,
+        "inliers": 97,
+        "reproj": 1.946
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.1876,
+      "reproj_px": 1.946,
+      "scale_global": 1.06847,
+      "rotation_deg_global": 0.165,
+      "translation_global": [
+        -152.09,
+        53.78
+      ],
+      "scale": 1.07566,
+      "rotation_deg": 0.2716,
+      "translation": [
+        -157.17,
+        37.81
+      ],
+      "local": {
+        "ok": true,
+        "inliers": 127,
+        "good": 189,
+        "reproj": 1.383,
+        "applied": true,
+        "correction_px": 13.578,
+        "corner_dev_px": [
+          13.58,
+          12.55,
+          11.86,
+          10.67
+        ],
+        "center_delta": [
+          -1.39,
+          -12.0
+        ],
+        "scale": 1.00672,
+        "rotation_deg": 0.1067
+      },
+      "stable_mad": 17.975,
+      "stable_edge_p90_px": 11.984,
+      "flat_noise_de": 3.892,
+      "stable_px": 789785,
+      "region": "blush",
+      "region_ref_box": [
+        312,
+        396,
+        710,
+        548
+      ],
+      "region_box": [
+        312,
+        396,
+        710,
+        548
+      ],
+      "region_grow_steps": 0,
+      "mask_px": 99383,
+      "mask_bbox": [
+        310,
+        300,
+        711,
+        603
+      ],
+      "mask_change_px": 8696,
+      "mask_feature_px": 96752,
+      "dropped_components": 0,
+      "mask_region_cover": 1.6428,
+      "ring": {
+        "in_px": 8,
+        "out_px": 16,
+        "px": 13040,
+        "px_flat": 833,
+        "px_skin": 189,
+        "skin_fallback": false,
+        "min_l": 45,
+        "de": 4.897,
+        "de_flat": 1.697,
+        "de_skin": 1.205,
+        "shift_lab": [
+          0.76,
+          0.34,
+          0.3
+        ],
+        "shift_de": 0.888,
+        "correction": "applied",
+        "pass": true
+      },
+      "mask_de_before": 5.563,
+      "mask_de_after": 5.678,
+      "mask_flat_px": 25381,
+      "mask_flat_de_before": 2.834,
+      "mask_flat_de_after": 3.126,
+      "mask_bias_before": 2.396,
+      "mask_bias_after": 2.758,
+      "strong_px": 0,
+      "ghost_px": 0,
+      "ghost_ratio": null,
+      "outside_master_alpha_px": 0,
+      "master_edge_px": 12734,
+      "master_edge_cover": 0.9165,
+      "cover_pass": true,
+      "deliver": {
+        "composited_de": 4.59,
+        "residual_de": 0.56
+      },
+      "id": "blush",
+      "out": "assets/parts/blush.png",
+      "prefix": "blush"
+    },
+    {
+      "name": "a1_arm_cup",
+      "kind": "gest",
+      "kp_master": 3889,
+      "kp_diff": 3936,
+      "kp_diff_pass2": 1639,
+      "pass1": {
+        "good": 552,
+        "inliers": 142,
+        "reproj": 1.749
+      },
+      "pass2": {
+        "good": 283,
+        "inliers": 119,
+        "reproj": 1.666
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.4205,
+      "reproj_px": 1.666,
+      "scale_global": 1.06753,
+      "rotation_deg_global": -0.1945,
+      "translation_global": [
+        -152.5,
+        20.4
+      ],
+      "scale": 1.06753,
+      "rotation_deg": -0.1945,
+      "translation": [
+        -152.5,
+        20.4
+      ],
+      "local": null,
+      "stable_mad": 15.472,
+      "stable_edge_p90_px": 3.197,
+      "flat_noise_de": 1.912,
+      "stable_px": 310241,
+      "seam": {
+        "y": 806,
+        "feather": 48,
+        "grad": 10.906,
+        "search": [
+          740,
+          820
+        ]
+      },
+      "patch_px": 521190,
+      "data_end_y": 1357,
+      "data_missing_px": 172888,
+      "master_edge_px": 43796,
+      "master_edge_cover": 0.6151,
+      "id": "arm_cup",
+      "out": "assets/parts/arm_cup.png",
+      "prefix": "arm"
+    },
+    {
+      "name": "a2_arm_polaroid",
+      "kind": "gest",
+      "kp_master": 3889,
+      "kp_diff": 3949,
+      "kp_diff_pass2": 1566,
+      "pass1": {
+        "good": 548,
+        "inliers": 156,
+        "reproj": 1.942
+      },
+      "pass2": {
+        "good": 284,
+        "inliers": 95,
+        "reproj": 1.706
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3345,
+      "reproj_px": 1.706,
+      "scale_global": 1.00938,
+      "rotation_deg_global": 0.08,
+      "translation_global": [
+        -111.68,
+        32.17
+      ],
+      "scale": 1.00938,
+      "rotation_deg": 0.08,
+      "translation": [
+        -111.68,
+        32.17
+      ],
+      "local": null,
+      "stable_mad": 14.19,
+      "stable_edge_p90_px": 3.197,
+      "flat_noise_de": 1.771,
+      "stable_px": 304973,
+      "seam": {
+        "y": 806,
+        "feather": 48,
+        "grad": 10.906,
+        "search": [
+          740,
+          820
+        ]
+      },
+      "patch_px": 455415,
+      "data_end_y": 1298,
+      "data_missing_px": 231788,
+      "master_edge_px": 43796,
+      "master_edge_cover": 0.5212,
+      "id": "arm_polaroid",
+      "out": "assets/parts/arm_polaroid.png",
+      "prefix": "arm"
+    },
+    {
+      "name": "a3_arm_camera",
+      "kind": "gest",
+      "kp_master": 3889,
+      "kp_diff": 3947,
+      "kp_diff_pass2": 1473,
+      "pass1": {
+        "good": 516,
+        "inliers": 198,
+        "reproj": 1.679
+      },
+      "pass2": {
+        "good": 276,
+        "inliers": 135,
+        "reproj": 1.945
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.4891,
+      "reproj_px": 1.945,
+      "scale_global": 1.07348,
+      "rotation_deg_global": 0.1178,
+      "translation_global": [
+        -148.02,
+        15.84
+      ],
+      "scale": 1.07348,
+      "rotation_deg": 0.1178,
+      "translation": [
+        -148.02,
+        15.84
+      ],
+      "local": null,
+      "stable_mad": 13.551,
+      "stable_edge_p90_px": 2.8,
+      "flat_noise_de": 1.74,
+      "stable_px": 307598,
+      "seam": {
+        "y": 806,
+        "feather": 48,
+        "grad": 10.906,
+        "search": [
+          740,
+          820
+        ]
+      },
+      "patch_px": 518457,
+      "data_end_y": 1363,
+      "data_missing_px": 166320,
+      "master_edge_px": 43796,
+      "master_edge_cover": 0.6312,
+      "id": "arm_camera",
+      "out": "assets/parts/arm_camera.png",
+      "prefix": "arm"
+    },
+    {
+      "name": "a4_arm_phone",
+      "kind": "gest",
+      "kp_master": 3889,
+      "kp_diff": 3930,
+      "kp_diff_pass2": 1446,
+      "pass1": {
+        "good": 669,
+        "inliers": 186,
+        "reproj": 1.762
+      },
+      "pass2": {
+        "good": 321,
+        "inliers": 102,
+        "reproj": 1.572
+      },
+      "used_pass": 2,
+      "fallback": false,
+      "inlier_ratio": 0.3178,
+      "reproj_px": 1.572,
+      "scale_global": 1.15752,
+      "rotation_deg_global": -0.4271,
+      "translation_global": [
+        -217.26,
+        18.67
+      ],
+      "scale": 1.15752,
+      "rotation_deg": -0.4271,
+      "translation": [
+        -217.26,
+        18.67
+      ],
+      "local": null,
+      "stable_mad": 17.275,
+      "stable_edge_p90_px": 3.597,
+      "flat_noise_de": 2.078,
+      "stable_px": 310258,
+      "seam": {
+        "y": 806,
+        "feather": 48,
+        "grad": 10.906,
+        "search": [
+          740,
+          820
+        ]
+      },
+      "patch_px": 624868,
+      "data_end_y": 1467,
+      "data_missing_px": 66828,
+      "master_edge_px": 43796,
+      "master_edge_cover": 0.8378,
+      "id": "arm_phone",
+      "out": "assets/parts/arm_phone.png",
+      "prefix": "arm"
+    }
+  ],
+  "table": {
+    "source": "b4_fg_table_v_checker.png",
+    "src_size": [
+      1254,
+      1254
+    ],
+    "out_size": [
+      1024,
+      1024
+    ],
+    "bg_fraction": 0.7095,
+    "alpha_px": 304692,
+    "opaque_top_y": 749,
+    "row_cover_bottom": 1.0,
+    "out": "assets/parts/fg_table_v.png"
+  }
+};

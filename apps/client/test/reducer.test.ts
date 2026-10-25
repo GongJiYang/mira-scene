@@ -1,0 +1,446 @@
+import { describe, expect, it } from "vitest";
+import type { Beat, SceneState, ServerMessage } from "@mira/protocol";
+import { initialState, nextBeatToPlay, reducer, type ClientAction, type ClientState } from "../src/state";
+
+const makeBeat = (seq: number, overrides: Partial<Beat> = {}): Beat => ({
+  seq,
+  say: `第 ${seq} 句`,
+  emotion: "warm",
+  pose: "sit",
+  action: null,
+  camera: null,
+  fx: null,
+  media: null,
+  story: null,
+  ...overrides,
+});
+
+const envelope = { v: 1, sessionId: "session-1", ts: 1_700_000_000_000 } as const;
+
+const beatMsg = (turnId: number, beat: Beat): ServerMessage => ({
+  ...envelope,
+  type: "beat",
+  turnId,
+  seq: beat.seq,
+  payload: { beat },
+});
+
+const turnEndMsg = (turnId: number): ServerMessage => ({
+  ...envelope,
+  type: "turn_end",
+  turnId,
+  seq: 0,
+  payload: { reason: "done" },
+});
+
+const errorMsg = (turnId: number): ServerMessage => ({
+  ...envelope,
+  type: "error",
+  turnId,
+  seq: 0,
+  payload: { code: "llm_timeout", message: "超时", retryable: true },
+});
+
+const makeSnapshot = (overrides: Partial<SceneState> = {}): SceneState => ({
+  node: "probe",
+  trust: 2,
+  flags: ["met"],
+  emotion: "sad",
+  pose: "look_down",
+  camera: "close_up",
+  fx: "lights_dim",
+  turnCount: 4,
+  ...overrides,
+});
+
+const sessionMsg = (turnId: number, snapshot: SceneState): ServerMessage => ({
+  ...envelope,
+  type: "session",
+  turnId,
+  seq: 0,
+  payload: { snapshot },
+});
+
+const stateSnapshotMsg = (turnId: number, snapshot: SceneState): ServerMessage => ({
+  ...envelope,
+  type: "state_snapshot",
+  turnId,
+  seq: 0,
+  payload: { snapshot },
+});
+
+const run = (state: ClientState, ...actions: ClientAction[]): ClientState => actions.reduce(reducer, state);
+
+const idleWithTurn = (): ClientState =>
+  run(initialState, { type: "SUBMIT_TEXT" }, { type: "SERVER_MESSAGE", message: turnEndMsg(1) });
+
+const listeningWithTurn = (): ClientState => run(initialState, { type: "PTT_DOWN" });
+
+const thinkingWithTurn = (): ClientState =>
+  run(initialState, { type: "PTT_DOWN" }, { type: "PTT_UP" });
+
+const speakingWithTurn = (): ClientState =>
+  run(
+    initialState,
+    { type: "SUBMIT_TEXT" },
+    {
+      type: "SERVER_MESSAGE",
+      message: beatMsg(
+        1,
+        makeBeat(0, { say: "你来了。", media: { type: "video", id: "letter_reveal" } }),
+      ),
+    },
+    { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+  );
+
+describe("turnId 过滤（D3）", () => {
+  const phases: Array<[string, () => ClientState]> = [
+    ["idle", idleWithTurn],
+    ["listening", listeningWithTurn],
+    ["thinking", thinkingWithTurn],
+    ["speaking", speakingWithTurn],
+  ];
+
+  it.each(phases)("%s 状态下丢弃旧轮次的 beat / turn_end / error", (label, build) => {
+    const state = build();
+    expect(state.phase.kind).toBe(label);
+    expect(state.currentTurnId).toBe(1);
+    const staleTurn = state.currentTurnId - 1;
+    const staleMessages = [
+      beatMsg(staleTurn, makeBeat(0)),
+      turnEndMsg(staleTurn),
+      errorMsg(staleTurn),
+    ];
+    for (const message of staleMessages) {
+      expect(reducer(state, { type: "SERVER_MESSAGE", message })).toBe(state);
+    }
+  });
+
+  it("打断后迟到的上一轮 turn_end 不会把 phase 改为 idle", () => {
+    const listening = reducer(speakingWithTurn(), { type: "PTT_DOWN" });
+    const afterLateTurnEnd = reducer(listening, {
+      type: "SERVER_MESSAGE",
+      message: turnEndMsg(1),
+    });
+    expect(afterLateTurnEnd).toBe(listening);
+    expect(afterLateTurnEnd.phase.kind).toBe("listening");
+  });
+
+  it("打断后旧轮次的音频回调（STARTED / ENDED）被丢弃", () => {
+    const listening = reducer(speakingWithTurn(), { type: "PTT_DOWN" });
+    expect(reducer(listening, { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 })).toBe(listening);
+    expect(reducer(listening, { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 })).toBe(listening);
+  });
+
+  it("连续 SUBMIT_TEXT 三次后只接受最后一轮的 beat", () => {
+    let state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SUBMIT_TEXT" },
+      { type: "SUBMIT_TEXT" },
+    );
+    expect(state.currentTurnId).toBe(3);
+
+    state = run(
+      state,
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0)) },
+      { type: "SERVER_MESSAGE", message: beatMsg(2, makeBeat(0)) },
+    );
+    expect(state.queue).toHaveLength(0);
+
+    state = reducer(state, { type: "SERVER_MESSAGE", message: beatMsg(3, makeBeat(1)) });
+    expect(state.queue.map((beat) => beat.seq)).toEqual([1]);
+  });
+});
+
+describe("打断与输入", () => {
+  it("speaking 时 PTT_DOWN：立即进入 listening 并清空当前轮", () => {
+    const state = speakingWithTurn();
+    const tokenBefore = state.audioStopToken;
+    expect(state.subtitle).not.toBeNull();
+    expect(state.media).not.toBeNull();
+
+    const next = reducer(state, { type: "PTT_DOWN" });
+    expect(next.phase).toEqual({ kind: "listening" });
+    expect(next.queue).toEqual([]);
+    expect(next.currentTurnId).toBe(2);
+    expect(next.audioStopToken).toBe(tokenBefore + 1);
+    expect(next.subtitle).toBeNull();
+    expect(next.media).toBeNull();
+  });
+
+  it("PTT_UP 只在 listening 时生效", () => {
+    const listening = listeningWithTurn();
+    const thinking = reducer(listening, { type: "PTT_UP" });
+    expect(thinking.phase).toEqual({ kind: "thinking" });
+    expect(thinking.currentTurnId).toBe(listening.currentTurnId);
+    expect(reducer(thinking, { type: "PTT_UP" })).toBe(thinking);
+  });
+
+  it("SUBMIT_TEXT 的清理与 PTT_DOWN 相同，但进入 thinking", () => {
+    const speaking = speakingWithTurn();
+    const tokenBefore = speaking.audioStopToken;
+    const next = reducer(speaking, { type: "SUBMIT_TEXT" });
+    expect(next.phase).toEqual({ kind: "thinking" });
+    expect(next.currentTurnId).toBe(speaking.currentTurnId + 1);
+    expect(next.queue).toEqual([]);
+    expect(next.subtitle).toBeNull();
+    expect(next.media).toBeNull();
+    expect(next.audioStopToken).toBe(tokenBefore + 1);
+  });
+
+  it("RETRY 只在 error 时回到 idle", () => {
+    const errorState = reducer(
+      reducer(initialState, { type: "SUBMIT_TEXT" }),
+      { type: "SERVER_MESSAGE", message: errorMsg(1) },
+    );
+    expect(errorState.phase).toEqual({
+      kind: "error",
+      code: "llm_timeout",
+      message: "超时",
+      retryable: true,
+    });
+    expect(reducer(initialState, { type: "RETRY" })).toBe(initialState);
+    expect(reducer(errorState, { type: "RETRY" }).phase).toEqual({ kind: "idle" });
+  });
+
+  it("error 清空 queue 与 subtitle，并让 audioStopToken +1", () => {
+    let state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "第一句" })) },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(1, { say: "第二句" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+    );
+    // 前置：正在播放 seq 0，seq 1 还在 queue 中。
+    expect(state.phase).toEqual({ kind: "speaking", seq: 0 });
+    expect(state.queue.map((beat) => beat.seq)).toEqual([1]);
+    expect(state.subtitle).toBe("第一句");
+    const tokenBefore = state.audioStopToken;
+
+    state = reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(1) });
+    expect(state.phase).toEqual({
+      kind: "error",
+      code: "llm_timeout",
+      message: "超时",
+      retryable: true,
+    });
+    expect(state.queue).toEqual([]);
+    expect(state.subtitle).toBeNull();
+    expect(state.audioStopToken).toBe(tokenBefore + 1);
+  });
+});
+
+describe("beat 与视觉/字幕", () => {
+  it("收到 beat 时 visual 和 subtitle 不变，BEAT_AUDIO_STARTED 之后才生效", () => {
+    const incoming = makeBeat(0, {
+      say: "雨停了吗？",
+      emotion: "sad",
+      pose: "look_down",
+      action: "glance_door",
+      camera: "close_up",
+      fx: "rain_stop",
+    });
+    let state = reducer(initialState, { type: "SUBMIT_TEXT" });
+    state = reducer(state, { type: "SERVER_MESSAGE", message: beatMsg(1, incoming) });
+    expect(state.visual).toEqual(initialState.visual);
+    expect(state.subtitle).toBeNull();
+
+    state = reducer(state, { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 });
+    expect(state.subtitle).toBe("雨停了吗？");
+    expect(state.visual).toEqual({
+      emotion: "sad",
+      pose: "look_down",
+      action: "glance_door",
+      camera: "close_up",
+      fx: "rain_stop",
+    });
+  });
+
+  it("action / camera / fx / media 为 null 时保持上一句的值", () => {
+    const state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      {
+        type: "SERVER_MESSAGE",
+        message: beatMsg(
+          1,
+          makeBeat(0, {
+            emotion: "sad",
+            pose: "look_down",
+            action: "glance_door",
+            camera: "close_up",
+            fx: "rain_stop",
+            media: { type: "image", id: "photo" },
+          }),
+        ),
+      },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+      {
+        type: "SERVER_MESSAGE",
+        message: beatMsg(1, makeBeat(1, { emotion: "warm", pose: "hold_cup" })),
+      },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 1 },
+    );
+    expect(state.visual).toEqual({
+      emotion: "warm",
+      pose: "hold_cup",
+      action: "glance_door",
+      camera: "close_up",
+      fx: "rain_stop",
+    });
+    expect(state.media).toEqual({ type: "image", id: "photo" });
+    expect(state.phase).toEqual({ kind: "speaking", seq: 1 });
+  });
+
+  it("重复 seq 的 beat 被忽略", () => {
+    const state = run(
+      reducer(initialState, { type: "SUBMIT_TEXT" }),
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "第一次" })) },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "第二次" })) },
+    );
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0]?.say).toBe("第一次");
+  });
+
+  it("seq 乱序到达时 nextBeatToPlay 返回 seq 最小的 beat", () => {
+    const state = run(
+      reducer(initialState, { type: "SUBMIT_TEXT" }),
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(1)) },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0)) },
+    );
+    expect(state.queue.map((beat) => beat.seq)).toEqual([0, 1]);
+    expect(nextBeatToPlay(state)?.seq).toBe(0);
+    expect(nextBeatToPlay(initialState)).toBeNull();
+  });
+
+  it("session / state_snapshot 不受 turnId 限制，只覆盖视觉持续字段且不动 phase", () => {
+    const state = run(initialState, { type: "SUBMIT_TEXT" });
+    const afterSession = reducer(state, {
+      type: "SERVER_MESSAGE",
+      message: sessionMsg(999, makeSnapshot()),
+    });
+    expect(afterSession.currentTurnId).toBe(state.currentTurnId);
+    expect(afterSession.phase).toEqual(state.phase);
+    expect(afterSession.visual).toEqual({
+      emotion: "sad",
+      pose: "look_down",
+      action: null,
+      camera: "close_up",
+      fx: "lights_dim",
+    });
+
+    const afterSnapshot = reducer(state, {
+      type: "SERVER_MESSAGE",
+      message: stateSnapshotMsg(
+        999,
+        makeSnapshot({ emotion: "guarded", pose: "lean_in", camera: null, fx: null }),
+      ),
+    });
+    expect(afterSnapshot.visual).toEqual({
+      emotion: "guarded",
+      pose: "lean_in",
+      action: null,
+      camera: null,
+      fx: null,
+    });
+  });
+});
+
+describe("一轮完整流程", () => {
+  it("SUBMIT_TEXT → 2 个 beat → 依次 STARTED/ENDED → turn_end → idle", () => {
+    const state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "第一句" })) },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(1, { say: "第二句" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+      { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 1 },
+      { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 1 },
+      { type: "SERVER_MESSAGE", message: turnEndMsg(1) },
+    );
+    expect(state.currentTurnId).toBe(1);
+    expect(state.queue).toEqual([]);
+    expect(state.turnEnded).toBe(true);
+    expect(state.phase).toEqual({ kind: "idle" });
+  });
+
+  it("最后一句 ENDED 后 turn_end 未到：进入 thinking（subtitle=null），新 beat 的 STARTED 恢复 speaking", () => {
+    let state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "第一句" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+      { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 },
+    );
+    expect(state.turnEnded).toBe(false);
+    expect(state.phase).toEqual({ kind: "thinking" });
+    expect(state.subtitle).toBeNull();
+    expect(state.queue).toEqual([]);
+
+    state = run(
+      state,
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(1, { say: "第二句" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 1 },
+    );
+    expect(state.phase).toEqual({ kind: "speaking", seq: 1 });
+    expect(state.subtitle).toBe("第二句");
+  });
+
+  it("turn_end 先于最后一个 beat 的 ENDED 到达时，要等 ENDED 之后才 idle", () => {
+    let state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0)) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+      { type: "SERVER_MESSAGE", message: turnEndMsg(1) },
+    );
+    // 最后一个 beat 在 STARTED 时已出队，但音频仍在播放：不得提前 idle。
+    expect(state.turnEnded).toBe(true);
+    expect(state.phase).toEqual({ kind: "speaking", seq: 0 });
+
+    state = reducer(state, { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 });
+    expect(state.phase).toEqual({ kind: "idle" });
+    expect(state.subtitle).toBeNull();
+    expect(state.queue).toEqual([]);
+  });
+
+  it("多 beat 场景中 turn_end 在第二个 beat 播放期间到达：仍 speaking，第二个 ENDED 后 idle", () => {
+    let state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "第一句" })) },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(1, { say: "第二句" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+      { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 1 },
+      { type: "SERVER_MESSAGE", message: turnEndMsg(1) },
+    );
+    expect(state.turnEnded).toBe(true);
+    expect(state.phase).toEqual({ kind: "speaking", seq: 1 });
+    expect(state.subtitle).toBe("第二句");
+
+    state = reducer(state, { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 1 });
+    expect(state.phase).toEqual({ kind: "idle" });
+    expect(state.subtitle).toBeNull();
+    expect(state.queue).toEqual([]);
+  });
+
+  it("thinking 状态下未收到任何 beat 就 turn_end → idle，subtitle 为 null", () => {
+    const state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: turnEndMsg(1) },
+    );
+    expect(state.turnEnded).toBe(true);
+    expect(state.phase).toEqual({ kind: "idle" });
+    expect(state.subtitle).toBeNull();
+    expect(state.queue).toEqual([]);
+  });
+
+  it("started 的 beat 不在 queue 中时丢弃回调", () => {
+    const thinking = thinkingWithTurn();
+    expect(reducer(thinking, { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 5 })).toBe(thinking);
+  });
+});

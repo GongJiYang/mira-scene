@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>P4 配准贴片预览</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: rgba(12, 14, 18, .82);
+    --line: #2c3138;
+    --fg: #e8eaed;
+    --dim: #9aa2ad;
+    --accent: #7ec8ff;
+    --warn: #ffb454;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px/1.5 -apple-system, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 10px;
+    gap: 10px;
+  }
+  h1 { font-size: 14px; font-weight: 600; margin: 0; }
+  h1 span { color: var(--dim); font-weight: 400; }
+  .stageWrap {
+    position: relative;
+    align-self: center;
+    width: min(100%, calc((100vh - 220px) * 2 / 3));
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+  .stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1024 / 1536;
+    background:
+      linear-gradient(45deg, #1d2025 25%, transparent 25%, transparent 75%, #1d2025 75%) 0 0/24px 24px,
+      linear-gradient(45deg, #1d2025 25%, #22252b 25%, #22252b 75%, #1d2025 75%) 12px 12px/24px 24px;
+    overflow: hidden;
+    border-radius: 4px;
+    touch-action: manipulation;
+  }
+  .stage img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  #bg { z-index: 0; }
+  #master { z-index: 1; }
+  #table {
+    top: auto;
+    bottom: 0;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    z-index: 3;
+  }
+  .overlay { z-index: 2; }
+  .overlay.hidden, #table.hidden { opacity: 0; }
+  #panel {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 10;
+    max-width: min(46vw, 210px);
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+    font-size: 11px;
+    line-height: 1.45;
+    pointer-events: none;
+  }
+  #panel .name { color: var(--accent); font-weight: 600; margin-bottom: 3px; }
+  #panel dl { display: grid; grid-template-columns: auto 1fr; gap: 0 6px; margin: 0; }
+  #panel dt { color: var(--dim); white-space: nowrap; }
+  #panel dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  #panel .note { color: var(--warn); margin-top: 4px; }
+  #panel .empty { color: var(--dim); }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  button {
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg);
+    background: #1e2228;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 11px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover { border-color: #49525e; }
+  button.on { background: #1b3a52; border-color: var(--accent); color: #dff0ff; }
+  button.demo.on { background: #3a2f1b; border-color: var(--warn); color: #ffe9c7; }
+  button.sep { margin-left: 10px; }
+  .group { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .group + .group { margin-top: 2px; }
+  .group .label {
+    align-self: center;
+    color: var(--dim);
+    font-size: 11px;
+    min-width: 3.6em;
+    text-align: right;
+  }
+  .hint { color: var(--dim); font-size: 11px; text-align: center; margin: 0; }
+  .mark { color: var(--warn); }
+  @media (max-width: 640px) {
+    body { padding: 5px; gap: 4px; }
+    h1 { font-size: 12px; }
+    .stageWrap { width: 100%; }
+    button { padding: 4px 9px; font-size: 11px; }
+    #panel { font-size: 10px; max-width: 47vw; padding: 5px 7px; background: rgba(12, 14, 18, .68); }
+    .group { gap: 4px; }
+    .group .label { min-width: 2.8em; font-size: 10px; }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+  <h1>P4 配准贴片预览 <span id="meta"></span></h1>
+
+  <div class="stageWrap">
+    <div class="stage" id="stage">
+      <img id="bg" class="hidden" src="../../assets/raw/b1_bg_main_v.png" alt="scene">
+      <img id="master" src="../../assets/parts/master_clean.png" alt="master">
+      <div id="panel"><div class="empty">点按钮看这张差分的配准数值</div></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="flicker">闪烁对比 2Hz</button>
+    <button id="blink" class="demo">眨眼演示</button>
+    <button id="mouth" class="demo">口型演示</button>
+    <button id="scene">真实场景</button>
+    <button id="clear" class="sep">全部关闭</button>
+  </div>
+
+  <div class="group" id="gExpr"></div>
+  <div class="group" id="gArm"></div>
+  <div class="group" id="gTable"></div>
+
+  <p class="hint">底层是 master_clean.png；开启手势时角色在 characterClipBottom 以下被裁掉。桌面按宽度 1024 贴底，不透明桌沿必须 ≤ tableTopMinCover（见桌面面板）。「真实场景」= b1_bg_main_v.png + 角色 + 桌面。</p>
+
+<script src="metrics.js"></script>
+<script>
+(function () {
+  const M = window.SPIKE_METRICS;
+  const PATCHES = M.patches;
+  const byName = Object.fromEntries(PATCHES.map(p => [p.id, p]));
+
+  const stage = document.getElementById('stage');
+  const panel = document.getElementById('panel');
+  const meta = document.getElementById('meta');
+  const COMP = M.composition;
+  const CLIP_PCT = (M.master.h - COMP.characterClipBottom) / M.master.h * 100;
+  meta.textContent = `master ${M.master.w}×${M.master.h}；local 上限 ${M.params.local_max_px}px；` +
+    `裁剪线 y=${COMP.characterClipBottom}`;
+
+  // ---- 图层
+  const layers = {};      // name -> <img>
+  function addLayer(name, src, cls) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = name;
+    img.className = cls + ' hidden';
+    img.dataset.name = name;
+    stage.appendChild(img);
+    layers[name] = img;
+    return img;
+  }
+  PATCHES.forEach(p => addLayer(p.id, '../../' + p.out, 'overlay'));
+  // 桌面 1024x1024, 贴底
+  const tableImg = document.createElement('img');
+  tableImg.src = '../../' + M.table.out;
+  tableImg.alt = 'fg_table_v';
+  tableImg.id = 'table';
+  tableImg.className = 'hidden';
+  stage.appendChild(tableImg);
+  layers.fg_table_v = tableImg;
+
+  // ---- 状态
+  const toggled = new Set();
+  let blinkOn = false, mouthOn = false, sceneOn = false;
+  let eyeFrame = null;     // null = open(仅 master) / 'eyelid_half' / 'eyelid_closed'
+  let mouthFrame = null;   // null = closed / 'mouth_small' / 'mouth_open'
+  const EYE_GROUP = ['eyelid_half', 'eyelid_closed'];
+  const MOUTH_GROUP = ['mouth_small', 'mouth_open'];
+  const ARM_GROUP = ['arm_cup', 'arm_polaroid', 'arm_camera', 'arm_phone'];
+
+  function visibleSet() {
+    const v = new Set(toggled);
+    if (blinkOn) { EYE_GROUP.forEach(n => v.delete(n)); if (eyeFrame) v.add(eyeFrame); }
+    if (mouthOn) { MOUTH_GROUP.forEach(n => v.delete(n)); if (mouthFrame) v.add(mouthFrame); }
+    return v;
+  }
+
+  const bgImg = document.getElementById('bg');
+  const masterImg = document.getElementById('master');
+
+  let flickerPhase = false;
+  function render() {
+    const v = visibleSet();
+    const showOverlay = !(flickerOn && flickerPhase);
+    for (const [name, img] of Object.entries(layers)) {
+      const isPatch = name !== 'fg_table_v';
+      const on = v.has(name) && (!isPatch || showOverlay);
+      img.classList.toggle('hidden', !on);
+    }
+    // 真实场景: 底层换成 b1_bg_main_v.png (角色/桌面仍是上面的层)
+    bgImg.classList.toggle('hidden', !sceneOn);
+    // 任一手势开启 -> 角色按 characterClipBottom 裁掉以下部分
+    const armOn = ARM_GROUP.some(n => v.has(n));
+    masterImg.style.clipPath = armOn ? `inset(0 0 ${CLIP_PCT}% 0)` : '';
+    // 按钮状态跟随实际显示
+    for (const b of buttons) b.classList.toggle('on', v.has(b.dataset.name));
+  }
+
+  // ---- 按钮
+  const buttons = [];
+  function mkButton(name, label, group) {
+    const b = document.createElement('button');
+    const p = byName[name];
+    b.dataset.name = name;
+    let mark = '';
+    if (p && (p.fallback || p.ghost_ratio > 0.01 || p.mask_px === 0)) mark = '<span class="mark">!</span>';
+    else if (p && p.data_missing_px > 2000) mark = '<span class="mark">†</span>';
+    b.innerHTML = label + mark;
+    b.addEventListener('click', () => {
+      if (toggled.has(name)) toggled.delete(name); else toggled.add(name);
+      showMetrics(name);
+      render();
+    });
+    b.addEventListener('mouseenter', () => showMetrics(name));
+    b.addEventListener('focus', () => showMetrics(name));
+    group.appendChild(b);
+    buttons.push(b);
+    return b;
+  }
+
+  const gE = document.getElementById('gExpr');
+  const gA = document.getElementById('gArm');
+  const gT = document.getElementById('gTable');
+  function addLabel(group, text) {
+    const s = document.createElement('span');
+    s.className = 'label';
+    s.textContent = text;
+    group.appendChild(s);
+  }
+  addLabel(gE, '表情');
+  ['eyelid_half', 'eyelid_closed', 'brow_sad', 'brow_raised', 'blush',
+   'mouth_small', 'mouth_open', 'mouth_o', 'mouth_smile', 'mouth_sad']
+    .forEach(n => mkButton(n, n, gE));
+  addLabel(gA, '手势');
+  ['arm_cup', 'arm_polaroid', 'arm_camera', 'arm_phone'].forEach(n => mkButton(n, n, gA));
+  addLabel(gT, '桌面');
+  mkButton('fg_table_v', 'fg_table_v（棋盘格已抠）', gT);
+
+  // ---- 数值面板
+  function f(v, d) { return (v === null || v === undefined) ? '—' : Number(v).toFixed(d); }
+  function showMetrics(name) {
+    if (name === 'fg_table_v') {
+      const t = M.table;
+      const top = M.master.h - t.out_size[1];          // 图片上沿
+      const opaque = top + t.opaque_top_y;             // 真正不透明的桌沿
+      panel.innerHTML = `<div class="name">fg_table_v</div><dl>
+        <dt>源</dt><dd>${t.src_size[0]}×${t.src_size[1]} RGB</dd>
+        <dt>输出</dt><dd>${t.out_size[0]}×${t.out_size[1]} RGBA</dd>
+        <dt>棋盘格占比</dt><dd>${f(t.bg_fraction * 100, 1)}%</dd>
+        <dt>不透明像素</dt><dd>${t.alpha_px}</dd>
+        <dt>图片上沿</dt><dd>y=${top}</dd>
+        <dt>桌沿(不透明上沿)</dt><dd>y=${opaque}</dd>
+        <dt>须 ≤ 裁剪线</dt><dd>${COMP.tableTopMinCover} ${opaque <= COMP.tableTopMinCover ? '✓' : '✗'}</dd>
+        </dl>`;
+      return;
+    }
+    const p = byName[name];
+    if (!p) return;
+    const notes = [];
+    if (p.fallback) notes.push('配准退回 pass1');
+    if (p.local) {
+      if (!p.local.applied) notes.push(`局部修正未应用：${p.local.reason}`);
+      else if (p.local.correction_px > 15) notes.push('局部修正量接近 20px 上限');
+    }
+    if (p.ghost_ratio > 0.01) notes.push('幽灵残留 ' + f(p.ghost_ratio * 100, 1) + '%');
+    if (p.ring && p.ring.skin_fallback) notes.push('环形肤色像素不足，退回全环');
+    if (p.kind === 'gest' && p.data_end_y !== null) {
+      notes.push(`差分图被裁：y>${p.data_end_y} 无数据（${p.data_missing_px}px）；` +
+        `角色在 y>${COMP.characterClipBottom} 被裁`);
+    }
+    const cover = p.master_edge_cover;
+    const rows = [
+      [`内点(pass${p.used_pass})`, `${p.pass2.inliers} / ${p.pass2.good}`],
+      ['重投影', `${f(p.reproj_px, 2)} px`],
+      ['缩放', `${f(p.scale, 4)}×`],
+      ['旋转', `${f(p.rotation_deg, 3)}°`],
+      ['平移', `${f(p.translation[0], 1)}, ${f(p.translation[1], 1)}`],
+      ['稳定区 MAD', f(p.stable_mad, 2)],
+    ];
+    if (p.local) {
+      rows.push(['局部修正量', p.local.correction_px === undefined ? '未成'
+        : `${f(p.local.correction_px, 2)} px${p.local.applied ? '' : '（退回全局）'}`]);
+      rows.push(['脸框内点/重投影', `${p.local.inliers}/${p.local.good} · ${f(p.local.reproj, 2)} px`]);
+    }
+    rows.push(['线稿覆盖率', cover === null ? '—' : `${f(cover * 100, 1)}%${p.cover_pass === false ? ' ✗' : ''}`]);
+    if (p.ring) {
+      rows.push(['环形肤色 ΔE', `${f(p.ring.de_skin, 2)}${p.ring.pass ? '' : ' ✗'}`]);
+      rows.push(['环形 全/平坦/肤色 px', `${p.ring.px}/${p.ring.px_flat}/${p.ring.px_skin}`]);
+      rows.push(['平移色差 ΔE', `${f(p.ring.shift_de, 2)}`]);
+      rows.push(['掩码内色偏 前→后', `${f(p.mask_bias_before, 2)} → ${f(p.mask_bias_after, 2)}`]);
+    }
+    if (p.kind === 'gest') {
+      rows.push(['接缝 y / 羽化', `${p.seam.y} / ${p.seam.feather}px`]);
+      rows.push(['数据下界', p.data_end_y === null ? '—' : p.data_end_y]);
+    }
+    rows.push(['掩码', `${p.mask_px === undefined ? p.patch_px : p.mask_px} px`]);
+    rows.push(['交付残差 ΔE', p.deliver ? f(p.deliver.residual_de, 2) : '—']);
+    panel.innerHTML = `<div class="name">${p.name}</div><dl>` +
+      rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('') +
+      '</dl>' + (notes.length ? '<div class="note">' + notes.join('<br>') + '</div>' : '');
+  }
+
+  // ---- 闪烁 2Hz
+  let flickerOn = false, flickerTimer = null;
+  const flickerBtn = document.getElementById('flicker');
+  flickerBtn.addEventListener('click', () => {
+    flickerOn = !flickerOn;
+    flickerBtn.classList.toggle('on', flickerOn);
+    if (flickerOn) {
+      flickerTimer = setInterval(() => { flickerPhase = !flickerPhase; render(); }, 250);
+    } else {
+      clearInterval(flickerTimer);
+      flickerPhase = false;
+      render();
+    }
+  });
+
+  // ---- 眨眼 open→half→closed→half→open, 每帧 60ms, 每 3s 一次
+  const blinkBtn = document.getElementById('blink');
+  let blinkTimer = null, blinkSeq = null;
+  const BLINK_FRAMES = [null, 'eyelid_half', 'eyelid_closed', 'eyelid_half', null];
+  function runBlink() {
+    let i = 0;
+    clearTimeout(blinkSeq);
+    const step = () => {
+      eyeFrame = BLINK_FRAMES[i];
+      if (eyeFrame) showMetrics(eyeFrame); else showMetrics('eyelid_half');
+      render();
+      i++;
+      if (i < BLINK_FRAMES.length) blinkSeq = setTimeout(step, 60);
+    };
+    step();
+  }
+  blinkBtn.addEventListener('click', () => {
+    blinkOn = !blinkOn;
+    blinkBtn.classList.toggle('on', blinkOn);
+    if (blinkOn) {
+      runBlink();
+      blinkTimer = setInterval(runBlink, 3000);
+    } else {
+      clearInterval(blinkTimer); clearTimeout(blinkSeq);
+      eyeFrame = null; render();
+    }
+  });
+
+  // ---- 口型 closed→small→open→small 循环
+  const mouthBtn = document.getElementById('mouth');
+  let mouthTimer = null;
+  const MOUTH_FRAMES = [null, 'mouth_small', 'mouth_open', 'mouth_small'];
+  let mi = 0;
+  mouthBtn.addEventListener('click', () => {
+    mouthOn = !mouthOn;
+    mouthBtn.classList.toggle('on', mouthOn);
+    if (mouthOn) {
+      mi = 0;
+      const step = () => {
+        mouthFrame = MOUTH_FRAMES[mi % MOUTH_FRAMES.length];
+        showMetrics(mouthFrame || 'mouth_small');
+        render();
+        mi++;
+      };
+      step();
+      mouthTimer = setInterval(step, 400);
+    } else {
+      clearInterval(mouthTimer);
+      mouthFrame = null; render();
+    }
+  });
+
+  document.getElementById('clear').addEventListener('click', () => {
+    toggled.clear();
+    if (blinkOn) blinkBtn.click();
+    if (mouthOn) mouthBtn.click();
+    if (sceneOn) sceneBtn.click();
+    render();
+  });
+
+  // ---- 真实场景: 底层 b1_bg_main_v.png, 上面依次角色/桌面
+  const sceneBtn = document.getElementById('scene');
+  sceneBtn.addEventListener('click', () => {
+    sceneOn = !sceneOn;
+    sceneBtn.classList.toggle('on', sceneOn);
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

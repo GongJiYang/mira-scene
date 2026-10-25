@@ -1,0 +1,31 @@
+Working...
+探针 P4 执行完毕，未 commit，`assets/raw/`、`docs/architecture/`、`packages/`、`apps/` 未改。
+
+## 产物
+
+| 路径 | 内容 |
+|---|---|
+| `tools/spike-align/align.py` | 两遍 SIFT+RANSAC 相似变换 → Lab ΔE 掩码 → 羽化贴片 + 桌面抠图 |
+| `tools/spike-align/preview.html` | 纯静态预览（16 图层 / 15 按钮 / 闪烁 / 眨眼 / 口型 / 右上角数值） |
+| `tools/spike-align/run.sh` | 冷跑 38s（建 venv+装依赖），热跑 8.5s，任意 cwd 均可，exit 0 |
+| `tools/spike-align/metrics.json` / `metrics.js` | 每张图的全部数值（后者让 `file://` 也能读） |
+| `assets/parts/` | 10 表情 + 4 手势（1024×1536 RGBA）+ `fg_table_v.png`（1024×1024 RGBA） |
+| `docs/tasks/spike-p4-report.md` | 数值表 + 可疑项 + 遇到的问题 |
+
+## 答案（数值，非目测）
+
+**配准成立，五官落点不成立。**
+
+- 14/14 张全部走完 pass2，无退回。内点重投影 **1.02–1.91 px**；稳定区边缘距离 p90 1.00 px（`eyelid_half`，本来对齐，方法自检通过）→ 12.0 px。
+- 但按「不变化区域」拟合的变换与「脸区单独拟合」的变换，在脸中心的落点差 **3.6–12.9 px**（嘴部 6.8–12.9，几乎全在 y）。这就是切换时会跳的量级——是说明里「特征只取不变化区域」的必然代价，不是 bug。
+- 平坦区 ΔE 仅 **1.7–4.3**（噪声底），所以羽化贴片在皮肤上不会被看出来；掩码偏大是因为整张重绘让 1–2px 线稿差也 >ΔE 12。
+
+## 三条最需要目测确认的可疑项
+
+1. `mouth_open` 掩码 bbox 只到 x=540（区域到 614），master 线稿仅被盖 **43.1%**（同组 71.8–82.1%）→ 可能看到「一左一右两张嘴」。机制：该图脸区 delta **x +6.64 px**。
+2. 1254² 差分图底部被裁：手势贴片在 y=1329–1465 无源像素，下方 6.8–20.3 万 px 仍是 master → 横向接缝。
+3. `mouth_o` 全局缩放 0.8925（13 张里唯一 <1），脸区拟合给 0.9200，差 3% ≈ 8.7 px。
+
+报告里明确写了不宣称「效果自然」，并给了目测顺序（`mouth_open` → `mouth_sad`/`mouth_small` → `blush` → `mouth_o` → `eyelid_half` 对照 → `arm_*` → 桌面）。
+
+预览：`cd 仓库根 && python3 -m http.server 8000` → `http://localhost:8000/tools/spike-align/preview.html`。已在 Chromium 实测：16 图无 404、15 个开关逐个通过、闪烁 250ms×6/2s、眨眼帧 61/123/183/244ms 且 3.0s 重复；390×844 下无横纵溢出、stage 380×570。

@@ -1,0 +1,24 @@
+Working...
+已按修复说明执行，但验收中触发其 §0 的矛盾协议，未修改测试意图。
+
+**改动**
+- `apps/client/src/state/reducer.ts`
+  - 新增 `toIdle()`：任何转入 idle 的路径统一执行 `phase=idle`、`queue=[]`、`subtitle=null`；media 保留。`applyBeatEnded`、`RETRY` 都改为复用它。
+  - 重写 `markTurnEnded()`：仅 `thinking && queue.length===0` 才直接转为 idle；`speaking` 及其他 phase 只置 `turnEnded=true`。
+  - `error`：在 `toIdle()` 的基础上改为 error phase，并将 `audioStopToken+1`。
+- `apps/client/test/reducer.test.ts`
+  - 恢复测试 #8 原始意图：只播放单个 beat，先到 `turn_end`，断言仍为 `speaking(0)`；直到 `ENDED(0)` 后才断言 idle，且 `subtitle=null`、`queue=[]`。
+  - 新增：多 beat 场景下 `turn_end` 在第二个 beat 播放期间到达，仍保持 `speaking(1)`，直到第二个 `ENDED` 后才 idle。
+  - 新增：在 `thinking` 阶段未收到 beat 就收到 `turn_end`，转为 idle。
+  - 新增：`error` 清空 queue 和 subtitle，并让 `audioStopToken+1`（前置条件为有 beat 正在播放且 queue 非空）。
+
+**验证**
+- `pnpm typecheck`：通过。
+- `pnpm test`：85 例中 84 通过，1 失败——正是**原有测试 #7**。
+  - `一轮完整流程 > SUBMIT_TEXT → 2 个 beat → 依次 STARTED/ENDED → turn_end → idle`
+  - `expected { kind: 'speaking', seq: 1 } to deeply equal { kind: 'idle' }`（`reducer.test.ts:366`）
+
+**矛盾（已追加至 `docs/tasks/stage-1-report.md` §修复记录）**
+§1 规定 `speaking` 收到 `turn_end` 不改变 phase；测试 #7 的到达顺序是两次 `ENDED` 之后才收到 `turn_end`。此时 §1 所期待的下一个 `BEAT_AUDIO_ENDED` 永远不会到来，phase 卡在 `speaking(1)`。现有状态模型无法区分「最后一句音频仍在播放」与「音频已结束、仅缺 turn_end」（两者均为 `speaking` + 空 queue），因此 §1 与 §4「其他测试保持通过」互斥。需要架构侧裁定：扩展状态记录“在播音已结束”，或修订测试 #7 的编排。按 §0 未擅自选择，也未改动该测试断言。
+
+未 commit，未改动 `docs/architecture/` 与 `packages/protocol/`。
