@@ -1,5 +1,7 @@
 import { parseServerMessage, type ClientMessage } from "@mira/protocol";
 import { handleTtsAudio } from "./audio";
+import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./heartbeat";
+import { handleMediaReady } from "./storyMediaLink";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 
 const SESSION_STORAGE_KEY = "mira.sessionId";
@@ -10,6 +12,7 @@ type ClientPayloads = {
   text_input: { text: string };
   audio_input: { mime: string; dataBase64: string };
   interrupt: { interruptedTurnId: number };
+  ping: Record<string, never>;
 };
 
 export type Connection = {
@@ -45,7 +48,49 @@ export function createConnection(): Connection {
   let seq = 0;
   let attempt = 0;
   let reconnectTimer: number | null = null;
+  let heartbeatTimer: number | null = null;
+  let lastPongAt = 0;
+  let requestingToken = false;
   let closed = false;
+
+  function stopHeartbeat(): void {
+    if (heartbeatTimer !== null) {
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+  }
+
+  function startHeartbeat(active: WebSocket): void {
+    stopHeartbeat();
+    lastPongAt = Date.now();
+    heartbeatTimer = window.setInterval(() => {
+      if (socket !== active) return;
+      if (isHeartbeatExpired(lastPongAt, Date.now())) {
+        pushEvent("heartbeat timeout → reconnect");
+        stopHeartbeat();
+        active.close();
+        return;
+      }
+      sendEnvelope("ping", {});
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  /** 握手令牌（D8 复核 · Q12）：连接前先取，缺失或过期由服务端 401 拒绝升级。 */
+  async function fetchSessionToken(): Promise<string | null> {
+    try {
+      const response = await fetch("/session-token");
+      if (!response.ok) {
+        console.warn(`[ws] 令牌请求失败：${response.status}`);
+        return null;
+      }
+      const body: unknown = await response.json();
+      if (typeof body !== "object" || body === null || !("token" in body)) return null;
+      return typeof body.token === "string" ? body.token : null;
+    } catch (error) {
+      console.warn("[ws] 令牌请求异常", error);
+      return null;
+    }
+  }
 
   function sendEnvelope<T extends keyof ClientPayloads>(type: T, payload: ClientPayloads[T]): void {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -90,13 +135,17 @@ export function createConnection(): Connection {
       // 这里不再直接写 stage store（D4：唯一写入口是 reducer）。
     }
     if (message.type === "tts_audio") handleTtsAudio(message);
+    // D27：media_ready 是剧情层消息，不经过 A 的 turnId 过滤，直接进 C。
+    if (message.type === "media_ready") handleMediaReady(message);
+    if (message.type === "pong") lastPongAt = Date.now();
     pushEvent(`recv ${message.type} t${message.turnId}`);
   }
 
   function scheduleReconnect(): void {
     if (closed || reconnectTimer) return;
     setStatus("reconnecting");
-    const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
+    const base = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
+    const wait = jitteredDelay(base, Math.random());
     attempt += 1;
     pushEvent(`reconnect in ${wait}ms`);
     reconnectTimer = window.setTimeout(() => {
@@ -106,31 +155,46 @@ export function createConnection(): Connection {
   }
 
   function connect(): void {
+    if (requestingToken) return;
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
     closed = false;
     setStatus(attempt === 0 ? "connecting" : "reconnecting");
 
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const nextSocket = new WebSocket(`${protocol}//${location.host}/ws`);
-    socket = nextSocket;
+    requestingToken = true;
+    void fetchSessionToken().then((token) => {
+      requestingToken = false;
+      if (closed) return;
+      if (token === null) {
+        scheduleReconnect();
+        return;
+      }
 
-    nextSocket.addEventListener("open", () => {
-      attempt = 0;
-      setStatus("open");
-      pushEvent("ws open");
-      sendEnvelope("hello", { resumeSessionId: readStoredSessionId() });
-    });
-    nextSocket.addEventListener("message", (event) => {
-      if (typeof event.data === "string") handleMessage(event.data);
-    });
-    nextSocket.addEventListener("close", () => {
-      if (socket === nextSocket) socket = null;
-      pushEvent("ws close");
-      scheduleReconnect();
-    });
-    nextSocket.addEventListener("error", () => {
-      console.warn("[ws] 连接错误");
-      nextSocket.close();
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      const nextSocket = new WebSocket(
+        `${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`,
+      );
+      socket = nextSocket;
+
+      nextSocket.addEventListener("open", () => {
+        attempt = 0;
+        setStatus("open");
+        pushEvent("ws open");
+        startHeartbeat(nextSocket);
+        sendEnvelope("hello", { resumeSessionId: readStoredSessionId() });
+      });
+      nextSocket.addEventListener("message", (event) => {
+        if (typeof event.data === "string") handleMessage(event.data);
+      });
+      nextSocket.addEventListener("close", () => {
+        if (socket === nextSocket) socket = null;
+        stopHeartbeat();
+        pushEvent("ws close");
+        scheduleReconnect();
+      });
+      nextSocket.addEventListener("error", () => {
+        console.warn("[ws] 连接错误");
+        nextSocket.close();
+      });
     });
   }
 
@@ -142,6 +206,7 @@ export function createConnection(): Connection {
         window.clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      stopHeartbeat();
       socket?.close();
       socket = null;
     },

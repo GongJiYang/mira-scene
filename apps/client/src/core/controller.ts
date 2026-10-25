@@ -1,6 +1,9 @@
+import { create } from "zustand";
 import { createConnection, type Connection } from "./connection";
+import { installPerformanceClock } from "./performanceClock";
 import { blobToBase64, createRecorder, type Recorder } from "./recorder";
 import { dispatch, getStageState, pushEvent } from "./store";
+import { installStoryMediaLink } from "./storyMediaLink";
 
 export type Intents = {
   pttDown(): void;
@@ -11,12 +14,23 @@ export type Intents = {
 
 export type ControllerDeps = { connection: Connection; recorder: Recorder };
 
+type NudgeSlice = { pending: boolean };
+
+/** D32 主动行动：本批只记录，不发送到服务端（S3 再接）。 */
+export const useNudgeStore = create<NudgeSlice>()(() => ({ pending: false }));
+
+export function recordNudge(at: number): void {
+  useNudgeStore.setState({ pending: true });
+  pushEvent(`nudge@${at} · 12s 无输入，主动行动挂起（未发送）`);
+}
+
 export function createController({ connection, recorder }: ControllerDeps): Intents {
   return {
     pttDown() {
       const { currentTurnId, phase } = getStageState();
       const wasActive = phase.kind !== "idle";
       pushEvent(`ptt down t${currentTurnId}`);
+      if (useNudgeStore.getState().pending) useNudgeStore.setState({ pending: false });
       dispatch({ type: "PTT_DOWN" });
       if (wasActive) connection.sendInterrupt(currentTurnId);
       const turnId = getStageState().currentTurnId;
@@ -49,6 +63,7 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       const { currentTurnId, phase } = getStageState();
       const wasActive = phase.kind !== "idle";
       pushEvent(`submit t${currentTurnId}`);
+      if (useNudgeStore.getState().pending) useNudgeStore.setState({ pending: false });
       dispatch({ type: "SUBMIT_TEXT" });
       if (wasActive) connection.sendInterrupt(currentTurnId);
       connection.sendText(trimmed);
@@ -68,5 +83,8 @@ const recorder = createRecorder();
 export const intents: Intents = createController({ connection, recorder });
 
 export function bootstrapConnection(): void {
+  // 表演时钟（B）与剧情媒体（C）的接线都在这里启动：UI 只经由视图模型读状态。
+  installPerformanceClock({ onNudge: recordNudge });
+  installStoryMediaLink();
   connection.connect();
 }

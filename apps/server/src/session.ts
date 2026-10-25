@@ -39,6 +39,8 @@ type Session = {
   scene: SceneState;
   recentActions: readonly (Action | null)[];
   lastTurnId: number;
+  /** 已接受的轮数（Q12 会话限额）。 */
+  turnsUsed: number;
   controller: AbortController | null;
   lastActiveAt: number;
   outSeq: number;
@@ -51,6 +53,10 @@ export type SessionDeps = Ports & {
   now?: () => number;
   idleTimeoutMs?: number;
   sweepIntervalMs?: number;
+  /** 每会话最多轮数，默认 30。 */
+  sessionTurnLimit?: number;
+  /** 全站每天最多轮数，默认 300。 */
+  dailyTurnLimit?: number;
 };
 
 export type SessionManager = {
@@ -61,11 +67,23 @@ export type SessionManager = {
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 1000;
+const DEFAULT_SESSION_TURN_LIMIT = 30;
+const DEFAULT_DAILY_TURN_LIMIT = 300;
+
+/** 自然日（本地时区）→ 用于每日限额重置。 */
+function localDayKey(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
 
 export function createSessionManager(deps: SessionDeps): SessionManager {
   const clock = deps.now ?? Date.now;
   const idleTimeoutMs = deps.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  const sessionTurnLimit = deps.sessionTurnLimit ?? DEFAULT_SESSION_TURN_LIMIT;
+  const dailyTurnLimit = deps.dailyTurnLimit ?? DEFAULT_DAILY_TURN_LIMIT;
   const sessions = new Map<string, Session>();
+  // 全站每日计数：内存保存，跨自然日重置。
+  const daily = { day: localDayKey(clock()), count: 0 };
 
   function buildEnvelope<T extends keyof TurnPayloads>(
     session: Session,
@@ -241,6 +259,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         scene: createInitialScene(),
         recentActions: [],
         lastTurnId: 0,
+        turnsUsed: 0,
         controller: null,
         lastActiveAt: clock(),
         outSeq: 0,
@@ -284,6 +303,30 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       return;
     }
 
+    // Q12 限额：超出时只回 error，不创建 controller、不调用任何 Provider。
+    const at = clock();
+    const day = localDayKey(at);
+    if (daily.day !== day) {
+      daily.day = day;
+      daily.count = 0;
+    }
+    const scope = session.turnsUsed >= sessionTurnLimit ? "session" : daily.count >= dailyTurnLimit ? "daily" : null;
+    if (scope !== null) {
+      const limit = scope === "session" ? sessionTurnLimit : dailyTurnLimit;
+      const used = scope === "session" ? session.turnsUsed : daily.count;
+      logFor(session, message.turnId, "quota_exceeded", { scope, used, limit });
+      session.send?.(
+        buildEnvelope(session, message.turnId, "error", {
+          code: "quota_exceeded",
+          message: scope === "session" ? `本次会话最多 ${limit} 轮` : `今天的体验额度已用完（${limit} 轮）`,
+          retryable: false,
+        }),
+      );
+      return;
+    }
+    session.turnsUsed += 1;
+    daily.count += 1;
+
     if (session.controller) {
       const supersededTurnId = session.lastTurnId;
       session.controller.abort();
@@ -306,7 +349,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       return;
     }
 
-    // 心跳：本批只定义 schema，ping/pong 的收发与超时判定在 G1-c。
+    // 心跳：pong 由传输层（index.ts）直接回复；会话层不产生下行消息。
     if (message.type === "ping") return;
 
     const session = sessions.get(message.sessionId);

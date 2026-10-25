@@ -59,7 +59,7 @@ export function PlaceholderStage() {
     };
   }, [startPushToTalk, endPushToTalk]);
 
-  const { phase, visual, subtitle, media, error, connection, micError, debug } = vm;
+  const { phase, visual, subtitle, media, error, connection, micError, debug, performance, storyMedia, pendingNudge } = vm;
 
   return (
     <main>
@@ -68,6 +68,13 @@ export function PlaceholderStage() {
       <p>{`emotion=${visual.emotion} hands=${visual.hands} action=${visual.action ?? "-"} camera=${
         visual.camera ?? "-"
       } fx=${visual.fx ?? "-"}`}</p>
+
+      <p>{`performance: blink=${performance.blink} mouth=${performance.mouth} hands=${performance.hands} action=${
+        performance.activeAction?.action ?? "-"
+      } transition=${performance.handsTransition ? performance.handsTransition.progress.toFixed(2) : "-"}`}</p>
+
+      <p>{`storyMedia=${storyMedia.status}${storyMedia.media ? ` ${storyMedia.media.type}:${storyMedia.media.id}` : ""}`}</p>
+      {pendingNudge && <p>（她似乎想说点什么）</p>}
 
       <p>{`subtitle: ${subtitle ?? "-"}`}</p>
 

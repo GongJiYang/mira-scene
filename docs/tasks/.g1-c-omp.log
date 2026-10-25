@@ -1,0 +1,21 @@
+Working...
+G1-c 完成。未 commit，未修改 `docs/architecture/`，无残留进程。
+
+**验收结果**
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm typecheck` | 3 个包全部 Done |
+| `pnpm test` | 22 文件 / **249 测试**通过（原 188 + 新增 61，原有测试零改动） |
+| `pnpm smoke` | `SMOKE OK`；含新步骤 `hello → session`、`ping → pong`（总耗时 2618ms） |
+| `pnpm dev`（无 `.env`） | Vite 5173 + mock 服务端；`/session-token` 经代理 200；浏览器 `connection=open`、多轮对话、口型 101–136ms、手部过渡 0.00→0.42→cup、12s `nudge`、`recv pong`；验证后 `NO_LEFTOVER` |
+
+**交付内容**
+
+- **B（表演）** `state/performance.ts` 纯 reducer：idle 眨眼/8s 待机小动作、listening 立即换脸+嘴闭、thinking `eyelid_half`+2s 补 sip_coffee、speaking 跟随 beat 情绪/手部/动作+口型循环、error `brow_raised`、打断手部 200ms `handsTransition`、12s nudge。
+- **C（剧情媒体）** `state/storyMedia.ts`：`none→developing→ready→shown`、失败 `fallback→shown`、按 `storyEventId` 去重；`media_ready` 绕过 A 的 turnId 过滤直送 C；显影中不被新一轮作废。
+- **接线** `core/performanceClock.ts`（60ms 帧循环 + 精确 90–140ms 口型定时器）、`core/storyMediaLink.ts`、controller 记录 `pendingNudge`、视图模型只新增 `performance/storyMedia/pendingNudge` 三个字段。
+- **连接层** 客户端 15s ping / 30s 无 pong 判断线、退避 ±20% 抖动、连接前取令牌；服务端 `GET /session-token`（内存 30 分钟）、WS 缺/无效令牌 401、ping→pong、>2MB 关闭码 1009 并写日志。
+- **限额** `SESSION_TURN_LIMIT`/`DAILY_TURN_LIMIT`（默认 30/300，本地自然日重置），超出回 `quota_exceeded, retryable:false` 且不调用任何 Provider。
+
+报告：`docs/tasks/g1-c-report.md`（含改动的文件、61 个新增测试清单、14 条歧义/矛盾与实现判断；授权边界 3 处越界已在报告中单列：新增 `core/storyMediaLink.ts`、`vite.config.ts` 加 `/session-token` 代理、占位 UI 显示新字段）。

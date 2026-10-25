@@ -1,5 +1,5 @@
 /**
- * 冒烟脚本：真实 WS 连接 + 随机端口，验证 hello → 多轮 → 打断 → stale_turn。
+ * 冒烟脚本：先取握手令牌，再真实 WS 连接 + 随机端口，验证 hello → 多轮 → 打断 → stale_turn → ping/pong。
  * 任何一步失败以非 0 退出码结束。
  */
 import WebSocket from "ws";
@@ -52,7 +52,19 @@ async function main(): Promise<void> {
   const health = (await fetch(`http://127.0.0.1:${server.port}/health`).then((response) => response.json())) as { ok?: boolean };
   if (health?.ok !== true) fail(`/health 异常：${JSON.stringify(health)}`);
 
-  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`);
+  // Q12：WS 升级必须带 GET /session-token 发放的令牌。
+  const tokenBody: unknown = await fetch(`http://127.0.0.1:${server.port}/session-token`).then((response) => response.json());
+  if (
+    typeof tokenBody !== "object" ||
+    tokenBody === null ||
+    !("token" in tokenBody) ||
+    typeof tokenBody.token !== "string"
+  ) {
+    fail(`/session-token 响应异常：${JSON.stringify(tokenBody)}`);
+  }
+  const token = tokenBody.token;
+
+  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?token=${encodeURIComponent(token)}`);
   let seq = 0;
   let sessionId = "";
   let turnId = 0;
@@ -74,7 +86,7 @@ async function main(): Promise<void> {
     }
   });
 
-  const send = (type: "hello" | "text_input", payload: Record<string, unknown>, envelopeTurnId: number): void => {
+  const send = (type: "hello" | "text_input" | "ping", payload: Record<string, unknown>, envelopeTurnId: number): void => {
     socket.send(
       JSON.stringify({ v: 1, sessionId, turnId: envelopeTurnId, seq: seq++, ts: now(), type, payload }),
     );
@@ -148,7 +160,14 @@ async function main(): Promise<void> {
     if (stale.payload.retryable !== false) fail("stale_turn 应为 retryable=false");
     timings.push({ step: "重复 turnId → stale_turn", ms: now() - staleAt });
 
-    // 7. 打印各步耗时
+    // 7. 心跳：ping → pong
+    const pingAt = now();
+    send("ping", {}, turnId);
+    const pong = await waitForMessage((message) => message.type === "pong", "pong");
+    if (pong.type !== "pong") return;
+    timings.push({ step: "ping → pong", ms: now() - pingAt });
+
+    // 8. 打印各步耗时
     console.log("SMOKE OK");
     console.table(timings);
     console.log(`总耗时 ${now() - startedAt}ms；turn2 beats=${turn2Beats.length} tts=${turn2Tts.length}`);
