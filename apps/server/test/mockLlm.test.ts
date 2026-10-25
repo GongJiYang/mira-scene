@@ -5,15 +5,18 @@ import type { LLMContext } from "../src/ports";
 import { createInitialScene } from "../src/story";
 
 const NODES: StoryNode[] = ["arrive", "probe", "reveal", "ending"];
-const INTENTS: Intent[] = ["ask_waiting", "ask_photo", "comfort", "greeting", "other"];
+const INTENTS: Intent[] = ["ask_waiting", "ask_photo", "ask_radio", "comfort", "greeting", "other"];
 
 const TEXT_BY_INTENT: Record<Intent, string> = {
   ask_waiting: "你在等谁？",
-  ask_photo: "这张照片是谁拍的？",
-  comfort: "别担心，我陪你等",
+  ask_photo: "能看看照片吗",
+  ask_radio: "你主持的节目叫什么",
+  comfort: "我陪你坐一会儿",
   greeting: "你好",
   other: "今天店里很安静",
 };
+
+const LLM_BEAT_KEYS = ["say", "emotion", "suggest", "advance"];
 
 function context(overrides: Partial<LLMContext> = {}): LLMContext {
   return { history: [], scene: createInitialScene(), userText: "你好", ...overrides };
@@ -23,8 +26,13 @@ describe("mockLlm：意图与台词", () => {
   it("关键词意图识别", () => {
     expect(classifyIntent("你在等谁？")).toBe("ask_waiting");
     expect(classifyIntent("为什么还没来")).toBe("ask_waiting");
+    expect(classifyIntent("他约的几点")).toBe("ask_waiting");
     expect(classifyIntent("能看看照片吗")).toBe("ask_photo");
-    expect(classifyIntent("我们去摄影吧")).toBe("ask_photo");
+    expect(classifyIntent("带拍立得了吗")).toBe("ask_photo");
+    expect(classifyIntent("相机借我看看")).toBe("ask_photo");
+    expect(classifyIntent("能拍一张吗")).toBe("ask_photo");
+    expect(classifyIntent("你的电台节目几点开始")).toBe("ask_radio");
+    expect(classifyIntent("声音很好听")).toBe("ask_radio");
     expect(classifyIntent("别担心")).toBe("comfort");
     expect(classifyIntent("我陪你")).toBe("comfort");
     expect(classifyIntent("你好")).toBe("greeting");
@@ -46,39 +54,59 @@ describe("mockLlm：意图与台词", () => {
     }
   });
 
+  it("只输出契约 ① 的字段（say / emotion / suggest / advance）", () => {
+    for (const node of NODES) {
+      for (const intent of INTENTS) {
+        const beats = composeBeats(
+          context({ scene: { ...createInitialScene(), node }, userText: TEXT_BY_INTENT[intent] }),
+        );
+        for (const beat of beats) {
+          expect(Object.keys(beat).sort()).toEqual([...LLM_BEAT_KEYS].sort());
+        }
+      }
+    }
+  });
+
   it("arrive 下第 2 次输入起提议 probe；probe 下 ask_waiting/comfort 提议 reveal；reveal 下提议 ending", () => {
     const arrive = createInitialScene();
     const firstBeat = composeBeats(context({ scene: arrive, userText: "你好" }));
-    expect(firstBeat.every((beat) => beat.story === null)).toBe(true);
+    expect(firstBeat.every((beat) => beat.advance === null)).toBe(true);
 
     const secondInput = composeBeats(
       context({ scene: arrive, userText: "你好", history: [{ role: "user", text: "你好" }, { role: "assistant", text: "你来了。" }] }),
     );
-    expect(secondInput.at(-1)?.story).toEqual({ advance: "probe" });
+    expect(secondInput.at(-1)?.advance).toBe("probe");
 
     const probeScene = { ...createInitialScene(), node: "probe" as const };
-    expect(composeBeats(context({ scene: probeScene, userText: "你在等谁？" })).at(-1)?.story).toEqual({ advance: "reveal" });
-    expect(composeBeats(context({ scene: probeScene, userText: "别担心" })).at(-1)?.story).toEqual({ advance: "reveal" });
-    expect(composeBeats(context({ scene: probeScene, userText: "你好" })).at(-1)?.story ?? null).toBeNull();
+    expect(composeBeats(context({ scene: probeScene, userText: "你在等谁？" })).at(-1)?.advance).toBe("reveal");
+    expect(composeBeats(context({ scene: probeScene, userText: "别担心" })).at(-1)?.advance).toBe("reveal");
+    expect(composeBeats(context({ scene: probeScene, userText: "你好" })).at(-1)?.advance ?? null).toBeNull();
 
     const revealScene = { ...createInitialScene(), node: "reveal" as const };
-    expect(composeBeats(context({ scene: revealScene, userText: "然后呢" })).at(-1)?.story).toEqual({ advance: "ending" });
+    expect(composeBeats(context({ scene: revealScene, userText: "然后呢" })).at(-1)?.advance).toBe("ending");
 
     const endingScene = { ...createInitialScene(), node: "ending" as const };
-    expect(composeBeats(context({ scene: endingScene, userText: "你好" })).every((beat) => beat.story === null)).toBe(true);
+    expect(composeBeats(context({ scene: endingScene, userText: "你好" })).every((beat) => beat.advance === null)).toBe(true);
   });
 
-  it("进入 reveal 的那一轮有一个 beat 带 letter_reveal / close_up / rain_stop / sad", () => {
+  it("进入 reveal 的那一轮用 advance + suggest 表达意图（视觉由导演层给出）", () => {
     const probeScene = { ...createInitialScene(), node: "probe" as const };
     const beats = composeBeats(context({ scene: probeScene, userText: "你在等谁？" }));
-    const mediaBeat = beats.find((beat) => beat.media !== null);
-    expect(mediaBeat).toMatchObject({
-      media: { type: "video", id: "letter_reveal" },
-      camera: "close_up",
-      fx: "rain_stop",
-      emotion: "sad",
-    });
-    expect(beats.at(-1)?.story).toEqual({ advance: "reveal" });
+    expect(beats.at(-1)).toMatchObject({ advance: "reveal", suggest: "show_polaroid", emotion: "sad" });
+    expect(beats.every((beat) => !("camera" in beat) && !("fx" in beat) && !("media" in beat))).toBe(true);
+  });
+
+  it("至少一个 beat 提议 glance_window 的无声动作（say 为空串）", () => {
+    const probeScene = { ...createInitialScene(), node: "probe" as const };
+    const beats = composeBeats(context({ scene: probeScene, userText: "今天店里很安静" }));
+    expect(beats).toContainEqual(expect.objectContaining({ say: "", suggest: "glance_window" }));
+  });
+
+  it("咖啡台词暗示「一直没人动」，不说成给用户点的", () => {
+    const line = composeBeats(context({ scene: createInitialScene(), userText: "今天店里很安静" }))[1]?.say ?? "";
+    expect(line).toContain("咖啡");
+    expect(line).toContain("没人");
+    expect(line).not.toContain("给你点");
   });
 });
 

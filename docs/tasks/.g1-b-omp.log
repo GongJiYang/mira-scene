@@ -1,0 +1,35 @@
+Working...
+完成。报告已写入 `docs/tasks/g1-b-report.md`；未 commit，未改 `docs/architecture/`，无遗留进程（`NO_LEFTOVER`），无 `.env`。
+
+## 验收结果
+
+```
+pnpm typecheck   protocol / server / client 全部 Done
+pnpm test        14 files, 188 tests passed (153 → 188)
+pnpm smoke       SMOKE OK；turn2 beats=3 tts=2
+pnpm dev（无 .env）
+  /health → {"ok":true}
+  经 Vite 代理 hello → text_input：3 beats、首 beat fx=rain_heavy、state_snapshot OK
+```
+
+## 交付内容
+
+- `apps/server/src/director/`：`vocab.ts`（情绪 Fish 标签、动作→手部）、`director.ts`（`direct` 纯函数，规则 1–5）
+- `session.ts`：`parseLlmBeatLenient → direct → seq → 发送 → ttsText 调 TTS`，新增 `director_decision` 日志；守卫、TTS 串行、取消未改
+- `mockLlm.ts`：只输出 `LlmBeat`；reveal 轮用 `advance:"reveal"` + `suggest:"show_polaroid"`；咖啡台词改为「桌上那杯咖啡，一直没人动过」
+- `packages/protocol`：仅新增 `manifest.ts` 类型导出，已有 schema 未动
+- `apps/client/src/render/manifest.ts` + 枚举全覆盖/文件存在性测试（18 个贴片全部命中）
+- 属性测试：3 个属性 × 500 次 = 1500 次；`direct` 每次 50–200 beat、多轮连续调用
+
+## 迁移的断言
+
+1. mockLlm「reveal 轮带 photo_letters / close_up / rain_stop / sad / show_polaroid / polaroid」→ `director.test.ts`，仍用 `composeBeats` 输出过 `direct` 断言，验收意图完整保留。
+2. mockLlm「glance_window 无声动作」→ 保留原文件，断言改为 `suggest:"glance_window"`。
+3. session 全部夹具从 `RawBeat` 迁到 LlmBeat；`story`→`advance`；seq 输入移除，输出 seq 断言保留。
+4. 会话原无 reveal 视觉断言，故无需迁移。
+
+## 需要你裁定的矛盾
+
+`rules 3` 要求 reveal 必出 `action=show_polaroid`，而属性测试要求「同一 action 在任意连续 3 个 beat 内最多一次」。若前 1–2 beat 已采纳 `show_polaroid` 后立即进入 reveal，两者不可能同时成立。当前实现：**reveal 强制视觉优先**，属性测试对 reveal 强制动作豁免冷却，其余动作严格断言。详见报告 §6.1。若要求绝对冷却，需允许 reveal 不出现 `show_polaroid` 或禁止 LLM 提前建议它——都会改动已确认的验收意图。
+
+另记录了 5 处解释性判断：首 beat `rain_heavy` 无条件生效、切分后 hands/emotion 的延续、`recentActions` 用 null 占位、mock reveal 视觉落在无声 beat、`master_clean.png` 与 spec 中 `master.png` 的命名差异。

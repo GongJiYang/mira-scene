@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   isTurnIdAcceptable,
-  parseBeatLenient,
+  parseLlmBeatLenient,
+  type Action,
   type ClientMessage,
   type SceneState,
   type ServerMessage,
@@ -14,9 +15,10 @@ import {
   type ErrorPayload,
 } from "@mira/protocol";
 import { isAbortError, throwIfAborted } from "./abort";
+import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
 import type { LLMHistoryEntry, Ports } from "./ports";
-import { advanceScene, applyBeatToScene, createInitialScene, evaluateStoryAdvance } from "./story";
+import { createInitialScene } from "./story";
 
 export type SendFn = (message: ServerMessage) => void;
 
@@ -35,6 +37,7 @@ type Session = {
   send: SendFn | null;
   history: LLMHistoryEntry[];
   scene: SceneState;
+  recentActions: readonly (Action | null)[];
   lastTurnId: number;
   controller: AbortController | null;
   lastActiveAt: number;
@@ -134,59 +137,63 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
       let nextSeq = 0;
       let firstBeatSeen = false;
-      let storyAdvanced = false;
+      let directorCtx: DirectorContext = {
+        scene: session.scene,
+        recentActions: session.recentActions,
+        advancedThisTurn: false,
+        beatsThisTurn: 0,
+      };
 
       for await (const raw of deps.llm.streamBeats({ history: session.history, scene: session.scene, userText }, signal)) {
         if (signal.aborted || failure !== null) break;
 
-        const parsed = parseBeatLenient(raw);
-        if (parsed.warnings.length > 0) logTurn("beat_parse_warning", { warnings: parsed.warnings });
-        const beat = { ...parsed.beat, seq: nextSeq };
-        nextSeq += 1;
+        const parsed = parseLlmBeatLenient(raw);
+        if (parsed.warnings.length > 0) logTurn("llm_beat_warning", { warnings: parsed.warnings });
 
-        const proposedAdvance = beat.story?.advance;
-        if (proposedAdvance !== undefined) {
-          if (storyAdvanced) {
-            beat.story = null;
-            logTurn("story_rejected", { advance: proposedAdvance, reason: "one_step_per_turn" });
-          } else {
-            const decision = evaluateStoryAdvance(session.scene, proposedAdvance);
-            if (decision.ok) {
-              session.scene = advanceScene(session.scene, decision.node);
-              storyAdvanced = true;
-            } else {
-              beat.story = null;
-              logTurn("story_rejected", { advance: proposedAdvance, reason: decision.reason });
-            }
+        const directed = direct(parsed.llmBeat, directorCtx);
+        directorCtx = directed.ctx;
+        session.scene = directorCtx.scene;
+        session.recentActions = directorCtx.recentActions;
+
+        const suggested = parsed.llmBeat.suggest;
+        const proposedAdvance = parsed.llmBeat.advance;
+        logTurn("director_decision", {
+          suggest: suggested,
+          suggestAccepted: suggested !== null && directed.beats.some(({ beat }) => beat.action === suggested),
+          advance: proposedAdvance,
+          advanceAccepted:
+            proposedAdvance !== null && directed.beats.some(({ beat }) => beat.story?.advance === proposedAdvance),
+        });
+
+        for (const { beat, ttsText } of directed.beats) {
+          const seqBeat = { ...beat, seq: nextSeq };
+          nextSeq += 1;
+
+          if (!firstBeatSeen) {
+            firstBeatSeen = true;
+            logTurn("llm_first_beat", { seq: seqBeat.seq });
           }
-        }
+          if (!emit("beat", { beat: seqBeat })) return;
+          logTurn("beat_sent", { seq: seqBeat.seq, silent: seqBeat.say === "" });
 
-        session.scene = applyBeatToScene(session.scene, beat);
-
-        if (!firstBeatSeen) {
-          firstBeatSeen = true;
-          logTurn("llm_first_beat", { seq: beat.seq });
-        }
-        if (!emit("beat", { beat })) return;
-        logTurn("beat_sent", { seq: beat.seq, silent: beat.say === "" });
-
-        if (beat.say !== "") {
-          says.push(beat.say);
-          const beatSeq = beat.seq;
-          const audio = deps.tts.synthesize(beat.say, { emotion: beat.emotion }, signal).then(
-            (value) => ({ ok: true as const, value }),
-            (error: unknown) => ({ ok: false as const, error }),
-          );
-          ttsChain = ttsChain.then(async () => {
-            const result = await audio;
-            if (failure !== null) return;
-            if (!result.ok) {
-              failure = result.error;
-              return;
-            }
-            if (!emit("tts_audio", { beatSeq, mime: result.value.mime, dataBase64: result.value.data.toString("base64") })) return;
-            logTurn("tts_done", { seq: beatSeq });
-          });
+          if (seqBeat.say !== "") {
+            says.push(seqBeat.say);
+            const beatSeq = seqBeat.seq;
+            const audio = deps.tts.synthesize(ttsText, { emotion: seqBeat.emotion }, signal).then(
+              (value) => ({ ok: true as const, value }),
+              (error: unknown) => ({ ok: false as const, error }),
+            );
+            ttsChain = ttsChain.then(async () => {
+              const result = await audio;
+              if (failure !== null) return;
+              if (!result.ok) {
+                failure = result.error;
+                return;
+              }
+              if (!emit("tts_audio", { beatSeq, mime: result.value.mime, dataBase64: result.value.data.toString("base64") })) return;
+              logTurn("tts_done", { seq: beatSeq });
+            });
+          }
         }
       }
 
@@ -232,6 +239,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         send: null,
         history: [],
         scene: createInitialScene(),
+        recentActions: [],
         lastTurnId: 0,
         controller: null,
         lastActiveAt: clock(),
@@ -297,6 +305,9 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       handleHello(send, message);
       return;
     }
+
+    // 心跳：本批只定义 schema，ping/pong 的收发与超时判定在 G1-c。
+    if (message.type === "ping") return;
 
     const session = sessions.get(message.sessionId);
     if (!session) {

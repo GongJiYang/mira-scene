@@ -6,7 +6,7 @@ const makeBeat = (seq: number, overrides: Partial<Beat> = {}): Beat => ({
   seq,
   say: `第 ${seq} 句`,
   emotion: "warm",
-  pose: "sit",
+  hands: "cup",
   action: null,
   camera: null,
   fx: null,
@@ -46,7 +46,7 @@ const makeSnapshot = (overrides: Partial<SceneState> = {}): SceneState => ({
   trust: 2,
   flags: ["met"],
   emotion: "sad",
-  pose: "look_down",
+  hands: "phone",
   camera: "close_up",
   fx: "lights_dim",
   turnCount: 4,
@@ -236,8 +236,8 @@ describe("beat 与视觉/字幕", () => {
     const incoming = makeBeat(0, {
       say: "雨停了吗？",
       emotion: "sad",
-      pose: "look_down",
-      action: "glance_door",
+      hands: "phone",
+      action: "glance_window",
       camera: "close_up",
       fx: "rain_stop",
     });
@@ -250,8 +250,8 @@ describe("beat 与视觉/字幕", () => {
     expect(state.subtitle).toBe("雨停了吗？");
     expect(state.visual).toEqual({
       emotion: "sad",
-      pose: "look_down",
-      action: "glance_door",
+      hands: "phone",
+      action: "glance_window",
       camera: "close_up",
       fx: "rain_stop",
     });
@@ -267,29 +267,29 @@ describe("beat 与视觉/字幕", () => {
           1,
           makeBeat(0, {
             emotion: "sad",
-            pose: "look_down",
-            action: "glance_door",
+            hands: "phone",
+            action: "glance_window",
             camera: "close_up",
             fx: "rain_stop",
-            media: { type: "image", id: "photo" },
+            media: { type: "photo", id: "photo" },
           }),
         ),
       },
       { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
       {
         type: "SERVER_MESSAGE",
-        message: beatMsg(1, makeBeat(1, { emotion: "warm", pose: "hold_cup" })),
+        message: beatMsg(1, makeBeat(1, { emotion: "warm", hands: "cup" })),
       },
       { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 1 },
     );
     expect(state.visual).toEqual({
       emotion: "warm",
-      pose: "hold_cup",
-      action: "glance_door",
+      hands: "cup",
+      action: "glance_window",
       camera: "close_up",
       fx: "rain_stop",
     });
-    expect(state.media).toEqual({ type: "image", id: "photo" });
+    expect(state.media).toEqual({ type: "photo", id: "photo" });
     expect(state.phase).toEqual({ kind: "speaking", seq: 1 });
   });
 
@@ -314,17 +314,17 @@ describe("beat 与视觉/字幕", () => {
     expect(nextBeatToPlay(initialState)).toBeNull();
   });
 
-  it("session / state_snapshot 不受 turnId 限制，只覆盖视觉持续字段且不动 phase", () => {
+  it("session / state_snapshot 不受 turnId 过滤，只覆盖视觉持续字段且不动 phase", () => {
     const state = run(initialState, { type: "SUBMIT_TEXT" });
     const afterSession = reducer(state, {
       type: "SERVER_MESSAGE",
       message: sessionMsg(999, makeSnapshot()),
     });
-    expect(afterSession.currentTurnId).toBe(state.currentTurnId);
+    // session 的 turnId 同步见下一个用例；这里只断言视觉与 phase。
     expect(afterSession.phase).toEqual(state.phase);
     expect(afterSession.visual).toEqual({
       emotion: "sad",
-      pose: "look_down",
+      hands: "phone",
       action: null,
       camera: "close_up",
       fx: "lights_dim",
@@ -334,16 +334,84 @@ describe("beat 与视觉/字幕", () => {
       type: "SERVER_MESSAGE",
       message: stateSnapshotMsg(
         999,
-        makeSnapshot({ emotion: "guarded", pose: "lean_in", camera: null, fx: null }),
+        makeSnapshot({ emotion: "guarded", hands: "polaroid", camera: null, fx: null }),
       ),
     });
+    expect(afterSnapshot.currentTurnId).toBe(state.currentTurnId);
     expect(afterSnapshot.visual).toEqual({
       emotion: "guarded",
-      pose: "lean_in",
+      hands: "polaroid",
       action: null,
       camera: null,
       fx: null,
     });
+  });
+});
+
+describe("恢复会话时同步 turnId（S2 修复 1）", () => {
+  it("本地 0，收到 turnId=5 的 session → 5；之后 SUBMIT_TEXT → 6", () => {
+    expect(initialState.currentTurnId).toBe(0);
+    const restored = reducer(initialState, {
+      type: "SERVER_MESSAGE",
+      message: sessionMsg(5, makeSnapshot()),
+    });
+    expect(restored.currentTurnId).toBe(5);
+
+    const submitted = reducer(restored, { type: "SUBMIT_TEXT" });
+    expect(submitted.currentTurnId).toBe(6);
+  });
+
+  it("本地 7，收到 turnId=5 的 session → 仍是 7（不回退）", () => {
+    let state = run(initialState, ...Array.from({ length: 7 }, () => ({ type: "SUBMIT_TEXT" }) as const));
+    expect(state.currentTurnId).toBe(7);
+
+    state = reducer(state, { type: "SERVER_MESSAGE", message: sessionMsg(5, makeSnapshot()) });
+    expect(state.currentTurnId).toBe(7);
+  });
+});
+
+describe("INPUT_CANCELLED（S2 修复 2）", () => {
+  it("listening / thinking 下取消 → 回到 idle，turnId 不回退", () => {
+    for (const build of [listeningWithTurn, thinkingWithTurn]) {
+      const state = build();
+      const cancelled = reducer(state, { type: "INPUT_CANCELLED", turnId: state.currentTurnId });
+      expect(cancelled.phase).toEqual({ kind: "idle" });
+      expect(cancelled.currentTurnId).toBe(state.currentTurnId);
+      expect(cancelled.queue).toEqual([]);
+      expect(cancelled.subtitle).toBeNull();
+    }
+  });
+
+  it("旧 turnId → 同一个引用", () => {
+    const thinking = thinkingWithTurn();
+    expect(reducer(thinking, { type: "INPUT_CANCELLED", turnId: thinking.currentTurnId - 1 })).toBe(thinking);
+  });
+
+  it("speaking 下 → 不变（同一个引用）", () => {
+    const speaking = speakingWithTurn();
+    expect(reducer(speaking, { type: "INPUT_CANCELLED", turnId: speaking.currentTurnId })).toBe(speaking);
+  });
+});
+
+describe("剧情层与心跳消息（D27）", () => {
+  const mediaReadyMsg = (turnId: number, status: "ready" | "fallback"): ServerMessage => ({
+    ...envelope,
+    type: "media_ready",
+    turnId,
+    seq: 0,
+    payload: { storyEventId: "story-1", media: { type: "photo", id: "photo_letters" }, status },
+  });
+
+  it("media_ready 不按 turnId 过滤，本批原样忽略", () => {
+    const speaking = speakingWithTurn();
+    expect(reducer(speaking, { type: "SERVER_MESSAGE", message: mediaReadyMsg(999, "ready") })).toBe(speaking);
+    expect(reducer(speaking, { type: "SERVER_MESSAGE", message: mediaReadyMsg(1, "fallback") })).toBe(speaking);
+  });
+
+  it("pong 原样忽略", () => {
+    const speaking = speakingWithTurn();
+    const pong: ServerMessage = { ...envelope, type: "pong", turnId: 999, seq: 0, payload: {} };
+    expect(reducer(speaking, { type: "SERVER_MESSAGE", message: pong })).toBe(speaking);
   });
 });
 

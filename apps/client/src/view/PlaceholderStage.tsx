@@ -65,7 +65,7 @@ export function PlaceholderStage() {
     <main>
       <p style={{ fontSize: "2rem", margin: 0 }}>{phase}</p>
 
-      <p>{`emotion=${visual.emotion} pose=${visual.pose} action=${visual.action ?? "-"} camera=${
+      <p>{`emotion=${visual.emotion} hands=${visual.hands} action=${visual.action ?? "-"} camera=${
         visual.camera ?? "-"
       } fx=${visual.fx ?? "-"}`}</p>
 

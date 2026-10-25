@@ -16,7 +16,8 @@ export type STTPort = {
 };
 
 /**
- * LLM 端口：产出未经校验的原始 beat 对象，由会话层调用 parseBeatLenient。
+ * LLM 端口：产出未经校验的原始对象（契约 ①：say / emotion / suggest / advance）。
+ * 会话层先 `parseLlmBeatLenient` 降级，再交给导演层决定视觉。
  */
 export type LLMPort = {
   streamBeats(ctx: LLMContext, signal: AbortSignal): AsyncIterable<unknown>;

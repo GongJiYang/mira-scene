@@ -13,7 +13,7 @@ const scene: SceneState = {
   trust: 1,
   flags: ["heard_rain"],
   emotion: "calm",
-  pose: "sit",
+  hands: "cup",
   camera: null,
   fx: "rain_heavy",
   turnCount: 0,
@@ -23,7 +23,7 @@ const beat: Beat = {
   seq: 0,
   say: "你来了。",
   emotion: "warm",
-  pose: "lean_in",
+  hands: "polaroid",
   action: null,
   camera: "close_up",
   fx: null,
@@ -48,6 +48,7 @@ describe("client message envelope", () => {
     ["text_input", envelope("text_input", { text: "你在等谁？" })],
     ["audio_input", envelope("audio_input", { mime: "audio/webm", dataBase64: "AAECAw==" })],
     ["interrupt", envelope("interrupt", { interruptedTurnId: 2 })],
+    ["ping", envelope("ping", {})],
   ];
 
   it.each(validCases)("接受合法 %s", (type, input) => {
@@ -82,6 +83,9 @@ describe("server message envelope", () => {
     ["turn_end interrupted", envelope("turn_end", { reason: "interrupted" })],
     ["turn_end error", envelope("turn_end", { reason: "error" })],
     ["state_snapshot", envelope("state_snapshot", { snapshot: scene })],
+    ["media_ready ready", envelope("media_ready", { storyEventId: "evt-1", media: { type: "photo", id: "photo_letters", url: "https://example.test/p.jpg" }, status: "ready" })],
+    ["media_ready fallback", envelope("media_ready", { storyEventId: "evt-1", media: { type: "photo", id: "photo_letters" }, status: "fallback" })],
+    ["pong", envelope("pong", {})],
     ["error", envelope("error", { code: "llm_timeout", message: "迟到了", retryable: true })],
   ];
 
@@ -99,6 +103,10 @@ describe("server message envelope", () => {
     ["tts_audio beatSeq 负数", envelope("tts_audio", { beatSeq: -1, mime: "audio/mpeg", dataBase64: "" })],
     ["turn_end 未知 reason", envelope("turn_end", { reason: "finished" })],
     ["state_snapshot 快照为 null", envelope("state_snapshot", { snapshot: null })],
+    ["media_ready 缺 storyEventId", envelope("media_ready", { media: { type: "photo", id: "photo_letters" }, status: "ready" })],
+    ["media_ready status 非法", envelope("media_ready", { storyEventId: "evt-1", media: { type: "photo", id: "x" }, status: "pending" })],
+    ["media_ready media.type 非法", envelope("media_ready", { storyEventId: "evt-1", media: { type: "image", id: "x" }, status: "ready" })],
+    ["ping payload 不是对象", envelope("ping", null)],
     ["error retryable 非布尔", envelope("error", { code: "x", message: "y", retryable: "yes" })],
     ["缺少 payload", { ...envelope("session", {}), payload: undefined }],
     ["额外未知 type", envelope("heartbeat", {})],

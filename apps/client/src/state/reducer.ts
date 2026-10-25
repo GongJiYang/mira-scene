@@ -7,7 +7,7 @@ export const initialState: ClientState = {
   queue: [],
   turnEnded: false,
   subtitle: null,
-  visual: { emotion: "neutral", pose: "sit", action: null, camera: null, fx: null },
+  visual: { emotion: "neutral", hands: "cup", action: null, camera: null, fx: null },
   media: null,
   audioStopToken: 0,
 };
@@ -64,7 +64,7 @@ function applySnapshot(state: ClientState, snapshot: SceneState): ClientState {
     visual: {
       ...state.visual,
       emotion: snapshot.emotion,
-      pose: snapshot.pose,
+      hands: snapshot.hands,
       camera: snapshot.camera,
       fx: snapshot.fx,
     },
@@ -72,9 +72,20 @@ function applySnapshot(state: ClientState, snapshot: SceneState): ClientState {
 }
 
 function applyServerMessage(state: ClientState, message: ServerMessage): ClientState {
-  if (message.type === "session" || message.type === "state_snapshot") {
+  // 恢复会话：服务端 lastTurnId 可能大于本地计数器（例如刷新页面）。
+  // turnId 同步必须在 reducer 内完成（D4），且只前进不回退（D12）。
+  if (message.type === "session") {
+    return {
+      ...applySnapshot(state, message.payload.snapshot),
+      currentTurnId: Math.max(state.currentTurnId, message.turnId),
+    };
+  }
+  if (message.type === "state_snapshot") {
     return applySnapshot(state, message.payload.snapshot);
   }
+
+  // 剧情层消息（D27）与心跳：不按 turnId 过滤，本批原样忽略；C 状态机与心跳在 G1-c。
+  if (message.type === "media_ready" || message.type === "pong") return state;
 
   // D3：客户端按 turnId 过滤是唯一正确性保证；不属于本轮的消息一律丢弃。
   if (message.turnId !== state.currentTurnId) return state;
@@ -112,7 +123,7 @@ function applyBeatStarted(state: ClientState, turnId: number, seq: number): Clie
     subtitle: beat.say,
     visual: {
       emotion: beat.emotion,
-      pose: beat.pose,
+      hands: beat.hands,
       action: beat.action ?? state.visual.action,
       camera: beat.camera ?? state.visual.camera,
       fx: beat.fx ?? state.visual.fx,
@@ -149,6 +160,13 @@ export function reducer(state: ClientState, action: ClientAction): ClientState {
       return applyBeatStarted(state, action.turnId, action.seq);
     case "BEAT_AUDIO_ENDED":
       return applyBeatEnded(state, action.turnId);
+    case "INPUT_CANCELLED":
+      // 本轮没有上行输入（短按 / 麦克风失败）：listening / thinking 回到 idle。
+      // 旧轮次或其它 phase 原样返回同一个引用；currentTurnId 不回退。
+      return action.turnId === state.currentTurnId &&
+        (state.phase.kind === "listening" || state.phase.kind === "thinking")
+        ? toIdle(state)
+        : state;
     case "RETRY":
       return state.phase.kind === "error" ? toIdle(state) : state;
   }

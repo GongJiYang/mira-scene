@@ -1,0 +1,36 @@
+Working...
+G1-a 完成。未 commit，未修改 `docs/architecture/`（该目录下 `decisions.md` 的改动任务开始前已存在），无残留进程。
+
+## 交付
+
+**协议（`packages/protocol`）**
+- `Pose`→`Hands`（`cup/polaroid/camera/phone`），`pose` 字段全量改名 `hands`；`Action` 换为 `sip_coffee/glance_window/check_phone/show_polaroid`；`MediaType` `image`→`photo`。
+- `parseBeatLenient` 非法 hands 降级 `cup`。
+- 新增 `llmBeatSchema`/`LlmBeat` + `parseLlmBeatLenient`（永不抛错，缺失 say→`""`、非法 emotion→`neutral`、suggest/advance→`null`）。
+- 新增 `media_ready`、`pong`（下行）与 `ping`（上行）schema；`SceneState.hands`。
+
+**S2 遗留修复**
+- reducer：`session` 消息 `currentTurnId=max(本地, turnId)`；新增 `INPUT_CANCELLED`（仅同 turnId + listening/thinking → `toIdle`，不回退 turnId）。
+- `connection.ts` 删除对 stage store 的直接 `setState`，唯一写入口回到 reducer。
+- controller：短按/空 Blob/录音器失败/麦克风被拒 → `INPUT_CANCELLED` 且不发 `audio_input`；recorder 的 `error` 事件收敛为 `stop()→null`。
+
+**Mock 剧本（凛）**：4 节点 × 6 意图中文台词；新增 `ask_radio` 与关键词；reveal 轮首 beat 带 `photo/photo_letters + close_up + rain_stop + sad + show_polaroid + polaroid`；probe 无声 beat 为 `glance_window`；`proposeStory` 与 3-beat 结构未改。标题 `Mira`→`凛`。
+
+## 验证
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm install` | Already up to date |
+| `pnpm test` | 11 files / **153 passed**（基线 123，+30） |
+| `pnpm typecheck` | protocol / server / client 全部 Done |
+| `pnpm smoke` | `SMOKE OK`，turn2 beats=3 tts=2 |
+
+Q10：无 `.env` 启动 `pnpm dev`，`/health` 返回 `{"ok":true}`，Vite 代理 WS hello 返回 `hands:"cup"` 快照，页面标题「凛」；随后停止，`pgrep` 确认无残留。本机 `127.0.0.1:8787` 被无关 Python 进程占用、5173/5174 被其它项目占用，故走 `[::1]:8787` 与 5175，属环境状态。
+
+## 冲突与偏差（已写进报告）
+
+1. 两条旧断言与 `stage-2-fix.md` 直接冲突：session 提升 turnId、丢弃录音后回 `idle`。按铁律 1 记录在报告 §3.1/§6，实现按新验收标准，未为迁就旧断言放宽代码。
+2. §3 的台词/媒体 id 变更连带改了 4 处内容断言（`photo_letters`、`ask_photo`/`comfort` 夹具、`摄影`→新关键词），断言意图未反转。
+3. `ask_radio` 不触发剧情推进（保持规则不变）；心跳仅定义 schema，服务端收到 `ping` 忽略不回 `pong`（G1-c）。
+
+报告：`docs/tasks/g1-a-report.md`（含逐条断言变更、新增测试、grep 证据）；`docs/tasks/stage-2-report.md` 已追加「## 修复记录」。

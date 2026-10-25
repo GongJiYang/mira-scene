@@ -264,3 +264,42 @@ type Intents = {
 - 未 commit。
 - 依赖只新增允许清单内项：`ws`、`@types/ws`、`tsx`、`@types/node`、`zustand`。
 - 冒烟后未留下构建产物；`apps/server/node_modules/.bin/tsx` 为 pnpm 安装生成（已被 `.gitignore` 的 `node_modules` 覆盖）。
+
+## 修复记录
+
+按 `docs/tasks/stage-2-fix.md` 修复两个问题（详细报告与逐条断言变更见 `docs/tasks/g1-a-report.md` §3、§5）。
+
+### 改动的文件
+
+| 文件 | 改动 |
+|---|---|
+| `apps/client/src/state/types.ts` | 新增动作 `INPUT_CANCELLED(turnId)` |
+| `apps/client/src/state/reducer.ts` | `session` 消息内 `currentTurnId = max(本地, msg.turnId)`；新增 `INPUT_CANCELLED`（listening/thinking → `toIdle`，旧 turnId / 其他 phase 返回同一引用，turnId 不回退） |
+| `apps/client/src/core/connection.ts` | 删除 `useStageStore.setState` 直接同步 turnId，改为只 `dispatch` |
+| `apps/client/src/core/controller.ts` | 短按/空录音/录音器失败 → `INPUT_CANCELLED` 且不发 `audio_input`；`recorder.start()` 为 false（权限拒绝/不可用）→ `INPUT_CANCELLED`，micError 照旧由 recorder 写入 |
+| `apps/client/src/core/recorder.ts` | 监听 MediaRecorder `error`；`stop()` 在 `error` 或 `stop` 抛错时解析 `null` |
+| `apps/client/test/reducer.test.ts` | 新增 session turnId 两例、`INPUT_CANCELLED` 三例；session 提升 turnId 后旧的「turnId 不变」断言移到 `state_snapshot` |
+| `apps/client/test/controller.test.ts` | 丢弃录音后断言 `idle`；新增麦克风被拒用例 |
+| `apps/client/test/recorder.test.ts` | 新增：MediaRecorder error → `stop()` 返回 null |
+
+### 验证
+
+```
+$ pnpm test        → 11 files / 153 tests passed
+$ pnpm typecheck   → protocol / server / client 全部 Done
+$ pnpm smoke       → SMOKE OK
+```
+
+### 确认 connection.ts 不再直接 setState 修改 reducer 管理的字段
+
+```
+$ grep -rn "useStageStore.setState" apps/client/src
+apps/client/src/core/store.ts:8:  useStageStore.setState((state) => reducer(state, action));
+
+$ grep -n "setState" apps/client/src/core/connection.ts
+40:  useConnectionStore.setState({ status });
+87:      useConnectionStore.setState({ sessionId: message.sessionId });
+```
+
+`store.ts:8` 是唯一写入口 `dispatch`；`connection.ts` 只剩连接 slice（`status`/`sessionId`，不属于 reducer 状态）的写入。`currentTurnId` 只在 reducer 内变化。
+

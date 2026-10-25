@@ -1,4 +1,4 @@
-import type { Action, Beat, Camera, Emotion, Fx, Media, Pose, ServerMessage } from "@mira/protocol";
+import type { Action, Beat, Camera, Emotion, Fx, Hands, Media, ServerMessage } from "@mira/protocol";
 
 export type Phase =
   | { kind: "idle" }
@@ -9,7 +9,7 @@ export type Phase =
 
 export type Visual = {
   emotion: Emotion;
-  pose: Pose;
+  hands: Hands;
   action: Action | null;
   camera: Camera | null;
   fx: Fx | null;
@@ -33,4 +33,5 @@ export type ClientAction =
   | { type: "SERVER_MESSAGE"; message: ServerMessage }
   | { type: "BEAT_AUDIO_STARTED"; turnId: number; seq: number }
   | { type: "BEAT_AUDIO_ENDED"; turnId: number; seq: number }
+  | { type: "INPUT_CANCELLED"; turnId: number }
   | { type: "RETRY" };

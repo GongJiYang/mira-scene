@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { beatSchema } from "./beat";
+import { beatSchema, mediaSchema } from "./beat";
 import { sceneStateSchema } from "./scene";
 
 const nonNegativeInt = z.number().int().nonnegative();
@@ -61,11 +61,23 @@ export const errorPayloadSchema = z.object({
   retryable: z.boolean(),
 });
 
+/** D27：剧情层媒体就绪事件，只与 storyEventId 绑定，不跟 turnId 作废。 */
+export const mediaReadyPayloadSchema = z.object({
+  storyEventId: z.string(),
+  media: mediaSchema,
+  status: z.enum(["ready", "fallback"]),
+});
+
+/** 心跳：本批只定义 schema，收发逻辑在 G1-c。 */
+export const pingPayloadSchema = z.object({});
+export const pongPayloadSchema = z.object({});
+
 export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("hello"), payload: helloPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("text_input"), payload: textInputPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("audio_input"), payload: audioInputPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("interrupt"), payload: interruptPayloadSchema }),
+  z.object({ ...envelopeFields, type: z.literal("ping"), payload: pingPayloadSchema }),
 ]);
 
 export const serverMessageSchema = z.discriminatedUnion("type", [
@@ -75,6 +87,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("tts_audio"), payload: ttsAudioPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("turn_end"), payload: turnEndPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("state_snapshot"), payload: stateSnapshotPayloadSchema }),
+  z.object({ ...envelopeFields, type: z.literal("media_ready"), payload: mediaReadyPayloadSchema }),
+  z.object({ ...envelopeFields, type: z.literal("pong"), payload: pongPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("error"), payload: errorPayloadSchema }),
 ]);
 
@@ -88,6 +102,9 @@ export type BeatPayload = z.infer<typeof beatPayloadSchema>;
 export type TtsAudioPayload = z.infer<typeof ttsAudioPayloadSchema>;
 export type TurnEndPayload = z.infer<typeof turnEndPayloadSchema>;
 export type StateSnapshotPayload = z.infer<typeof stateSnapshotPayloadSchema>;
+export type MediaReadyPayload = z.infer<typeof mediaReadyPayloadSchema>;
+export type PingPayload = z.infer<typeof pingPayloadSchema>;
+export type PongPayload = z.infer<typeof pongPayloadSchema>;
 export type ErrorPayload = z.infer<typeof errorPayloadSchema>;
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

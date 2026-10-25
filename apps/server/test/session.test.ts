@@ -4,33 +4,23 @@ import { createAbortError } from "../src/abort";
 import { createMockLlm } from "../src/adapters/mock/mockLlm";
 import { createMockStt } from "../src/adapters/mock/mockStt";
 import { createMockTts } from "../src/adapters/mock/mockTts";
-import { silentLogger } from "../src/log";
+import { silentLogger, type LogRecord } from "../src/log";
 import type { LLMPort, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
 
-type RawBeat = {
-  seq?: number;
+type LlmBeatFixture = {
   say: string;
   emotion?: string;
-  pose?: string;
-  action?: string | null;
-  camera?: string | null;
-  fx?: string | null;
-  media?: { type: string; id: string } | null;
-  story?: { advance: StoryNode } | null;
+  suggest?: string | null;
+  advance?: StoryNode | null;
 };
 
-function rawBeat(say: string, extra: Partial<RawBeat> = {}): RawBeat {
+function llmBeat(say: string, extra: Partial<LlmBeatFixture> = {}): LlmBeatFixture {
   return {
-    seq: 0,
     say,
     emotion: "neutral",
-    pose: "sit",
-    action: null,
-    camera: null,
-    fx: null,
-    media: null,
-    story: null,
+    suggest: null,
+    advance: null,
     ...extra,
   };
 }
@@ -50,7 +40,7 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 /** 按顺序消费脚本：每次 streamBeats 取下一个脚本。 */
-function scriptedLlm(scripts: RawBeat[][]): LLMPort {
+function scriptedLlm(scripts: LlmBeatFixture[][]): LLMPort {
   const pending = [...scripts];
   return {
     async *streamBeats() {
@@ -90,7 +80,7 @@ type Harness = {
 
 let activeManager: SessionManager | null = null;
 
-function setup(ports: { llm?: LLMPort; stt?: STTPort; tts?: TTSPort } = {}): Harness {
+function setup(ports: { llm?: LLMPort; stt?: STTPort; tts?: TTSPort; log?: (record: LogRecord) => void } = {}): Harness {
   const sent: ServerMessage[] = [];
   let waiters: Array<() => void> = [];
   const send: SendFn = (message) => {
@@ -103,7 +93,7 @@ function setup(ports: { llm?: LLMPort; stt?: STTPort; tts?: TTSPort } = {}): Har
     stt: ports.stt ?? createMockStt({ delayMs: 0 }),
     llm: ports.llm ?? createMockLlm({ beatDelayMs: 0 }),
     tts: ports.tts ?? createMockTts({ delayMs: 0 }),
-    log: silentLogger,
+    log: ports.log ?? silentLogger,
   });
   activeManager = manager;
 
@@ -149,7 +139,9 @@ function setup(ports: { llm?: LLMPort; stt?: STTPort; tts?: TTSPort } = {}): Har
 }
 
 function beatsOf(sent: ServerMessage[], turnId: number) {
-  return sent.filter((message) => message.type === "beat" && message.turnId === turnId);
+  return sent.filter(
+    (message): message is Extract<ServerMessage, { type: "beat" }> => message.type === "beat" && message.turnId === turnId,
+  );
 }
 
 function ttsSeqs(sent: ServerMessage[]) {
@@ -170,7 +162,7 @@ describe("session：输入与中止", () => {
     const flags: Array<{ text: string; aborted: boolean }> = [];
     const llm: LLMPort = {
       async *streamBeats(ctx, signal) {
-        yield rawBeat("嗯。");
+        yield llmBeat("嗯。");
         if (ctx.userText === "第一句") {
           await untilAborted(signal).catch(() => undefined);
           flags.push({ text: ctx.userText, aborted: signal.aborted });
@@ -194,10 +186,10 @@ describe("session：输入与中止", () => {
   it("被中止的一轮在中止之后发送消息数为 0（含 turn_end）", async () => {
     const llm: LLMPort = {
       async *streamBeats(ctx, signal) {
-        yield rawBeat("一");
+        yield llmBeat("一");
         if (ctx.userText === "打断") return;
         await untilAborted(signal).catch(() => undefined);
-        yield rawBeat("二");
+        yield llmBeat("二");
       },
     };
     const harness = setup({ llm });
@@ -220,9 +212,9 @@ describe("session：输入与中止", () => {
     const release = Promise.withResolvers<void>();
     const llm: LLMPort = {
       async *streamBeats() {
-        yield rawBeat("一");
+        yield llmBeat("一");
         await release.promise;
-        yield rawBeat("二");
+        yield llmBeat("二");
       },
     };
     const harness = setup({ llm });
@@ -243,7 +235,38 @@ describe("session：输入与中止", () => {
   });
 });
 
+describe("session：heartbeat 占位", () => {
+  it("ping 在本批不产生任何下行消息（心跳逻辑在 G1-c）", async () => {
+    const harness = setup();
+    const session = await harness.hello();
+    const marker = harness.sent.length;
+
+    await harness.manager.handleMessage(
+      harness.send,
+      envelope("ping", {}, { sessionId: session.sessionId, turnId: 0 }),
+    );
+
+    expect(harness.sent.slice(marker)).toEqual([]);
+  });
+});
+
 describe("session：TTS 流水线", () => {
+  it("TTS 用带 Fish 标签的 ttsText，下行 beat.say 保持原台词", async () => {
+    const spoken: Array<{ text: string; emotion: string }> = [];
+    const tts: TTSPort = {
+      synthesize(text, opts) {
+        spoken.push({ text, emotion: opts.emotion });
+        return Promise.resolve({ mime: "audio/wav", data: Buffer.from([1]) });
+      },
+    };
+    const harness = setup({ llm: scriptedLlm([[llmBeat("雨还在下。", { emotion: "calm" })]]), tts });
+    await harness.hello();
+    await harness.input(1, "你好");
+
+    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ payload: { beat: { say: "雨还在下。", emotion: "calm" } } });
+    expect(spoken).toEqual([{ text: "[calm] 雨还在下。", emotion: "calm" }]);
+  });
+
   it("tts_audio 按 seq 顺序发送（seq1 先合成完也要等 seq0）", async () => {
     const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
     let call = 0;
@@ -257,7 +280,7 @@ describe("session：TTS 流水线", () => {
         return { mime: "audio/wav", data: Buffer.from([index]) };
       },
     };
-    const harness = setup({ llm: scriptedLlm([[rawBeat("第一句"), rawBeat("第二句")]]), tts });
+    const harness = setup({ llm: scriptedLlm([[llmBeat("第一句"), llmBeat("第二句")]]), tts });
     await harness.hello();
 
     const turn = harness.input(1, "你好");
@@ -281,7 +304,7 @@ describe("session：TTS 流水线", () => {
         return { mime: "audio/wav", data: Buffer.from([1]) };
       },
     };
-    const harness = setup({ llm: scriptedLlm([[rawBeat("一"), rawBeat("二")]]), tts });
+    const harness = setup({ llm: scriptedLlm([[llmBeat("一"), llmBeat("二")]]), tts });
     await harness.hello();
 
     const turn = harness.input(1, "你好");
@@ -301,9 +324,9 @@ describe("session：TTS 流水线", () => {
     const release = Promise.withResolvers<void>();
     const llm: LLMPort = {
       async *streamBeats() {
-        yield rawBeat("一");
+        yield llmBeat("一");
         await release.promise;
-        yield rawBeat("二");
+        yield llmBeat("二");
       },
     };
     const tts: TTSPort = {
@@ -327,9 +350,9 @@ describe("session：TTS 流水线", () => {
 });
 
 describe("session：beats、剧情与错误", () => {
-  it("LLM 返回的 seq 被重写为 0,1,2…", async () => {
+  it("beat 的 seq 由会话层分配为 0,1,2…", async () => {
     const harness = setup({
-      llm: scriptedLlm([[rawBeat("一", { seq: 5 }), rawBeat("二", { seq: 5 }), rawBeat("三", { seq: 9 })]]),
+      llm: scriptedLlm([[llmBeat("一"), llmBeat("二"), llmBeat("三")]]),
     });
     await harness.hello();
     await harness.input(1, "你好");
@@ -340,9 +363,9 @@ describe("session：beats、剧情与错误", () => {
   it("剧情：跳级被拒绝；合法转移更新 node 与 trust；每轮最多一步", async () => {
     const harness = setup({
       llm: scriptedLlm([
-        [rawBeat("跳级", { story: { advance: "reveal" } })],
-        [rawBeat("合法", { story: { advance: "probe" } })],
-        [rawBeat("一步", { story: { advance: "reveal" } }), rawBeat("再一步", { story: { advance: "ending" } })],
+        [llmBeat("跳级", { advance: "reveal" })],
+        [llmBeat("合法", { advance: "probe" })],
+        [llmBeat("一步", { advance: "reveal" }), llmBeat("再一步", { advance: "ending" })],
       ]),
     });
     await harness.hello();
@@ -367,6 +390,39 @@ describe("session：beats、剧情与错误", () => {
     });
     expect(beatsOf(harness.sent, 3)[0]).toMatchObject({ payload: { beat: { story: { advance: "reveal" } } } });
     expect(beatsOf(harness.sent, 3)[1]).toMatchObject({ payload: { beat: { story: null } } });
+  });
+
+  it("导演层：日志记录 suggest / advance 的采纳结果", async () => {
+    const records: LogRecord[] = [];
+    const harness = setup({
+      llm: scriptedLlm([[llmBeat("嗯。", { suggest: "sip_coffee", advance: "probe" })]]),
+      log: (record) => records.push(record),
+    });
+    await harness.hello();
+    await harness.input(1, "你好");
+
+    const decision = records.find((record) => record.event === "director_decision");
+    expect(decision?.detail).toMatchObject({
+      suggest: "sip_coffee",
+      suggestAccepted: true,
+      advance: "probe",
+      advanceAccepted: true,
+    });
+  });
+
+  it("导演层：第一句过长时切成两个 beat，seq 连续且 TTS 各一条", async () => {
+    const harness = setup({
+      llm: scriptedLlm([[llmBeat("第一句很短，第二句稍微长一点点也没有关系。")]]),
+    });
+    await harness.hello();
+    await harness.input(1, "你好");
+
+    expect(beatsOf(harness.sent, 1).map((message) => message.payload.beat.seq)).toEqual([0, 1]);
+    expect(beatsOf(harness.sent, 1).map((message) => message.payload.beat.say)).toEqual([
+      "第一句很短，",
+      "第二句稍微长一点点也没有关系。",
+    ]);
+    expect(ttsSeqs(harness.sent)).toEqual([0, 1]);
   });
 
   it("LLM 抛出非 AbortError → error{turn_failed} 再 turn_end{error}", async () => {
@@ -399,14 +455,14 @@ describe("session：interrupt 与会话恢复", () => {
       async *streamBeats(_ctx, signal) {
         calls += 1;
         const thisCall = calls;
-        yield rawBeat("一");
+        yield llmBeat("一");
         if (thisCall === 1) {
           await release.promise;
-          yield rawBeat("二");
+          yield llmBeat("二");
           return;
         }
         await untilAborted(signal).catch(() => undefined);
-        yield rawBeat("二");
+        yield llmBeat("二");
       },
     };
     const harness = setup({ llm });
@@ -431,7 +487,7 @@ describe("session：interrupt 与会话恢复", () => {
   });
 
   it("hello 带已有 sessionId → 返回同一份 scene", async () => {
-    const harness = setup({ llm: scriptedLlm([[rawBeat("合法", { story: { advance: "probe" } })]]) });
+    const harness = setup({ llm: scriptedLlm([[llmBeat("合法", { advance: "probe" })]]) });
     const first = await harness.hello();
     await harness.input(1, "你在等谁？");
     const snapshot = harness.sent.filter((message) => message.type === "state_snapshot").at(-1);
@@ -450,7 +506,7 @@ describe("session：音频输入", () => {
         return Promise.resolve("你在等谁？");
       },
     };
-    const harness = setup({ stt, llm: scriptedLlm([[rawBeat("我在等人。")]]) });
+    const harness = setup({ stt, llm: scriptedLlm([[llmBeat("我在等人。")]]) });
     await harness.hello();
     await harness.audio(1);
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cameraSchema, emotionSchema, fxSchema, poseSchema, storyNodeSchema } from "./enums";
+import { cameraSchema, emotionSchema, fxSchema, handsSchema, storyNodeSchema } from "./enums";
 
 export const trustSchema = z.number().int().min(0).max(3);
 
@@ -8,7 +8,7 @@ export const sceneStateSchema = z.object({
   trust: trustSchema,
   flags: z.array(z.string()),
   emotion: emotionSchema,
-  pose: poseSchema,
+  hands: handsSchema,
   camera: cameraSchema.nullable(),
   fx: fxSchema.nullable(),
   turnCount: z.number().int().nonnegative(),

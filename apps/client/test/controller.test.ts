@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createController, type Intents } from "../src/core/controller";
 import type { Connection } from "../src/core/connection";
 import type { Recording, Recorder } from "../src/core/recorder";
-import { getStageState, useConnectionStore, useDebugStore, useStageStore } from "../src/core/store";
+import { getStageState, useConnectionStore, useDebugStore, useMicStore, useStageStore } from "../src/core/store";
 import { initialState } from "../src/state";
 
 function fakeConnection(events: string[], overrides: Partial<Connection> = {}): Connection {
@@ -32,6 +32,7 @@ function fakeRecorder(recording: Recording | null): Recorder {
 function resetStores(): void {
   useStageStore.setState(initialState, true);
   useConnectionStore.setState({ status: "open", sessionId: "session-1" });
+  useMicStore.setState({ micError: null });
   useDebugStore.setState({ events: [] });
 }
 
@@ -107,7 +108,7 @@ describe("controller：PTT", () => {
     expect(events).toContain("audio:1:audio/webm:YWJj");
   });
 
-  it("录音被丢弃（不足 300ms 或权限失败）时不发送", async () => {
+  it("录音被丢弃（不足 300ms 或无数据）时不发送 audio_input，并回到 idle", async () => {
     const events: string[] = [];
     const controller = setup(events, null);
 
@@ -118,6 +119,28 @@ describe("controller：PTT", () => {
     await Promise.resolve();
 
     expect(events.filter((event) => event.startsWith("audio:"))).toEqual([]);
-    expect(getStageState().phase.kind).toBe("thinking");
+    expect(getStageState().phase.kind).toBe("idle");
+    expect(getStageState().currentTurnId).toBe(1);
+  });
+
+  it("麦克风被拒绝：phase 回到 idle，micError 有值，且不发送任何消息", async () => {
+    resetStores();
+    const events: string[] = [];
+    const denied: Recorder = {
+      start() {
+        useMicStore.setState({ micError: "NotAllowedError" });
+        return Promise.resolve(false);
+      },
+      stop: () => Promise.resolve(null),
+    };
+    const controller = createController({ connection: fakeConnection(events), recorder: denied });
+
+    controller.pttDown();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(getStageState().phase.kind).toBe("idle");
+    expect(useMicStore.getState().micError).toBe("NotAllowedError");
+    expect(events).toEqual([]);
   });
 });

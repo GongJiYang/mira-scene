@@ -14,7 +14,7 @@ export function createInitialScene(): SceneState {
     trust: 0,
     flags: [],
     emotion: "neutral",
-    pose: "sit",
+    hands: "cup",
     camera: null,
     fx: null,
     turnCount: 0,
@@ -38,12 +38,12 @@ export function advanceScene(scene: SceneState, node: StoryNode): SceneState {
   return { ...scene, node, trust: Math.min(scene.trust + 1, 3) };
 }
 
-/** 持久视觉状态：emotion/pose 每 beat 覆盖，camera/fx 仅在给出时覆盖。 */
+/** 持久视觉状态：emotion/hands 每 beat 覆盖，camera/fx 仅在给出时覆盖。 */
 export function applyBeatToScene(scene: SceneState, beat: Beat): SceneState {
   return {
     ...scene,
     emotion: beat.emotion,
-    pose: beat.pose,
+    hands: beat.hands,
     camera: beat.camera ?? scene.camera,
     fx: beat.fx ?? scene.fx,
   };

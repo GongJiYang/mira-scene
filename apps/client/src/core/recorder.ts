@@ -8,7 +8,7 @@ export type Recording = { blob: Blob; mime: string; durationMs: number };
 export type Recorder = {
   /** 开始录音；权限被拒绝或不可用时返回 false，并把原因写入 micError slice。 */
   start(): Promise<boolean>;
-  /** 停止录音；不足 300ms（误触）或没有数据时返回 null。 */
+  /** 停止录音；不足 300ms（误触）、没有数据或录音器出错时返回 null。 */
   stop(): Promise<Recording | null>;
 };
 
@@ -28,6 +28,8 @@ export function createRecorder(): Recorder {
   let chunks: Blob[] = [];
   let startedAt = 0;
   let starting: Promise<boolean> | null = null;
+  // MediaRecorder 的 error 事件：本轮录音不可用，stop() 一律返回 null。
+  let failed = false;
   // stop() 早于 getUserMedia 完成时置位：避免用户松开后才开始录音。
   let cancelled = false;
 
@@ -48,8 +50,12 @@ export function createRecorder(): Recorder {
         const mimeType = MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate));
         mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
         chunks = [];
+        failed = false;
         mediaRecorder.addEventListener("dataavailable", (event) => {
           if (event.data.size > 0) chunks.push(event.data);
+        });
+        mediaRecorder.addEventListener("error", () => {
+          failed = true;
         });
         mediaRecorder.start();
         startedAt = performance.now();
@@ -85,6 +91,15 @@ export function createRecorder(): Recorder {
       if (!recorder) return Promise.resolve(null);
       const durationMs = performance.now() - startedAt;
       const finished = Promise.withResolvers<Recording | null>();
+      let settled = false;
+      const settle = (value: Recording | null) => {
+        if (settled) return;
+        settled = true;
+        finished.resolve(value);
+      };
+
+      // error 事件可能先于 stop 事件到达，也可能完全没有 stop：两种情况都按失败收尾。
+      recorder.addEventListener("error", () => settle(null), { once: true });
 
       recorder.addEventListener(
         "stop",
@@ -92,12 +107,16 @@ export function createRecorder(): Recorder {
           const mime = recorder.mimeType || "audio/webm";
           const blob = new Blob(chunks, { type: mime });
           chunks = [];
-          finished.resolve(durationMs >= MIN_RECORDING_MS && blob.size > 0 ? { blob, mime, durationMs } : null);
+          settle(!failed && durationMs >= MIN_RECORDING_MS && blob.size > 0 ? { blob, mime, durationMs } : null);
         },
         { once: true },
       );
 
-      recorder.stop();
+      try {
+        recorder.stop();
+      } catch {
+        settle(null);
+      }
       stream?.getTracks().forEach((track) => track.stop());
       stream = null;
       mediaRecorder = null;

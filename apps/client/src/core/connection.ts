@@ -1,6 +1,6 @@
 import { parseServerMessage, type ClientMessage } from "@mira/protocol";
 import { handleTtsAudio } from "./audio";
-import { dispatch, getStageState, pushEvent, useConnectionStore, useStageStore, type ConnectionStatus } from "./store";
+import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 
 const SESSION_STORAGE_KEY = "mira.sessionId";
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000] as const;
@@ -86,9 +86,8 @@ export function createConnection(): Connection {
     if (message.type === "session") {
       useConnectionStore.setState({ sessionId: message.sessionId });
       storeSessionId(message.sessionId);
-      // 恢复会话：服务端 lastTurnId 可能大于本地计数器（例如刷新页面），
-      // 同步它，避免下一次输入被判为 stale_turn（D12 要求 turnId 单调递增）。
-      useStageStore.setState((state) => ({ currentTurnId: Math.max(state.currentTurnId, message.turnId) }));
+      // 恢复会话时 currentTurnId 的同步在 reducer 内完成（SERVER_MESSAGE + session），
+      // 这里不再直接写 stage store（D4：唯一写入口是 reducer）。
     }
     if (message.type === "tts_audio") handleTtsAudio(message);
     pushEvent(`recv ${message.type} t${message.turnId}`);

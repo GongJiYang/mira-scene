@@ -1,16 +1,26 @@
 import { z } from "zod";
-import { beatSchema, mediaSchema, storyStepSchema, type Beat, type Media, type StoryStep } from "./beat";
+import {
+  beatSchema,
+  llmBeatSchema,
+  mediaSchema,
+  storyStepSchema,
+  type Beat,
+  type Media,
+  type StoryStep,
+} from "./beat";
 import {
   actionSchema,
   cameraSchema,
   emotionSchema,
   fxSchema,
-  poseSchema,
+  handsSchema,
+  storyNodeSchema,
   type Action,
   type Camera,
   type Emotion,
   type Fx,
-  type Pose,
+  type Hands,
+  type StoryNode,
 } from "./enums";
 
 export type BeatParseResult = {
@@ -18,16 +28,36 @@ export type BeatParseResult = {
   warnings: string[];
 };
 
+/** parseLlmBeatLenient 的规范化输出：可选的 suggest / advance 统一为 null。 */
+export type NormalizedLlmBeat = {
+  say: string;
+  emotion: Emotion;
+  suggest: Action | null;
+  advance: StoryNode | null;
+};
+
+export type LlmBeatParseResult = {
+  llmBeat: NormalizedLlmBeat;
+  warnings: string[];
+};
+
 const EMPTY_BEAT: Beat = {
   seq: 0,
   say: "",
   emotion: "neutral",
-  pose: "sit",
+  hands: "cup",
   action: null,
   camera: null,
   fx: null,
   media: null,
   story: null,
+};
+
+const EMPTY_LLM_BEAT: NormalizedLlmBeat = {
+  say: "",
+  emotion: "neutral",
+  suggest: null,
+  advance: null,
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -76,7 +106,7 @@ export function parseBeatLenient(input: unknown): BeatParseResult {
   if (!isPlainObject(input)) {
     return {
       beat: { ...EMPTY_BEAT },
-      warnings: ["beat 输入不是对象，已回退为 neutral/sit 的空 beat"],
+      warnings: ["beat 输入不是对象，已回退为 neutral/cup 的空 beat"],
     };
   }
 
@@ -99,7 +129,7 @@ export function parseBeatLenient(input: unknown): BeatParseResult {
   }
 
   const emotion = enumField<Emotion>(emotionSchema, input.emotion, "neutral", "emotion", "neutral", warnings);
-  const pose = enumField<Pose>(poseSchema, input.pose, "sit", "pose", "sit", warnings);
+  const hands = enumField<Hands>(handsSchema, input.hands, "cup", "hands", "cup", warnings);
   const action = nullableObject<Action>(actionSchema, input.action, "action", warnings);
   const camera = nullableObject<Camera>(cameraSchema, input.camera, "camera", warnings);
   const fx = nullableObject<Fx>(fxSchema, input.fx, "fx", warnings);
@@ -110,7 +140,7 @@ export function parseBeatLenient(input: unknown): BeatParseResult {
     seq,
     say,
     emotion,
-    pose,
+    hands,
     action,
     camera,
     fx,
@@ -124,4 +154,42 @@ export function parseBeatLenient(input: unknown): BeatParseResult {
   }
 
   return { beat, warnings };
+}
+
+/**
+ * 宽松解析 LLM 原始输出（契约 ①）：永不抛错。
+ * 非法 emotion → neutral；非法 suggest / advance → null；say 缺失 → 空串；非对象 → neutral 空 beat。
+ */
+export function parseLlmBeatLenient(input: unknown): LlmBeatParseResult {
+  if (!isPlainObject(input)) {
+    return {
+      llmBeat: { ...EMPTY_LLM_BEAT },
+      warnings: ["llmBeat 输入不是对象，已回退为 neutral 的空 beat"],
+    };
+  }
+
+  const warnings: string[] = [];
+
+  const rawSay = input.say;
+  let say = "";
+  if (typeof rawSay === "string") {
+    say = rawSay;
+  } else {
+    warnings.push(`say ${preview(rawSay)} 不是字符串，已回退为空串`);
+  }
+
+  const emotion = enumField<Emotion>(emotionSchema, input.emotion, "neutral", "emotion", "neutral", warnings);
+  const suggest = nullableObject<Action>(actionSchema, input.suggest, "suggest", warnings);
+  const advance = nullableObject<StoryNode>(storyNodeSchema, input.advance, "advance", warnings);
+
+  const llmBeat: NormalizedLlmBeat = { say, emotion, suggest, advance };
+
+  if (!llmBeatSchema.safeParse(llmBeat).success) {
+    return {
+      llmBeat: { ...EMPTY_LLM_BEAT },
+      warnings: [...warnings, "llmBeat 组装后仍未通过 schema，已回退为空 beat"],
+    };
+  }
+
+  return { llmBeat, warnings };
 }

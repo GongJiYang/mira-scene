@@ -5,7 +5,7 @@ const baseBeat: Beat = {
   seq: 0,
   say: "今晚的雨真大。",
   emotion: "calm",
-  pose: "hold_cup",
+  hands: "cup",
   action: null,
   camera: null,
   fx: null,
@@ -29,13 +29,13 @@ describe("parseBeatLenient", () => {
 
   const enumCases: Array<{ field: string; patch: Partial<Record<keyof Beat, unknown>>; expected: Partial<Beat> }> = [
     { field: "emotion", patch: { emotion: "angry" }, expected: { emotion: "neutral" } },
-    { field: "pose", patch: { pose: "stand" }, expected: { pose: "sit" } },
+    { field: "hands", patch: { hands: "stand" }, expected: { hands: "cup" } },
     { field: "action", patch: { action: "wave" }, expected: { action: null } },
     { field: "camera", patch: { camera: "zoom" }, expected: { camera: null } },
     { field: "fx", patch: { fx: "snow" }, expected: { fx: null } },
     {
       field: "media.type",
-      patch: { media: { type: "gif", id: "letter_reveal" } },
+      patch: { media: { type: "gif", id: "photo_letters" } },
       expected: { media: null },
     },
     {
@@ -52,13 +52,20 @@ describe("parseBeatLenient", () => {
     expect(result.warnings.join("\n")).toContain(field.split(".")[0] ?? field);
   });
 
+  it("旧字段名 pose 不再被当作 hands 读取", () => {
+    const result = parseBeatLenient({ ...baseBeat, pose: "polaroid", hands: undefined });
+    expect(result.beat.hands).toBe("cup");
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings.join("\n")).toContain("hands");
+  });
+
   it("合法的 media / story / action / camera / fx 被保留", () => {
     const full: Beat = {
       ...baseBeat,
       action: "sip_coffee",
       camera: "close_up",
       fx: "warm_glow",
-      media: { type: "video", id: "letter_reveal" },
+      media: { type: "video", id: "photo_letters" },
       story: { advance: "reveal" },
     };
     const result = parseBeatLenient(full);
@@ -85,7 +92,7 @@ describe("parseBeatLenient", () => {
   });
 
   it.each([null, undefined, "not-an-object", 42, ["beat"]])(
-    "非对象输入 %s 不抛错，返回 neutral/sit 空 beat 和一条 warning",
+    "非对象输入 %s 不抛错，返回 neutral/cup 空 beat 和一条 warning",
     (input) => {
       let result: BeatParseResult | undefined;
       expect(() => {
@@ -95,7 +102,7 @@ describe("parseBeatLenient", () => {
         seq: 0,
         say: "",
         emotion: "neutral",
-        pose: "sit",
+        hands: "cup",
         action: null,
         camera: null,
         fx: null,
