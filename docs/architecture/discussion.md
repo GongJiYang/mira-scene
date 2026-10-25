@@ -122,3 +122,19 @@ P1 LLM 逐行 JSON 合规率与首句延迟 · P2 Fish STT 能否识别 webm/mp4
 **框架 Don't「指令互相矛盾」**：「不轻易谈起自己」和「必须走到 reveal」冲突 → 把「什么时候可以说」写成明确条件，并由服务端校验。
 **用户关键纠正**：体验不应该像「和 AI 聊天」。→ 重新设计剧情推进：角色主动行动、环境按剧情时间推进、线索可以点击。
 **用户回答**：用户身份 = **B 那位写信的听众（反转）**（用户回复「可以」，Claude 按推荐理解）；用户沉默 12 秒后角色主动行动：可以；线索点击：等 UI 设计稿，或者先简单占位、之后再改；跑题时温和拉回：可以；3 组示例（正常 / 跑题或注入 / reveal）：可以；固定用中文回答：可以。
+
+## 第 10–11 轮（合并）· 约束理论 + 错误处理 · 2026-10-26
+
+**约束理论**：首句延迟先测量，只攻瓶颈。第 1 步记录 4 个时间点（Q14）；第 2 步挖潜：关掉思考模式、命中前缀缓存、第一句 ≤20 字、TTS 设为 balanced；第 3 步其余环节一律不动；框架 Do 提到的缓冲：下一句 TTS 先合成好备用；第 4 步按瓶颈三选一：STT 改用 Fish 实时识别 / 精简提示词 / TTS 改用 Fish `tts/live` 流式。另加感知层面的优化：先播一句预录的「嗯……」反应音（这句也必须能被打断）。
+**错误处理**：失败处理表（LLM 超时→快速失败+兜底；TTS 失败→重试 1 次后无声 beat；STT 为空→「没听清」；WS 断线→退避重连+快照；生图失败→预置照片；额度用完→Mock/回放；不做死信队列）；故障注入：用装饰器包装各个端口，开关为 `?fail=`。
+**用户回答**：1）先测量再攻瓶颈：可以；2）「嗯……」反应音：可以；3）失败处理表：可以。
+
+**插曲：Live2D 方案**
+- 用户提供 psd2live（分层 PSD/图层清单 → 自动绑定 → Live2D moc3 / p2lrt），Claude 调研了同类方案（Cubism 模板、Inochi2D、Spine/Rive、Talking Head Anime、LivePortrait），推荐 psd2live 为主方案，D24 兜底。
+- 用户提出 Seedream 5.0 Pro 有图层分离功能（最多 16 层，带包围框和补画），可以直接对接 psd2live 的图层清单。
+- 用户最终决定：**更换角色**，旧角色不再使用；分层和选人由用户人工完成；Claude 只辅助验证 psd2live 能否跑通（D33）。
+- 验证进度：JDK 21 已安装，示例 PSD 已下载并通过校验，Java 部分构建成功；曾卡在 Rust 运行时（见下）。仓库位置：`~/tools/psd2live`，日志在 `build-run.log`。
+- **结论（2026-10-26 复跑，已跑通）**：psd2live 可用。失败原因不在仓库：本机 rustc 1.96 在 Apple 平台链接任何 bin / cdylib 都要调 `rust-objcopy`，而它属于 cargo-binutils，本机没装，连空 crate 都编不过（`cargo new --lib` + cdylib 复现），`cargo install cargo-binutils` 本身也因同一原因编不过（死锁）。解法：把 `~/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/llvm-objcopy` 软链成 `~/.cargo/bin/rust-objcopy`。
+- 修复后实测：`./gradlew run --args="--input examples/tml/psd-input/tml.psd --output build/example-output"` → BUILD SUCCESSFUL（首次 4m44s，含 Rust 运行时 dylib），产出 16 个文件：`tml.moc3`、`tml.cmo3`、`tml.model3.json`、`physics3.json`、4 个 motion3、4 个 exp3、texture_00.png。`export ... --target gif` 另出 `tml.gif`（11s），抽帧确认角色正常渲染、网格轮廓与五官绑定正确。
+- 平台事实：macOS 无安装包，须 JDK 21 从源码跑（系统默认 java 是 JBR 17，必须显式 `JAVA_HOME=/opt/homebrew/opt/openjdk@21`）。CLI 只出导出文件、**不产出可继续编辑的 `.psd2live` 工程**——要留可改工程得开 GUI（`./gradlew run` 无参数）。
+- 我方可控的部分：用户人工分层时的 PSD 命名契约（`docs/zh/spec/PSD_LAYER_SPEC.md`）：RGB/8 位/透明背景、效果先栅格化、眼白·瞳孔·上睫毛分层且瞳孔保留被遮部分、给张嘴素材、前发后发分开、同层左右部件不会自动拆。AI 拆件也可走 Layout 清单（JSON/zip）绕开 PSD。

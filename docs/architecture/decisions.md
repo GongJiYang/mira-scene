@@ -410,3 +410,14 @@
 ## D28 补充（G1-c 验收裁定）
 - 状态机 C 的 ready → shown 条件：A 不处于 speaking 或 listening 即可，**thinking 期间也可以显影**，用来覆盖等待时间。
 - listening 的「看镜头」使用中性 master；thinking = master + eyelid_half；error = master + brow_raised（三者都是贴片组合，不走 Emotion 表）。
+
+## D33 角色换人：分层与选人由用户人工完成，Live2D 走 psd2live 🟡（2026-10-26）
+
+- 用户决定**更换角色**，旧角色「夏凛」及其素材（assets/raw、assets/parts）不再使用。
+- 分层和选人由**用户人工完成**。Claude 只负责确认工具链能跑通：用 psd2live 把分层 PSD 导出为 Live2D 模型，再在网页中运行。
+- Seedream 分层（P8b）和代码拆层（P8a）暂停。D24 PixiJS 网格保留为兜底方案。
+- 待定：新角色的设定（D25 需要随之修订：剧情、Mock 剧本、提示词、导演层词表里与角色相关的部分）。
+
+## D33 补充：psd2live 验证通过 ✅（2026-10-26）
+- 用示例 tml.psd 构建成功（首次 4m44s，包含 Rust 运行时），导出 16 个文件：moc3/cmo3/model3.json/physics3.json、4 个动作（Idle/Blink/Nod/Shake）、4 个表情（angry/sad/smile/surprised）、贴图；导出 GIF 用时 11s，角色渲染正常。
+- Live2D 主方案确定为 psd2live；D24（PixiJS 分层）作为兜底。网页运行时（Cubism Web SDK 或 p2lrt）在 S4 开始时选定。
