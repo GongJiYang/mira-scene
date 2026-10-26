@@ -80,5 +80,15 @@ cd ~/mira-scene/tools/live2d-pipeline
 | 前发边缘有锯齿 | alpha 被 2 倍放大 | 和原图轮廓重合的部分直接用原图 alpha；其余部分用 Lanczos 放大再轻微高斯模糊 |
 | 左右眼动反了 | 左右命名弄反了 | psd2live 的 left 指角色自己的左边，也就是图像右侧 |
 
+
+## 8. 参考资料与吸收的做法
+- **隐藏区域参考包**（推荐）：原图上看不见的部位提前画好，不要事后补画。提示词见 `docs/live2d-ref-pack.md`（R1 无五官脸、R2 额头、R3 脖子、R4 眼睛部件、R5 耳机内胆、R6 耳坠交界），生成后放进 `overrides/`。
+- [Kota-Ohno/seethrough-live2d-pipeline](https://github.com/Kota-Ohno/seethrough-live2d-pipeline)（MIT）：
+  - `clean_face.py`：清掉 face 层上的细线和污点（闭眼时会露出来的区域），对应 run5 出现的「眼睑鬼影」；
+  - 用 **ag-psd** 写出 PSD：用 Python 写的 PSD，Cubism Editor 可能显示为空白（作者实测）；需要进 Cubism 精修时必须换成 ag-psd；
+  - Real-ESRGAN 4× 放大后再重投影到 4096px（可选，用来改善锯齿和细节）；
+  - 失败排查表 `docs/pre-rig-failure-routing.md`。
+- 平台规则：nizima 禁止上架或接单来源于 AI 生成插画的 Live2D 作品（2026-07）；本项目只做演示用途。
+
 ## 7. 产物
 `<out>/step7/out/`：`*.moc3`、`*.cmo3`、`*.model3.json`、`*.physics3.json`，4 个动作文件（Idle/Blink/Nod/Shake）、4 个表情文件（angry/sad/smile/surprised）；`<out>/step8/web/`：网页播放器（需要通过 `python3 -m http.server` 托管）；`<out>/step8/v/`：mp4。可以直接导入 Cubism Editor 或 VTube Studio，也可以在网页里由状态机 B 驱动。
