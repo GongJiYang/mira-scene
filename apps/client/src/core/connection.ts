@@ -1,5 +1,5 @@
 import { parseServerMessage, type ClientMessage } from "@mira/protocol";
-import { handleTtsAudio } from "./audio";
+import { handleTtsAudio, setPlaybackStartedReporter } from "./audio";
 import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./heartbeat";
 import { handleMediaReady } from "./storyMediaLink";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
@@ -12,6 +12,7 @@ type ClientPayloads = {
   text_input: { text: string };
   audio_input: { mime: string; dataBase64: string };
   interrupt: { interruptedTurnId: number };
+  playback_started: { turnId: number; seq: number; clientMs: number };
   ping: Record<string, never>;
 };
 
@@ -121,6 +122,11 @@ export function createConnection(): Connection {
     seq += 1;
     socket.send(JSON.stringify(message));
   }
+
+  // §6：音频层在第一个 beat 开始播放时通过这里上报 playback_started。
+  setPlaybackStartedReporter((turnId, beatSeq, clientMs) => {
+    sendEnvelope("playback_started", { turnId, seq: beatSeq, clientMs });
+  });
 
   function handleMessage(raw: string): void {
     let parsedJson: unknown;

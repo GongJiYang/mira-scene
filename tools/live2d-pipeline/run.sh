@@ -9,7 +9,7 @@
 set -euo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-CFG="$HERE/config.json"
+CFG=${L2D_CONFIG:-"$HERE/config.json"}
 
 PY=${L2D_PYTHON:-}
 if [ -z "$PY" ]; then

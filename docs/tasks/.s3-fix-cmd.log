@@ -1,0 +1,16 @@
+Done. All four fixes are implemented and the three gates pass.
+
+**验收**
+- `pnpm test` → **336 passed**（基线 327 + 新增 9）
+- `pnpm typecheck` → 4 个 workspace 全绿
+- `pnpm smoke` → SMOKE OK
+
+**改了什么**
+1. **`parseBeatLines`**：只对 `JSON.parse` 失败的行套用 ①粘连拆段 →②正则提取 say/emotion →③疑似 JSON 丢弃 →④纯文本降级；新增 4 个用例 + 600 次 fast-check 属性测试（输出的 `say` 绝不含 `{"` 或 `":`）。
+2. **`advanceRule`**：`SceneState` 只新增可选 `revealTurn`，`reveal` 分支改为 `turnCount - revealTurn >= 2`，无 `revealTurn` 不允许 ending；导演层进入 reveal 时写入 `revealTurn`。
+3. **`paceGuard`**：`TtsOptions` 新增可选 `beatSeq`（会话层传入），`beatSeq===0` 只检查写 warning 不重试。
+4. **小问题**：`classifyIntent` 迁到 `apps/server/src/intent.ts`；`stt_done` 改记 `chars`;`fishTts` 余额标记成功一次即清除 + 每 5 分钟允许探测一次。
+
+**报告**：`docs/tasks/s3-fix-report.md`（含改动清单、新增测试、测试输出摘要、冲突说明与自查）。未 commit、未碰 `tools/`、未打印任何 Key、无常驻进程。
+
+一处需你确认：`revealTurn` 的写入落在 `apps/server/src/director/director.ts`（授权范围未列该类，但只有导演层的 reveal 分支能唯一确定「进入 reveal 的轮次」），已在报告 §5.3 注明。

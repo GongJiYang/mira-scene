@@ -1,0 +1,16 @@
+Done. Everything is implemented, scoped, and verified.
+
+**What I built (S3, per `docs/tasks/s3.md` + the 架构关卡结论):**
+
+- **DeepSeek adapter** (格式 a 逐行 JSON): OpenAI-compatible streaming, `thinking:{type:"disabled"}`, `stream_options.include_usage`, cache fields logged; pure `parseBeatLines(chunk, carry)` strips fences, degrades bad lines to plain dialogue, never throws; AbortSignal passed to fetch.
+- **Prompt layer**: `loader.ts` reads `prompts/rin.v1.md` (STATIC verbatim → system, DYNAMIC filled → user, `prompt_version` logged per turn); pure `renderPrompt` and `advanceRule`.
+- **Fish adapters**: TTS one request per beat (mp3/128k/balanced/reference_id-optional), STT `transcribe-1-pro`/zh forwarding the browser mime; 402/429 → `FishApiError{code}`.
+- **Pace check**: pure `paceCheck` + `paceGuard` decorator (retry once, then keep + warn).
+- **Reaction sound (client)**: `reactionSfx.ts` logic + Web Audio playback, armed 150ms after PTT_UP/SUBMIT_TEXT, stopped by `audioStopToken`, faded 80ms on first beat; `make-sfx.ts` generated real `react-*.mp3` from Fish.
+- **Timing/§6**: `tts_first_audio` event added; new `playback_started` client message logged as `first_audio_ms`. Kept `session.ts` to exactly the two allowed changes.
+
+**Gate compliance:** skipped §7 nudge and `pnpm latency:report` (S4/E2); a port missing a Key in real mode falls back to Mock alone with `provider_fallback`; mock behavior unchanged; no real network in tests (all fake `fetch`, incl. a 600-run fast-check property test).
+
+**Verification:** `pnpm test` → **327 passed** (269 baseline intent intact + 58 new), `pnpm typecheck` clean, `pnpm smoke` → SMOKE OK, `pnpm smoke:real` → runs and prints a clear 402 notice then exits 0 (both DeepSeek and Fish accounts are at zero balance right now).
+
+**Notes:** No commit made; `tools/live2d-pipeline/` and `tools/probes/` untouched (their pending changes pre-existed); no stray processes left (port 8787 is held by an unrelated pre-existing `Python` process, not mine). Report with the smoke/latency table shapes, Fish API uncertainties + doc URLs, and the spec ambiguities I resolved is at `docs/tasks/s3-report.md`.

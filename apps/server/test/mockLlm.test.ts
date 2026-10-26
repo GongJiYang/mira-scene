@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StoryNode } from "@mira/protocol";
-import { classifyIntent, composeBeats, createMockLlm, type Intent } from "../src/adapters/mock/mockLlm";
+import { classifyIntent, type Intent } from "../src/intent";
+import { composeBeats, createMockLlm } from "../src/adapters/mock/mockLlm";
 import type { LLMContext } from "../src/ports";
 import { createInitialScene } from "../src/story";
 

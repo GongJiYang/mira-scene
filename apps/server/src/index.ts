@@ -3,12 +3,19 @@ import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { parseClientMessage, type ServerMessage } from "@mira/protocol";
+import { createDeepSeekLlm } from "./adapters/deepseek/deepseekLlm";
+import { withSttErrorDegrade } from "./adapters/fish/degrade";
+import { createFishStt } from "./adapters/fish/fishStt";
+import { createFishTts } from "./adapters/fish/fishTts";
 import { parseFaults, readFirstTokenTimeoutMs, withFaults } from "./adapters/faults";
 import { createMockLlm } from "./adapters/mock/mockLlm";
 import { createMockStt } from "./adapters/mock/mockStt";
 import { createMockTts } from "./adapters/mock/mockTts";
-import { loadConfig } from "./config";
+import { applyRepoEnv, loadConfig } from "./config";
 import { consoleLogger, type Logger } from "./log";
+import type { LLMPort, Ports, STTPort, TTSPort } from "./ports";
+import { loadPromptTemplate } from "./prompts/loader";
+import { withPaceCheck } from "./quality/paceGuard";
 import { createSessionManager, type SendFn } from "./session";
 import { createTokenStore } from "./tokens";
 
@@ -25,6 +32,8 @@ export type StartServerOptions = {
   port?: number;
   /** 默认 consoleLogger；测试注入以断言日志事件。 */
   logger?: Logger;
+  /** 默认 process.env；smoke:real 注入从 `.env` 读到的环境。 */
+  env?: NodeJS.ProcessEnv;
 };
 
 function messageBytes(raw: RawData): number {
@@ -41,11 +50,65 @@ function rejectUpgrade(socket: Duplex, status: string): void {
  * 进程内启动：GET /health、GET /session-token；WebSocket 只升级带有效令牌的 /ws。
  */
 export async function startServer(options: StartServerOptions = {}): Promise<ServerHandle> {
-  const config = loadConfig();
+  const config = loadConfig(options.env ?? process.env);
   const logger = options.logger ?? consoleLogger;
   const tokens = createTokenStore();
+  const { providers } = config;
+
+  // 按模式选择适配器：real 模式下缺 Key 的端口单独回退到 Mock，并记 provider_fallback（§4）。
+  function buildPorts(): Ports {
+    const wantReal = config.providerMode === "real";
+    const fallback = (port: string, reason: string): void => {
+      logger({ ts: Date.now(), event: "provider_fallback", detail: { port, reason } });
+    };
+
+    let stt: STTPort;
+    if (wantReal && providers.fish.apiKey !== "") {
+      stt = withSttErrorDegrade(
+        createFishStt({ baseUrl: providers.fish.baseUrl, apiKey: providers.fish.apiKey, log: logger }),
+        { log: logger },
+      );
+    } else {
+      if (wantReal) fallback("stt", "missing_key");
+      stt = createMockStt();
+    }
+
+    let llm: LLMPort;
+    if (wantReal && providers.deepseek.apiKey !== "") {
+      llm = createDeepSeekLlm({
+        baseUrl: providers.deepseek.baseUrl,
+        apiKey: providers.deepseek.apiKey,
+        model: providers.deepseek.model,
+        prompt: loadPromptTemplate(),
+        log: logger,
+      });
+    } else {
+      if (wantReal) fallback("llm", "missing_key");
+      llm = createMockLlm();
+    }
+
+    let tts: TTSPort;
+    if (wantReal && providers.fish.apiKey !== "") {
+      tts = withPaceCheck(
+        createFishTts({
+          baseUrl: providers.fish.baseUrl,
+          apiKey: providers.fish.apiKey,
+          voiceId: providers.fish.voiceId,
+          model: providers.fish.ttsModel,
+          log: logger,
+        }),
+        { log: logger },
+      );
+    } else {
+      if (wantReal) fallback("tts", "missing_key");
+      tts = createMockTts();
+    }
+
+    return { stt, llm, tts };
+  }
+
   // 每个会话一份端口，故障（hello.faults / FAULTS）在创建端口实例时套上装饰器。
-  const basePorts = { stt: createMockStt(), llm: createMockLlm(), tts: createMockTts() };
+  const basePorts = buildPorts();
   // sessionId → 连接：`ws_drop` 需要服务端主动关闭会话所在的连接。
   const sessionSockets = new Map<string, WebSocket>();
   const sessions = createSessionManager({
@@ -54,9 +117,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       faults.length === 0
         ? basePorts
         : {
-            stt: withFaults(createMockStt(), "stt", faults),
-            llm: withFaults(createMockLlm(), "llm", faults),
-            tts: withFaults(createMockTts(), "tts", faults),
+            stt: withFaults(basePorts.stt, "stt", faults),
+            llm: withFaults(basePorts.llm, "llm", faults),
+            tts: withFaults(basePorts.tts, "tts", faults),
           },
     defaultFaults: parseFaults(process.env.FAULTS),
     firstTokenTimeoutMs: readFirstTokenTimeoutMs(),
@@ -198,6 +261,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
 
 const invokedPath = process.argv[1];
 if (invokedPath && pathToFileURL(invokedPath).href === import.meta.url) {
+  // 直接运行（pnpm dev / start）时把仓库根 .env 补进进程环境；被测试/冒烟 import 时不读。
+  applyRepoEnv();
   startServer().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;

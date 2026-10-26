@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createConnection, type Connection } from "./connection";
 import { installPerformanceClock } from "./performanceClock";
 import { blobToBase64, createRecorder, type Recorder } from "./recorder";
+import { reactionSfx } from "./reactionSfx";
 import { dispatch, getStageState, pushEvent } from "./store";
 import { installStoryMediaLink } from "./storyMediaLink";
 
@@ -44,7 +45,10 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
 
     pttUp() {
       dispatch({ type: "PTT_UP" });
-      const turnId = getStageState().currentTurnId;
+      const afterUp = getStageState();
+      // §5：进入 thinking 后 150ms 内随机播一条反应音。
+      if (afterUp.phase.kind === "thinking") reactionSfx()?.arm(afterUp.currentTurnId);
+      const turnId = afterUp.currentTurnId;
       void (async () => {
         const recording = await recorder.stop();
         if (!recording) {
@@ -65,6 +69,8 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       pushEvent(`submit t${currentTurnId}`);
       if (useNudgeStore.getState().pending) useNudgeStore.setState({ pending: false });
       dispatch({ type: "SUBMIT_TEXT" });
+      // §5：进入 thinking 后 150ms 内随机播一条反应音。
+      reactionSfx()?.arm(getStageState().currentTurnId);
       if (wasActive) connection.sendInterrupt(currentTurnId);
       connection.sendText(trimmed);
     },

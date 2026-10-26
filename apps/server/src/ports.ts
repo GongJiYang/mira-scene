@@ -25,8 +25,17 @@ export type LLMPort = {
 
 export type TTSAudio = { mime: string; data: Buffer };
 
+export type TtsOptions = {
+  emotion: Emotion;
+  /**
+   * s3-fix §3：本句在整轮里的 `seq`（由会话层传入）。
+   * `beatSeq === 0`（第一句）时语速体检只检查、不重试，避免拖慢首句延迟。
+   */
+  beatSeq?: number;
+};
+
 export type TTSPort = {
-  synthesize(text: string, opts: { emotion: Emotion }, signal: AbortSignal): Promise<TTSAudio>;
+  synthesize(text: string, opts: TtsOptions, signal: AbortSignal): Promise<TTSAudio>;
 };
 
 export type Ports = {

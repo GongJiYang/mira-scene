@@ -5,7 +5,6 @@ import {
   type Action,
   type Beat,
   type ClientMessage,
-  type Emotion,
   type SceneState,
   type ServerMessage,
   type SessionPayload,
@@ -20,7 +19,7 @@ import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, FALLBACK_LINES, WS_DROP_AFTER_BEAT, par
 import { isAbortError, throwIfAborted } from "./abort";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
-import type { LLMHistoryEntry, Ports, TTSAudio, TTSPort } from "./ports";
+import type { LLMHistoryEntry, Ports, TTSAudio, TTSPort, TtsOptions } from "./ports";
 import { createInitialScene } from "./story";
 
 export type SendFn = (message: ServerMessage) => void;
@@ -51,6 +50,8 @@ type Session = {
   ports: Ports;
   /** 本会话生效的故障（hello 的 faults，缺省取全局默认值）。 */
   faults: readonly Fault[];
+  /** 最近一轮的起点（服务端时钟），用于 playback_started 计算 first_audio_ms。 */
+  turnStartedAt: { turnId: number; at: number } | null;
 };
 
 type InputMessage = Extract<ClientMessage, { type: "text_input" | "audio_input" }>;
@@ -97,7 +98,7 @@ type SynthOutcome = { ok: true; value: TTSAudio } | { ok: false; error: unknown 
 async function synthesizeWithRetry(
   tts: TTSPort,
   text: string,
-  opts: { emotion: Emotion },
+  opts: TtsOptions,
   signal: AbortSignal,
 ): Promise<SynthOutcome> {
   let lastError: unknown = null;
@@ -170,6 +171,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     const logTurn = (event: string, detail?: unknown) => {
       deps.log({ ts: clock(), sessionId: session.id, turnId, event, ms: clock() - startedAt, detail });
     };
+    // §6 计时：记录本轮起点，供 playback_started 计算 first_audio_ms。
+    session.turnStartedAt = { turnId, at: startedAt };
 
     let closed = false;
     // 首 token 超时用独立 AbortController 中止 LLM，不污染本轮 turn signal（打断语义不变）。
@@ -179,6 +182,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     let firstTokenTimer: NodeJS.Timeout | null = null;
     let llmTimedOut = false;
     let ttsDegraded = false;
+    let ttsFirstLogged = false;
 
     const emit = <T extends keyof TurnPayloads>(type: T, payload: TurnPayloads[T]): boolean => {
       if (closed || signal.aborted || session.lastTurnId !== turnId) return false;
@@ -204,7 +208,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         const data = Buffer.from(message.payload.dataBase64, "base64");
         userText = await session.ports.stt.transcribe({ mime: message.payload.mime, data }, signal);
         throwIfAborted(signal);
-        logTurn("stt_done", { text: userText });
+        logTurn("stt_done", { chars: [...userText].length });
         if (userText.trim() === "") {
           // STT 空结果：不跑 LLM，给一句「没听清」后正常结束本轮。
           logTurn("fallback_used", { category: "stt" });
@@ -287,7 +291,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             if (seqBeat.say !== "") {
               says.push(seqBeat.say);
               const beatSeq = seqBeat.seq;
-              const audio = synthesizeWithRetry(session.ports.tts, ttsText, { emotion: seqBeat.emotion }, signal);
+              const audio = synthesizeWithRetry(session.ports.tts, ttsText, { emotion: seqBeat.emotion, beatSeq: seqBeat.seq }, signal);
               ttsChain = ttsChain.then(async () => {
                 const result = await audio;
                 if (!result.ok) {
@@ -305,6 +309,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
                   return;
                 }
                 if (!emit("tts_audio", { beatSeq, mime: result.value.mime, dataBase64: result.value.data.toString("base64") })) return;
+                if (!ttsFirstLogged) {
+                  ttsFirstLogged = true;
+                  logTurn("tts_first_audio", { seq: beatSeq });
+                }
                 logTurn("tts_done", { seq: beatSeq });
               });
             }
@@ -381,6 +389,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         outSeq: 0,
         ports,
         faults,
+        turnStartedAt: null,
       };
       sessions.set(session.id, session);
       logFor(session, 0, "session_created", { faults });
@@ -404,6 +413,22 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     }
     session.controller.abort();
     logFor(session, interruptedTurnId, "turn_aborted", { reason: "interrupt" });
+  }
+
+  /**
+   * §6：客户端上报第一个 beat 的音频开始播放。计算并记录 first_audio_ms
+   * （客户端 roundtrip 时间，D17 在客户端测量），并带上服务端侧的本轮耗时对照。
+   */
+  function handlePlaybackStarted(session: Session, message: Extract<ClientMessage, { type: "playback_started" }>): void {
+    session.lastActiveAt = clock();
+    const started = session.turnStartedAt;
+    const serverMs = started !== null && started.turnId === message.turnId ? clock() - started.at : null;
+    logFor(session, message.turnId, "playback_started", {
+      seq: message.payload.seq,
+      clientMs: message.payload.clientMs,
+      first_audio_ms: message.payload.clientMs,
+      server_ms: serverMs,
+    });
   }
 
   async function handleInput(session: Session, message: InputMessage): Promise<void> {
@@ -486,6 +511,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     }
     session.send ??= send;
 
+    if (message.type === "playback_started") {
+      handlePlaybackStarted(session, message);
+      return;
+    }
     if (message.type === "interrupt") {
       handleInterrupt(session, message);
       return;

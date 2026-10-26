@@ -34,6 +34,16 @@ export const interruptPayloadSchema = z.object({
   interruptedTurnId: nonNegativeInt,
 });
 
+/**
+ * §6 计时：第一个 beat 的音频开始播放时，客户端上报一次。
+ * `clientMs` 是客户端从本轮开始到开始播放的毫秒数（D17 在客户端测量）。
+ */
+export const playbackStartedPayloadSchema = z.object({
+  turnId: nonNegativeInt,
+  seq: nonNegativeInt,
+  clientMs: z.number().nonnegative(),
+});
+
 export const sessionPayloadSchema = z.object({
   snapshot: sceneStateSchema,
 });
@@ -82,6 +92,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("text_input"), payload: textInputPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("audio_input"), payload: audioInputPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("interrupt"), payload: interruptPayloadSchema }),
+  z.object({ ...envelopeFields, type: z.literal("playback_started"), payload: playbackStartedPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("ping"), payload: pingPayloadSchema }),
 ]);
 
@@ -101,6 +112,7 @@ export type HelloPayload = z.infer<typeof helloPayloadSchema>;
 export type TextInputPayload = z.infer<typeof textInputPayloadSchema>;
 export type AudioInputPayload = z.infer<typeof audioInputPayloadSchema>;
 export type InterruptPayload = z.infer<typeof interruptPayloadSchema>;
+export type PlaybackStartedPayload = z.infer<typeof playbackStartedPayloadSchema>;
 export type SessionPayload = z.infer<typeof sessionPayloadSchema>;
 export type TranscriptPayload = z.infer<typeof transcriptPayloadSchema>;
 export type BeatPayload = z.infer<typeof beatPayloadSchema>;

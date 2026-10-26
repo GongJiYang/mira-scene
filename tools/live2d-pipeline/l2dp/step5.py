@@ -350,6 +350,25 @@ def run(cfg, out_root, log=print):
 
     ys, xs = np.mgrid[0:roi_h, 0:roi_w]
     gx = xs + x0
+
+    # An extra iris source (the See-through rebuild's complete circle) may be supplied by the
+    # segly adapter: it widens the circle fit without pretending those pixels are visible in the
+    # artwork (that is what model_masks['irides'] still reports).
+    extra_iris = None
+    if c.get('extra_iris_from_source'):
+        p = os.path.join(out_root, 'step4', 'eye_model_extra', 'irides.png')
+        if os.path.exists(p):
+            j = util.read_json(os.path.join(out_root, 'step4', 'eye_model_extra', 'irides.json'))
+            img = util.load_rgba(p)
+            ox, oy = j['origin']
+            extra_iris = np.zeros((roi_h, roi_w), bool)
+            ax0, ay0 = max(ox, x0), max(oy, y0)
+            ax1, ay1 = min(ox + img.shape[1], x1), min(oy + img.shape[0], y1)
+            if ax1 > ax0 and ay1 > ay0:
+                extra_iris[ay0 - y0:ay1 - y0, ax0 - x0:ax1 - x0] = \
+                    img[ay0 - oy:ay1 - oy, ax0 - ox:ax1 - ox, 3] > 127
+            log(f'step5: extra iris source loaded ({int(extra_iris.sum())}px in ROI)')
+
     per_side = {}
     for b in blob_list:
         name = name_for['right' if b['centroid'][0] + x0 > mid else 'left']
@@ -364,7 +383,9 @@ def run(cfg, out_root, log=print):
         b = per_side[name]
         on_right = b['centroid'][0] + x0 > mid
         side_bool = (gx > mid) if on_right else (gx < mid)
-        extra = (lab == b['label']) & side_bool
+        extra = ((lab == b['label']) & side_bool)
+        if extra_iris is not None:
+            extra = extra | (extra_iris & side_bool)
         layers, params, extra_info = build_eye(roi, model, extra, b['centroid'], cfg,
                                                side_mask=side_bool)
         # the artwork opening, on the native canvas, for the export check (sclera outside it = 0)

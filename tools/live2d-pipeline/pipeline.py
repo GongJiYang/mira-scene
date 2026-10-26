@@ -64,6 +64,9 @@ def main(argv=None):
     log = (lambda *a, **k: None) if args.quiet else print
 
     chain = ['step3', 'step4', 'step5', 'step6', 'step7', 'step8', 'compare', 'report']
+    if (cfg.get('input') or {}).get('adapter') == 'segly':
+        # the segly adapter produces the step4 hand-off itself (steps A/B/C), so 3 and 4 are out
+        chain = ['segly', 'step5', 'step6', 'step7', 'step8', 'compare3', 'report5']
     steps = []
     for s in args.steps:
         for name in (chain if s == 'all' else [s]):

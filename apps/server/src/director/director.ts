@@ -106,6 +106,8 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   }
 
   if (advancedTo === "reveal") {
+    // s3-fix §2：记录「进入 reveal 的轮次」，供 advanceRule 判定两轮后才允许 ending。
+    scene = { ...scene, revealTurn: scene.turnCount };
     camera = "close_up";
     fx = "rain_stop";
     media = { type: "photo", id: "photo_letters" };
