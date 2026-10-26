@@ -26,7 +26,7 @@ Remove the over-ear headphones from around the neck. Show the full neck from jus
 ```
 > 用途：把脖子补成实心；同时得到不戴耳机的高领，让耳机（neckwear）可以单独移动。
 
-## R4 · 眼睛部件（一只眼一张，左右眼各做一套；裁切时只保留眼部）
+## R4 · 眼睛部件（每条提示词生成一张图，两只眼睛一起改；流水线会自动裁出眼部并拆成左右眼）
 **R4a `eyewhite` 实心眼白**
 ```
 Change ONLY the eyes: remove the irises and pupils so each eye shows only a solid clean white eyeball (the sclera) filling the whole eye opening, with a soft grey-blue shadow under the upper eyelid. Eyelashes and eyelids unchanged.
