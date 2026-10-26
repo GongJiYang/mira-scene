@@ -138,3 +138,37 @@ P1 LLM 逐行 JSON 合规率与首句延迟 · P2 Fish STT 能否识别 webm/mp4
 - 修复后实测：`./gradlew run --args="--input examples/tml/psd-input/tml.psd --output build/example-output"` → BUILD SUCCESSFUL（首次 4m44s，含 Rust 运行时 dylib），产出 16 个文件：`tml.moc3`、`tml.cmo3`、`tml.model3.json`、`physics3.json`、4 个 motion3、4 个 exp3、texture_00.png。`export ... --target gif` 另出 `tml.gif`（11s），抽帧确认角色正常渲染、网格轮廓与五官绑定正确。
 - 平台事实：macOS 无安装包，须 JDK 21 从源码跑（系统默认 java 是 JBR 17，必须显式 `JAVA_HOME=/opt/homebrew/opt/openjdk@21`）。CLI 只出导出文件、**不产出可继续编辑的 `.psd2live` 工程**——要留可改工程得开 GUI（`./gradlew run` 无参数）。
 - 我方可控的部分：用户人工分层时的 PSD 命名契约（`docs/zh/spec/PSD_LAYER_SPEC.md`）：RGB/8 位/透明背景、效果先栅格化、眼白·瞳孔·上睫毛分层且瞳孔保留被遮部分、给张嘴素材、前发后发分开、同层左右部件不会自动拆。AI 拆件也可走 Layout 清单（JSON/zip）绕开 PSD。
+
+## D33 补完：see-through → psd2live 链路实测 · 2026-10-26
+
+**结论：链路通，两块都能用。** 用户改用 see-through 在线演示拆层（HuggingFace Space `24yearsold/see-through-demo`，ZeroGPU 每天 1–2 次；ModelScope `ljsabc/See-Through` 免费、分辨率更高），拿回的 PSD 直接喂 psd2live 就能绑定。
+
+**关键发现：命名天然对齐。** see-through PSD 的图层名就是它的 23 个 body tag（`back hair` / `front hair` / `face` / `irides` / `eyewhite` / `eyelash` / `eyebrow` / `nose` / `mouth` / `ears` / `neck` / `topwear` / `bottomwear` / `handwear` / `legwear` / `footwear` / `headwear` / `neckwear` / `eyewear` / `earwear` / `tail` / `wings` / `objects`），与 psd2live 分类器（`LayerClassifier.kt` + `docs/zh/spec/PSD_LAYER_SPEC.md` 别名表）**逐一命中**。实测 15 层全部识别，0 个 UNKNOWN，不需要改名。
+
+**实测（`/Users/gjy/Downloads/seethrough_output.psd`，768×768、RGBA8、15 层）**
+- `./gradlew run --args="--input seethrough_output.psd --output build/seethrough-out"` → 27s，16 个文件：`moc3`、`cmo3`、`model3.json`、`physics3.json`、4 个 motion3（Idle 12s / Blink / Nod / Shake）、4 个 exp3、图集。
+- 生成 20 个参数（AngleX/Y/Z、BodyAngle、Lean、Proportion、EyeL/R、EyeBall、Brow、MouthForm/OpenY、Breath、HairFront/Back），Idle 含头部 3 轴摆动 + 呼吸 + 眨眼曲线。
+- `export --target gif` → 360 帧预览，抽帧确认网格、五官绑定、头发跟随都生效。
+
+**素材侧问题（不是工具的问题，下一张图要修）**
+1. **姿势**：源图是蹲坐张腿、手臂下垂，psd2live 要求身体基本正立（诊断里头部初始倾角 −21.7°，脸 rig 半径被拉成 122×152）。→ 换站立正面 A-pose。
+2. **裁切**：`legwear` bbox 到 y=768 即画布下沿，腿部被切，变形必露底。→ 全身留白。
+3. **分辨率 768 偏小**：绑定按长边 2048 文档像素算网格，放大后糊。→ 在线跑 1280。
+4. **缺层**：无 `footwear`、无张嘴素材（只有 `mouth`，唇形同步无内容）、无闭眼差分；左右手同在 `handwear`、左右腿同在 `legwear`，psd2live **不会**自动左右拆分（文档明确）。→ 需要左右独立摆时人工分层，或在编辑器里按网格拆分。
+
+**see-through 本机环境（已备，按用户要求只下载不跑）**：`~/tools/see-through`，uv venv（python 3.12）、torch 2.14.1（MPS 可用）、diffusers 0.37.0、transformers 5.0.0；为 macOS 打了设备补丁：`common/utils/inference_utils.py` 把写死的 `device='cuda'` + `bfloat16` 换成 `_device()`/`_dtype()`（cuda→bf16，mps→fp16，cpu→fp32，可用 `SEE_THROUGH_DEVICE` 覆盖），group_offload 仅在 cuda 生效，`torch.Generator` 在非 cuda 下用 cpu。权重 `layerdifforg/seethroughv0.0.2_layerdiff3d` + `layerdifforg/seethroughv0.0.1_marigold` 下载中。本机 M1 Max 32GB，1280 分辨率大约在可跑边缘（官方要求 12–16GB VRAM）。
+
+## D33 续：把原图当数据源 + 眼睛重建 · 2026-10-26
+
+**动机**：see-through 在线输出是 768×768、且眼睛拆得很差（`eyewhite` 几乎是空的，`irides` 只剩可见的一条缝）。用户要求在流程里并入原图（1534×2302）并优化眼睛。
+
+**做法（一次性脚本放在 `~/tools/pipeline-out/scripts/`，流程本身见下，可纯手工复现）**
+- 放大重建：把每个 see-through 部件放大到原图坐标（PSD→原图比例 `768/2302`、pad x=384），然后用**原图像素**替换颜色——仅当该像素处图层不透明（α>0.85）且与放大色差 <34 时替换，差异大的地方是模型补画（被遮挡区），保留模型颜色。画布改为 1534×2302，图层名不变。
+- 眼睛重建：眼睛整套重建。`irides-l/r` 用 HSV 取紫色，最小二乘拟合虹膜圆（r≈20.0 / 18.6 px），被眼皮遮住的上缘按水平线镜像补全；`eyewhite-l/r` 是按睫毛主方向旋转 ±10–17° 的实心眼白椭圆（rx≈1.34r）——psd2live 会把 irides **裁剪**到 eyewhite，眼白若做成"环形"虹膜会被裁没，这一步踩过坑；`eyelash-l/r` 用原图暗笔画取 alpha 并丢掉 <24 px 的碎点。
+- 图层顺序：眼白 → 虹膜 → 睫毛，眉毛在睫毛之上，前发最上层。
+
+**psd2live 侧确认**：`eyewhite-l/r` 等被识别为 `side=LEFT/RIGHT`，生成独立网格 `ArtMeshEyewhiteL/R`、`ArtMeshIridesL/R`、`ArtMeshEyelashL/R`（诊断会警告"同名图层 eyewhite/irides/eyelash"，属正常，按稳定图层 ID 区分）。
+
+**验收**：`ParamEyeLOpen=0` 单侧闭合（睫毛压成一线）；`ParamEyeBallX=1,ParamEyeBallY=0.8` 眼白在内角露出、虹膜不再跑出眼眶（旧 768 模型同姿势直接露空）；Idle 12s 眨眼帧正常。纹理图集 7.4 MB（旧 1.5 MB），moc3 375 KB，cmo3 14.8 MB。
+
+**产物**：`~/tools/pipeline-out/seethrough_native.psd`（20 层，1534×2302）；`~/tools/psd2live/build/native-out/`（moc3/cmo3/model3/physics/4 motion/4 exp）；`build/native-mp4/`、`build/native-web/`（`http://127.0.0.1:8199/index.html`）。
