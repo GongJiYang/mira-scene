@@ -1,0 +1,23 @@
+{
+  "name": "@mira/probes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "p1": "tsx p1/run.ts",
+    "p2": "tsx p2/run.ts",
+    "p3": "tsx p3/run.ts",
+    "all": "tsx run-all.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@mira/protocol": "workspace:*",
+    "ai": "^5.0.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0"
+  }
+}

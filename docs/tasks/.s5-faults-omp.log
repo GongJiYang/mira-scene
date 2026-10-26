@@ -1,0 +1,29 @@
+Working...
+完成。S5-1 故障注入与降级路径已实现，`pnpm test` / `pnpm typecheck` / `pnpm smoke` 全绿；未 commit，无常驻进程，未触碰 `tools/` 与 `docs/architecture/`。
+
+## 交付
+
+| 文件 | 内容 |
+|---|---|
+| `apps/server/src/adapters/faults.ts`（新增） | `withFaults(port, kind, faults)`：`llm_timeout` / `llm_error` / `tts` / `tts_once` / `stt` / `slow`，`media` 预留；`parseFaults`、`readFirstTokenTimeoutMs`、`FALLBACK_LINES` |
+| `apps/server/src/session.ts` | 每会话端口（hello 的 `faults` 优先，`FAULTS` 兜底）；首 token 超时（独立 `AbortController`，不污染 turn signal）；TTS 逐句重试 1 次后无声降级；STT 空结果；`ws_drop` 第 2 beat 后回调传输层；`fallback_used` 结构化日志 |
+| `apps/server/src/index.ts` | 在创建端口实例处套装饰器；读 `FAULTS` / `LLM_FIRST_TOKEN_TIMEOUT_MS`；`sessionId→ws` 映射并在 `ws_drop` 时以 1011 关闭 |
+| `packages/protocol/src/messages.ts` | 仅新增 `hello.payload.faults?: string[]` |
+| `apps/client/src/core/connection.ts` | `readUrlFaults(location.search)` → hello |
+| `apps/server/test/faults.test.ts`（新增） | 20 条：装饰器单测 + 每种故障的会话级测试（假 send、假计时器） |
+| `apps/server/scripts/smoke.ts` | 新增 `faults:["tts"]` 一轮 |
+| `docs/tasks/s5-faults-report.md` | 报告 |
+
+## 验证
+
+- `pnpm test`：23 文件 / **269 通过**（原 249 意图不变 + 20 新增）。
+- `pnpm typecheck`：protocol / server / client / tools/probes 全通过。
+- `pnpm smoke`：`SMOKE OK`，含 `faults:["tts"] → turn_end(done)`（605ms）。
+- 额外一次性端到端核对（脚本已删）：`ws_drop` 真实 WS 收到 2 beat 后 **1011 关闭且无 turn_end**；`LLM_FIRST_TOKEN_TIMEOUT_MS=500` → 503ms 内 `beat(guarded)→error(llm_timeout)→turn_end(error)`；`FAULTS=tts` 启动 → 0 条 `tts_audio`、2 条 `tts_degraded`、`turn_end(done)`；客户端 `?fail=` 解析含空格/多值正确。
+
+## 需主审确认的偏差（详见报告 §4/§6）
+
+1. 兜底台词按授权范围放在 `faults.ts`（`mockLlm.ts` 未被授权修改），未放进 Mock 剧本。
+2. `tts_degraded` 按任务原文实现为**每个失败句一条**；D20 写「一条提示」，若需每轮一条可一行调整。
+3. 客户端 reducer 不在授权范围：`error` 分支会把 `tts_degraded` 当作错误态并停音频，UI 上不是「轻提示」；服务端本轮仍正常收尾，建议后续给非终止错误码单独处理。
+4. `LLM_FIRST_TOKEN_TIMEOUT_MS` 未写入 `.env.example`（不在授权范围）。

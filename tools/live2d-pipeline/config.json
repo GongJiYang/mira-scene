@@ -1,0 +1,586 @@
+{
+  "input": {
+    "psd": "/Users/gjy/Downloads/seethrough_output (1).psd",
+    "original_png": "/Users/gjy/Desktop/立绘图/M1 · 主立绘（透明背景）.png"
+  },
+  "output_dir": "/Users/gjy/tools/pipeline-out/run4",
+  "env": {
+    "python": "/Users/gjy/tools/see-through/.venv/bin/python",
+    "java_home": "/opt/homebrew/opt/openjdk@21",
+    "psd2live_dir": "/Users/gjy/tools/psd2live",
+    "ffmpeg": "ffmpeg"
+  },
+  "step3_mapping": {
+    "formula_side": "max",
+    "psd_reference_size": 768,
+    "compare_alpha_gate": 0.85,
+    "search": {
+      "translate_px": 3.0,
+      "translate_step_px": 1.0,
+      "scale_pct": 1.0,
+      "scale_step_pct": 0.5,
+      "refine_step_px": 0.25
+    },
+    "edge_sobel_percentile": 85.0,
+    "report_improvement_ratio": 1.25
+  },
+  "step4_upscale": {
+    "interpolation": "cubic",
+    "swap_alpha_gate": 0.85,
+    "swap_alpha_ramp": 0.15,
+    "color_tolerance": 34.0,
+    "compare_tolerances": [
+      24.0,
+      34.0,
+      44.0
+    ],
+    "skip_layers": [
+      "eyewhite",
+      "irides",
+      "eyelash"
+    ],
+    "background_probe_alpha": 0.2,
+    "residual": {
+      "uncovered_alpha": 0.5,
+      "union_alpha": 0.5,
+      "color_diff_threshold": 60.0,
+      "grow_diff_threshold": 30.0,
+      "min_blob_area": 2000,
+      "feather_px": 2.0
+    },
+    "residual_layers": {
+      "neckwear_name": "neckwear",
+      "objects_name": "objects",
+      "below_chin_group": "neckwear",
+      "chin_reference_layer": "face",
+      "hair_merge": {
+        "enabled": true,
+        "donor_layer": "front hair",
+        "max_mean_lum": 100.0,
+        "bbox_inflate": 0.25,
+        "min_inside_pct": 80.0
+      }
+    },
+    "alpha": {
+      "interpolation": "lanczos",
+      "gaussian_sigma": 0.9,
+      "original_alpha": {
+        "enabled": true,
+        "min_alpha": 0.02,
+        "ramp": 0.25,
+        "coincide_tol": 0.28,
+        "feather_px": 1.0,
+        "rgb_min_alpha": 0.25
+      },
+      "silhouette_clip": {
+        "enabled": true,
+        "faint_limit": 0.2,
+        "layers": [
+          "handwear",
+          "topwear"
+        ],
+        "limit_blur_px": 0.0,
+        "reported_zone": [
+          950,
+          1015,
+          1005,
+          1115
+        ]
+      }
+    }
+  },
+  "step5_eyes": {
+    "roi_layers": [
+      "eyewhite",
+      "irides",
+      "eyelash"
+    ],
+    "roi_margin_px": 12,
+    "iris_hue_tolerance": 22,
+    "iris_hue_min_sat": 30,
+    "iris_val_range": [
+      20,
+      190
+    ],
+    "iris_min_area": 200,
+    "iris_alpha_gate": 0.5,
+    "iris_fit_max_residual": 6.0,
+    "iris_mirror_axis": "horizontal",
+    "sclera_rx_ratio": 1.34,
+    "sclera_ry_ratio": 1.15,
+    "sclera_bright_percentile": 85.0,
+    "sclera_neutral_mix": 0.45,
+    "sclera_gain": 1.1,
+    "sclera_top_shadow": 0.2,
+    "lash_lum": 110.0,
+    "lash_lum_band": 30.0,
+    "lash_radius_ratio": [
+      2.3,
+      1.6
+    ],
+    "lash_min_speck_area": 24,
+    "lash_residual_speck_area": 4,
+    "lash_angle_clip_rad": 0.45,
+    "side_left_is_image_right": true,
+    "expected_iris_radius": {
+      "width_px": 1534,
+      "range": [
+        18.0,
+        20.0
+      ]
+    },
+    "zoom_factor": 4,
+    "eye_order": [
+      "eyewhite",
+      "irides",
+      "eyelash"
+    ],
+    "lash_angle_radius_ratio": 1.6,
+    "lash_angle_upper_only": true,
+    "iris_rim": {
+      "shrink_px": 1.5,
+      "feather_px": 1.2,
+      "decontaminate_px": 4.0,
+      "ring_outer_px": 2.0,
+      "ring_inner_px": 3.0
+    },
+    "sclera_opening": {
+      "enabled": true,
+      "skin_diff_thr": 34.0,
+      "lash_extra_lum": 40.0,
+      "close_px": 5,
+      "erode_px": 0,
+      "feather_px": 1.2,
+      "exclude_lash_dark": false,
+      "skin_warm_thr": 20.0,
+      "skin_warm_min_lum": 115.0,
+      "skin_warm_dist_max": 90.0
+    },
+    "lash_blobs": {
+      "enabled": true,
+      "band_rx_ratio": 1.25,
+      "band_ry_ratio": 1.3,
+      "min_inside_pct": 50.0,
+      "max_above_px": 8.0
+    },
+    "iris_clip_to_opening": true,
+    "iris_clip_softness": 0.03
+  },
+  "variant_layers": {
+    "eye_close": {
+      "name": "eye close",
+      "suffix_left": "-l",
+      "suffix_right": "-r",
+      "roi_expand": 1.35,
+      "diff_threshold": 10.0,
+      "diff_ramp": 14.0,
+      "min_alpha": 0.05,
+      "feather_px": 0.8
+    },
+    "mouth": {
+      "close_name": "mouth close",
+      "open_name": "mouth open",
+      "small_name": "mouth small",
+      "mask": {
+        "diff_threshold": 12.0,
+        "roi_expand": 1.8,
+        "expand_px": 8.0,
+        "feather_sigma": 3.0,
+        "change_ramp": 10.0,
+        "change_blur_px": 1.5,
+        "change_morph_px": 3,
+        "min_alpha": 0.02
+      },
+      "face_inpaint": {
+        "enabled": true,
+        "dilate_px": 2,
+        "telea_radius": 6
+      }
+    }
+  },
+  "step6_compose": {
+    "split_suffix_left": "-l",
+    "split_suffix_right": "-r",
+    "eye_order": [
+      "eyewhite",
+      "irides",
+      "eyelash"
+    ],
+    "brow_layer": "eyebrow",
+    "top_layer": "front hair",
+    "insert_after": "topwear",
+    "compare_alpha_gate": 0.85,
+    "flatten_background": "transparent",
+    "psd_mode": "RGB",
+    "repair": {
+      "holes": {
+        "enabled": true,
+        "min_area": 1,
+        "donor_preference": [
+          "neck",
+          "topwear",
+          "back hair"
+        ],
+        "passes": 3
+      },
+      "band": {
+        "enabled": true,
+        "y_below_face_bottom": -40,
+        "y_above_face_bottom": 110,
+        "x_pad": 40,
+        "skin_diff_thr": 34.0,
+        "model_diff_thr": 18.0,
+        "donor_layer": "neck",
+        "feather_px": 1.5,
+        "top_layers": [
+          "topwear",
+          "neckwear",
+          "neck",
+          "face"
+        ],
+        "skin_chroma_thr": 0.1,
+        "skin_min_lum": 50.0
+      },
+      "face_eyes": {
+        "enabled": true,
+        "ring_px": 3,
+        "dilate_px": 1,
+        "telea_radius": 6.0,
+        "layers": [
+          "face"
+        ],
+        "note": "erase the artwork's own eye/lid strokes under the rebuilt eyes, opening + 3px ring"
+      },
+      "neck": {
+        "enabled": true,
+        "above_chin_px": 130,
+        "below_collar_px": 60,
+        "feather_px": 1.5,
+        "min_visible_rows": 12,
+        "skin_chroma_max": 0.22,
+        "below_chin_px": 160,
+        "below_last_row_px": 10,
+        "row_margin_px": 4,
+        "above_chin_x_inset": 0.16,
+        "under_dilate_px": 3
+      },
+      "residue": {
+        "enabled": true,
+        "references": [
+          "earwear"
+        ],
+        "targets": [
+          "face",
+          "ears",
+          "front hair",
+          "back hair"
+        ],
+        "colour_tol": 34.0,
+        "dilate_px": 4,
+        "telea_radius": 6.0,
+        "min_blob_area": 3,
+        "footprint": {
+          "enabled": true,
+          "dilate_px": 3
+        }
+      },
+      "specks": {
+        "enabled": true,
+        "max_area_px": 400,
+        "colour_thr": 55.0,
+        "orig_alpha_gate": 0.85,
+        "max_passes": 2,
+        "exclude_layers": [
+          "eye close-l",
+          "eye close-r",
+          "mouth close",
+          "mouth small",
+          "mouth open"
+        ]
+      }
+    },
+    "renames": {},
+    "drop_base_layers": [
+      "mouth"
+    ],
+    "insert_after_layer": {
+      "nose": [
+        "mouth close",
+        "mouth small",
+        "mouth open"
+      ],
+      "eyelash-r": [
+        "eye close-l",
+        "eye close-r"
+      ]
+    },
+    "rest_hidden": [
+      "eye close-l",
+      "eye close-r",
+      "mouth small",
+      "mouth open"
+    ]
+  },
+  "step7_live": {
+    "lang": "zh",
+    "mesh_pixels": true,
+    "expected_outputs": [
+      "moc3",
+      "cmo3",
+      "model3.json",
+      "physics3.json",
+      "motion3"
+    ],
+    "motion3_min_count": 4,
+    "timeout_s": 1800,
+    "mcp": {
+      "profile": "core",
+      "port": 0,
+      "start_timeout_s": 420
+    },
+    "generation": {
+      "mesh_units": "PIXELS",
+      "mesh_spacing": 64,
+      "atlas_size": 4096,
+      "mouth_outline": false,
+      "see_through_eyes": true,
+      "see_through_brows": true,
+      "generate_physics": true,
+      "export_motions": true,
+      "head_strength": 0.5
+    },
+    "mouth_states": {
+      "edges": [
+        0.33,
+        0.66
+      ],
+      "epsilon": 0.004
+    }
+  },
+  "step8_export": {
+    "poses": {
+      "p1": "ParamEyeLOpen=0",
+      "p2": "ParamEyeBallX=1,ParamEyeBallY=0.8",
+      "p3": "ParamEyeROpen=0",
+      "p4": "ParamMouthOpenY=1",
+      "p5": "ParamAngleX=30",
+      "p6": "ParamAngleX=-30",
+      "p7": "ParamMouthOpenY=0.5",
+      "p8": "ParamMouthOpenY=0.2",
+      "p9": "ParamMouthOpenY=0.8",
+      "g_down": "ParamEyeBallY=-1",
+      "g_up": "ParamEyeBallY=1",
+      "g_left": "ParamEyeBallX=-1",
+      "g_right": "ParamEyeBallX=1",
+      "g_ul": "ParamEyeBallX=-1,ParamEyeBallY=1",
+      "g_ur": "ParamEyeBallX=1,ParamEyeBallY=1",
+      "g_dl": "ParamEyeBallX=-1,ParamEyeBallY=-1",
+      "g_dr": "ParamEyeBallX=1,ParamEyeBallY=-1",
+      "n_xp": "ParamAngleX=30,ParamAngleY=-30",
+      "n_xn": "ParamAngleX=-30,ParamAngleY=-30",
+      "n_zp": "ParamAngleZ=20",
+      "n_zn": "ParamAngleZ=-20"
+    },
+    "video": {
+      "clip": "Idle",
+      "size": 768,
+      "frame_step_s": 0.5
+    },
+    "web": true,
+    "blink": {
+      "idle_sample_fps": 30,
+      "min_lash_ratio": 0.55,
+      "iris_drop_ratio": 0.6,
+      "iris_color_tol": 40
+    },
+    "hole_min_area": 50,
+    "tracking": {
+      "anchor_layer": "nose"
+    },
+    "closed_eye": {
+      "iris_hue_tol": 22,
+      "iris_min_sat": 30,
+      "iris_val_range": [
+        20,
+        190
+      ],
+      "region_diff_thr": 12.0
+    },
+    "mouth_check": {
+      "diff_thr": 10.0
+    },
+    "gaze": {
+      "poses": [
+        "g_down",
+        "g_up",
+        "g_left",
+        "g_right",
+        "g_ul",
+        "g_ur",
+        "g_dl",
+        "g_dr"
+      ],
+      "ring_px": 3,
+      "dark_lum": 80.0
+    },
+    "neck": {
+      "poses": [
+        "n_xp",
+        "n_xn",
+        "n_zp",
+        "n_zn"
+      ],
+      "band_pose": "rest",
+      "band": {
+        "below_face_px": 4,
+        "height_px": 90,
+        "dilate_px": 1
+      }
+    },
+    "accessory": {
+      "poses": [
+        "p5",
+        "p6"
+      ],
+      "reference_layer": "earwear",
+      "colour_tol": 24.0,
+      "roi_pad_px": 6,
+      "min_area": 6,
+      "dilate_px": 3,
+      "hair_bright_max": 30
+    },
+    "head_strength": {
+      "enabled": true,
+      "variants": {
+        "default": 1.0,
+        "soft": 0.5
+      },
+      "poses": {
+        "hsp": "ParamAngleX=30,ParamAngleY=30",
+        "hsn": "ParamAngleX=-30,ParamAngleY=30"
+      }
+    }
+  },
+  "assets": {
+    "eye_close": "/Users/gjy/mira-scene/assets/parts/eyelid_closed.png",
+    "mouth_open": "/Users/gjy/mira-scene/assets/parts/mouth_open.png",
+    "mouth_small": "/Users/gjy/mira-scene/assets/parts/mouth_small.png"
+  },
+  "compare": {
+    "baseline_dir": "/Users/gjy/tools/pipeline-out/run3",
+    "crop_zoom": 3,
+    "round2": {
+      "mouth_states": [
+        [
+          "0.0",
+          "rest"
+        ],
+        [
+          "0.2",
+          "p8"
+        ],
+        [
+          "0.5",
+          "p7"
+        ],
+        [
+          "0.8",
+          "p9"
+        ],
+        [
+          "1.0",
+          "p4"
+        ]
+      ],
+      "mouth_asset_for_state": {
+        "0.0": "master",
+        "0.2": "master",
+        "0.5": "mouth_small",
+        "0.8": "mouth_open",
+        "1.0": "mouth_open"
+      },
+      "mouth_ring_px": 10,
+      "visible_alpha": 0.2,
+      "blue_dot_zone": [
+        950,
+        1015,
+        1005,
+        1115
+      ],
+      "regression_boxes": {
+        "closed_eye_left": [
+          530,
+          340,
+          650,
+          440
+        ],
+        "neck_chin": [
+          400,
+          540,
+          660,
+          700
+        ],
+        "front_hair": [
+          170,
+          250,
+          300,
+          400
+        ]
+      },
+      "extra_poses": {
+        "g_down": "ParamEyeBallY=-1",
+        "g_up": "ParamEyeBallY=1",
+        "g_left": "ParamEyeBallX=-1",
+        "g_right": "ParamEyeBallX=1",
+        "g_ul": "ParamEyeBallX=-1,ParamEyeBallY=1",
+        "g_ur": "ParamEyeBallX=1,ParamEyeBallY=1",
+        "g_dl": "ParamEyeBallX=-1,ParamEyeBallY=-1",
+        "g_dr": "ParamEyeBallX=1,ParamEyeBallY=-1",
+        "n_xp": "ParamAngleX=30,ParamAngleY=-30",
+        "n_xn": "ParamAngleX=-30,ParamAngleY=-30",
+        "n_zp": "ParamAngleZ=20",
+        "n_zn": "ParamAngleZ=-20"
+      },
+      "gaze_poses": [
+        "g_down",
+        "g_up",
+        "g_left",
+        "g_right",
+        "g_ul",
+        "g_ur",
+        "g_dl",
+        "g_dr"
+      ],
+      "neck_poses": [
+        "n_xp",
+        "n_xn",
+        "n_zp",
+        "n_zn"
+      ],
+      "accessory_poses": [
+        "p5",
+        "p6"
+      ],
+      "eye_ring_px": 3,
+      "dark_lum": 80.0,
+      "earring_boxes": {
+        "left": [
+          420,
+          420,
+          560,
+          560
+        ],
+        "right": [
+          600,
+          420,
+          700,
+          560
+        ]
+      },
+      "strength_poses": {
+        "hsp": "ParamAngleX=30,ParamAngleY=30",
+        "hsn": "ParamAngleX=-30,ParamAngleY=30"
+      }
+    }
+  }
+}

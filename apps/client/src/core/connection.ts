@@ -8,7 +8,7 @@ const SESSION_STORAGE_KEY = "mira.sessionId";
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000] as const;
 
 type ClientPayloads = {
-  hello: { resumeSessionId?: string };
+  hello: { resumeSessionId?: string; faults?: string[] };
   text_input: { text: string };
   audio_input: { mime: string; dataBase64: string };
   interrupt: { interruptedTurnId: number };
@@ -37,6 +37,17 @@ function storeSessionId(sessionId: string): void {
   } catch {
     // 隐私模式下 sessionStorage 可能不可用：仅内存保存。
   }
+}
+
+/** Q11：`?fail=tts,slow` → hello.payload.faults；空/非法值按未配置处理。 */
+export function readUrlFaults(search: string): string[] | undefined {
+  const raw = new URLSearchParams(search).get("fail");
+  if (!raw) return undefined;
+  const faults = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  return faults.length > 0 ? faults : undefined;
 }
 
 function setStatus(status: ConnectionStatus): void {
@@ -180,7 +191,11 @@ export function createConnection(): Connection {
         setStatus("open");
         pushEvent("ws open");
         startHeartbeat(nextSocket);
-        sendEnvelope("hello", { resumeSessionId: readStoredSessionId() });
+        const faults = readUrlFaults(location.search);
+        sendEnvelope(
+          "hello",
+          faults ? { resumeSessionId: readStoredSessionId(), faults } : { resumeSessionId: readStoredSessionId() },
+        );
       });
       nextSocket.addEventListener("message", (event) => {
         if (typeof event.data === "string") handleMessage(event.data);

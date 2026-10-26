@@ -1,0 +1,31 @@
+Working...
+完成。P1 有实测结论；P2/P3 被 Fish 余额（HTTP 402）阻断，已按铁律停止并记录，未改验收标准。
+
+## 交付
+
+- 代码：`tools/probes/`（已入 workspace），入口 `pnpm probe:p1|p2|p3|all`，均支持 `--mock`（本地假服务，P1 的 a/e/b 走同一套解析与指标代码，非假路径）。
+- 报告：`docs/tasks/g2-probes-report.md`。
+- 产物（`out/` 已 gitignore）：`p1-2026-10-26T03-58-18.json/.md`、`p2-…json`×2、`p3-…json`、`out/p3/<模型>/<情绪>.mp3`、`out/p3/blind.html`。
+
+## P1（DeepSeek `deepseek-v4-flash`，thinking disabled，流式，N=17 条全量 + 3 次取消/格式）
+
+| 格式 | 首句 P50 | P90 | 合规 | 复杂度 | 取消均值 | 加权总分 |
+|---|---|---|---|---|---|---|
+| **a 逐行 JSON** | 766ms | 968ms | 100% | 90 | 1.2ms | **93.8** |
+| e 行内标签 | 753ms | 907ms | 100% | 65 | 1.1ms | 90.4 |
+| b streamObject | 654ms | 929ms | 100% | 50 | 5.8ms | 90.9 |
+
+推荐 **a**：延迟与 e 在噪声内、P90 优于 b、整轮 P50 最好（910ms），零依赖、解析器 40 行内；b 的 P50 优势（112ms）换不回两个依赖 + schema 不下发 + 取消清理开销。三种格式都命中前缀缓存（128–256 token/次），取消全部 ≪500ms（不构成区分项）。
+
+## P2 / P3 阻断
+
+- P2：`say -v Ting-Ting` + ffmpeg 产出 webm(opus)/mp4(aac)/wav（7.13–7.16s），`/v1/asr`（`model: transcribe-1-pro`）6 次全部 `402 Insufficient API credit`；**格式支持只能引官方文档**（webm/mp4/wav 均列为支持），报告中标 `[INFERENCE]`，不冒充实测。
+- P3：12 次（6 情绪 × 2 模型）只 1 次 200：`s2.1-pro-free / sad`，首字节 **1208ms**，音频 2.064s；其余含 drama-3 全 6 条均 402。`FISH_VOICE_ID` 为空 → 用 Fish 默认音色（已注明）。**听感结论未下**，留给用户盲听；页面本身已在真浏览器验证（可播放、提交算分、打乱顺序）。
+- 充值后 `pnpm probe:p2` / `pnpm probe:p3` 一条命令重跑即补齐；只重排盲听页不发请求：`npx tsx p3/blind-only.ts`。
+
+## 必须知道的两处偏差
+
+1. **「20 条输入」与「每格式 ≤20 次调用 + 3 次取消」算术互斥**（23>20）。按上限执行：每格式 17 条全量 + 3 条只跑取消，`inputs.json` 仍完整 20 条、10 类全覆盖，但合规矩阵样本是 17 条。
+2. **P1 实际 80 次**（仅 b 超 20 次）：b 首轮 `usage.reasoningTokens` 31–281 → 思考未关（`providerOptions` 键应为 provider 名 `deepseek`，写错静默失效），数据作废后重跑；同一代码思考开/关的首句 P50 是 1577ms vs 654ms。作废数据保留可核对。
+
+总网络请求 99 次（Fish 18 次中仅 1 次计费）。`pnpm typecheck` 四包全通；`pnpm test` 269/269 通过（首跑一次偶发失败，同期另一 Agent 在改 `apps/server`，本次未改 `apps/`、`packages/`）。未 commit，无遗留进程，`out/` 全量扫描无 Key 泄漏。

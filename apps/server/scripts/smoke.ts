@@ -1,5 +1,6 @@
 /**
- * 冒烟脚本：先取握手令牌，再真实 WS 连接 + 随机端口，验证 hello → 多轮 → 打断 → stale_turn → ping/pong。
+ * 冒烟脚本：先取握手令牌，再真实 WS 连接 + 随机端口，验证 hello → 多轮 → 打断 → stale_turn → ping/pong，
+ * 最后用 faults:["tts"] 跑一轮无声但不中断的降级。
  * 任何一步失败以非 0 退出码结束。
  */
 import WebSocket from "ws";
@@ -47,6 +48,26 @@ function delay(ms: number): Promise<void> {
   return promise;
 }
 
+/** 把一条连接的入站消息送进共享 inbox；多个连接用 sessionId 区分。 */
+function attachMessages(socket: WebSocket): void {
+  socket.on("message", (raw) => {
+    const parsed = parseServerMessage(JSON.parse(raw.toString()));
+    if (!parsed.success) {
+      fail(`收到非法 ServerMessage：${parsed.error.message}`);
+      return;
+    }
+    inbox.push(parsed.data);
+    const pending = [...waiters];
+    for (const waiter of pending) {
+      if (waiter.predicate(parsed.data)) {
+        const index = waiters.indexOf(waiter);
+        if (index >= 0) waiters.splice(index, 1);
+        waiter.resolve(parsed.data);
+      }
+    }
+  });
+}
+
 async function main(): Promise<void> {
   const server = await startServer({ port: 0 });
   const health = (await fetch(`http://127.0.0.1:${server.port}/health`).then((response) => response.json())) as { ok?: boolean };
@@ -69,22 +90,7 @@ async function main(): Promise<void> {
   let sessionId = "";
   let turnId = 0;
 
-  socket.on("message", (raw) => {
-    const parsed = parseServerMessage(JSON.parse(raw.toString()));
-    if (!parsed.success) {
-      fail(`收到非法 ServerMessage：${parsed.error.message}`);
-      return;
-    }
-    inbox.push(parsed.data);
-    const pending = [...waiters];
-    for (const waiter of pending) {
-      if (waiter.predicate(parsed.data)) {
-        const index = waiters.indexOf(waiter);
-        if (index >= 0) waiters.splice(index, 1);
-        waiter.resolve(parsed.data);
-      }
-    }
-  });
+  attachMessages(socket);
 
   const send = (type: "hello" | "text_input" | "ping", payload: Record<string, unknown>, envelopeTurnId: number): void => {
     socket.send(
@@ -167,7 +173,64 @@ async function main(): Promise<void> {
     if (pong.type !== "pong") return;
     timings.push({ step: "ping → pong", ms: now() - pingAt });
 
-    // 8. 打印各步耗时
+    // 8. 故障注入（Q11）：faults:["tts"] → 整轮无声，但正常 turn_end(done)
+    const faultAt = now();
+    const faultSocket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?token=${encodeURIComponent(token)}`);
+    attachMessages(faultSocket);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        faultSocket.once("open", () => resolve());
+        faultSocket.once("error", (error) => reject(error));
+      });
+      faultSocket.send(
+        JSON.stringify({
+          v: 1,
+          sessionId: "",
+          turnId: 0,
+          seq: 0,
+          ts: now(),
+          type: "hello",
+          payload: { faults: ["tts"] },
+        }),
+      );
+      const faultSession = await waitForMessage(
+        (message) => message.type === "session" && message.sessionId !== sessionId,
+        "fault session",
+      );
+      const faultSessionId = faultSession.sessionId;
+      faultSocket.send(
+        JSON.stringify({
+          v: 1,
+          sessionId: faultSessionId,
+          turnId: 1,
+          seq: 0,
+          ts: now(),
+          type: "text_input",
+          payload: { text: "你好" },
+        }),
+      );
+      const faultEnd = await waitForMessage(
+        (message) => message.type === "turn_end" && message.sessionId === faultSessionId && message.turnId === 1,
+        "fault turn_end",
+      );
+      if (faultEnd.type !== "turn_end" || faultEnd.payload.reason !== "done") {
+        fail(`faults:["tts"] 本轮应以 done 结束，实际 ${JSON.stringify(faultEnd.payload)}`);
+      }
+      const faultTurn = inbox.filter((message) => message.sessionId === faultSessionId && message.turnId === 1);
+      const faultBeats = faultTurn.filter((message) => message.type === "beat");
+      const faultTts = faultTurn.filter((message) => message.type === "tts_audio");
+      const degraded = faultTurn.filter(
+        (message) => message.type === "error" && message.payload.code === "tts_degraded",
+      );
+      if (faultBeats.length < 2) fail(`faults:["tts"] 只收到 ${faultBeats.length} 个 beat`);
+      if (faultTts.length > 0) fail(`faults:["tts"] 不应下发 tts_audio，实际 ${faultTts.length} 条`);
+      if (degraded.length === 0) fail('faults:["tts"] 缺少 error{tts_degraded}');
+      timings.push({ step: 'faults:["tts"] → turn_end(done)', ms: now() - faultAt });
+    } finally {
+      faultSocket.close();
+    }
+
+    // 9. 打印各步耗时
     console.log("SMOKE OK");
     console.table(timings);
     console.log(`总耗时 ${now() - startedAt}ms；turn2 beats=${turn2Beats.length} tts=${turn2Tts.length}`);

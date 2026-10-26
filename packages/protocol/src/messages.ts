@@ -14,6 +14,11 @@ const envelopeFields = {
 
 export const helloPayloadSchema = z.object({
   resumeSessionId: z.string().optional(),
+  /**
+   * S5 故障注入（Q11）：客户端把 URL 的 `?fail=` 解析后随 hello 下发，
+   * 服务端按会话生效；缺省时使用环境变量 FAULTS 的全局默认值。
+   */
+  faults: z.array(z.string()).optional(),
 });
 
 export const textInputPayloadSchema = z.object({

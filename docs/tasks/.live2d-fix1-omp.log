@@ -1,0 +1,36 @@
+Working...
+修复轮 1 完成。`run3` 由 `./run.sh`（无参数）一条命令从零生成；删掉目录连跑两次，8 组指标完全一致；run2 未改（`find run2 -newermt 05:00` 为空），psd2live 仓库 `git status` 干净（只有被 ignore 的 build 产物），Gradle daemon 0、无残留 http.server。
+
+## 8 个问题的 run2 → run3（`compare/metrics.json`，同一段代码算两边）
+
+| # | 指标 | run2 | run3 |
+|---|---|---|---|
+| 1 | 内部空洞 px / 总空洞 | 901 / 1877 | **0** / 842（全在轮廓边） |
+| 1 | 下巴—领口带（原图为皮肤处）平均色差 | 12.0 | **3.05** |
+| 2 | 竖条区 (590–720,120–380) 平均/最大色差 | 16.36 / 170.33 | **5.09** / 146.67 |
+| 2 | `objects` 独立层 | 5161px | 无（残余 3036px 全在 front hair 框内，并入前发） |
+| 3 | 闭眼姿态眼白区虹膜色相 px（l/r） | 58 / 57 | **0 / 0** |
+| 3 | 闭眼区 vs `eyelid_closed` 平均色差 | 43.94 / 47.1 | **13.57 / 18.13** |
+| 4 | `MouthOpenY=1` vs 0 嘴部差异 px | 828 | **1419**；p4 vs `mouth_open` 11.46 → **3.2** |
+| 5 | 虹膜外缘环带亮度差（l/r） | −5.36 / −5.21 | **+1.9 / +2.09** |
+| 6 | 睫毛连通块（l/r） | 2 / 5 | **2 / 2**（r 删 335、91 px 漂笔触 + 2 个 1px） |
+| 7 | 轮廓 alpha 误差 全图/前发框 | 0.3653 / 0.2509 | **0.266 / 0.1408**；前发软边 \|Δα\| 0.1327→0.1253 |
+| 8 | 眼白越出眼眶开口 px；虹膜裁切 | 124/192；12.6%/14.0% | **0/0；0/0**（p2 虹膜反而 +18/+34px） |
+
+拍平自检 3.34（step3 11.37）、21 层、7 姿态 + `MouthOpenY=0.5` 导出、12s Idle 视频、web `ok=True`；新增 `check_cmp1..8_*.png` 与 `check_step6_seam.png` / `check_step8_{closed_eyes,mouth}.png`。
+
+## 与任务说明冲突、已如实写入 findings 的四处
+
+1. **第 1 条"透明缝"在 run2 不存在**：带内 `hole_pixels=0`、`transparent_band_pixels=8`；真实问题是**颜色**（带内 6621px，37.81→2.26）。真实内部空洞 826px（裙摆下 809px 一块）已填成 0。
+2. **`eyelid_closed.png` 不是纯眼部件**：整块脸（α≥1 共 102246px，bbox (306,296,410,312)，130 档 alpha）；只能 ROI + 差异掩膜用，否则会把变体自带的眉/眼/嘴贴进来。
+3. **`mouth_small` 做不了第三态**：`prefixMatch` 归 `MOUTH`，preset 只有 `MOUTH_OPEN/CLOSE`；三态需 switch 变体（编辑器/MCP），CLI `--input` 只收 PSD。故 `mouth open`←`mouth_open.png`、`mouth close`←原嘴层，`mouth_small` 仅作 p7 参照。
+4. **第 6 条按字面做会削掉内眼角睫毛**：改为"主块必留 + 眼眶带内且形心不高于椭圆上沿 8px"，并补一道 α>0.25 去 <4px 碎片（新配置 `lash_residual_speck_area: 4`）。
+
+## 未达标 / 需人判断（报告有数字）
+
+- 闭眼时睫毛层仍被 psd2live 平移（l 41→46，比 1.122），只是被不透的 `eye close-l/r` 盖住；旧判据 ≤0.65 已作废，仅作诊断。
+- p7（0.5）是两层半透明叠加，不是画好的半张嘴；`mouth_open` 下唇描边越过下巴 14px（`mouth_roi_expand` 1.6，可降到 1.2）。
+- 闭眼区与素材色差仍有 13.57/18.13（眼白/睫毛在眼皮下露 1–2px + 素材与 M1 有 1px 偏移）。
+- 全部结论为数值判定；我无目测能力，检查图留人工核对。
+
+产物：`~/tools/pipeline-out/run3/`（138M，`report.md` 28KB 含 findings 全文）+ `tools/live2d-pipeline/findings.md`；新模块 `l2dp/{eyegeom,variants,repair,compare}.py`，全部参数在 `config.json`。

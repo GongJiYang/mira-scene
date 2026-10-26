@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { parseClientMessage, type ServerMessage } from "@mira/protocol";
+import { parseFaults, readFirstTokenTimeoutMs, withFaults } from "./adapters/faults";
 import { createMockLlm } from "./adapters/mock/mockLlm";
 import { createMockStt } from "./adapters/mock/mockStt";
 import { createMockTts } from "./adapters/mock/mockTts";
@@ -43,10 +44,28 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   const config = loadConfig();
   const logger = options.logger ?? consoleLogger;
   const tokens = createTokenStore();
+  // 每个会话一份端口，故障（hello.faults / FAULTS）在创建端口实例时套上装饰器。
+  const basePorts = { stt: createMockStt(), llm: createMockLlm(), tts: createMockTts() };
+  // sessionId → 连接：`ws_drop` 需要服务端主动关闭会话所在的连接。
+  const sessionSockets = new Map<string, WebSocket>();
   const sessions = createSessionManager({
-    stt: createMockStt(),
-    llm: createMockLlm(),
-    tts: createMockTts(),
+    ...basePorts,
+    createPorts: (faults) =>
+      faults.length === 0
+        ? basePorts
+        : {
+            stt: withFaults(createMockStt(), "stt", faults),
+            llm: withFaults(createMockLlm(), "llm", faults),
+            tts: withFaults(createMockTts(), "tts", faults),
+          },
+    defaultFaults: parseFaults(process.env.FAULTS),
+    firstTokenTimeoutMs: readFirstTokenTimeoutMs(),
+    dropConnection: (sessionId) => {
+      const socket = sessionSockets.get(sessionId);
+      if (!socket) return;
+      sessionSockets.delete(sessionId);
+      socket.close(1011, "fault:ws_drop");
+    },
     log: logger,
     sessionTurnLimit: config.sessionTurnLimit,
     dailyTurnLimit: config.dailyTurnLimit,
@@ -89,6 +108,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     let tooLarge = false;
 
     const send: SendFn = (message: ServerMessage) => {
+      // sessionId → ws：ws_drop 关闭的是该会话所在连接。
+      if (message.type === "session") sessionSockets.set(message.sessionId, ws);
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
     };
 
@@ -143,6 +164,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
 
     ws.on("error", (error) => {
       logger({ ts: Date.now(), event: "ws_error", detail: error.message });
+    });
+
+    ws.on("close", () => {
+      for (const [sessionId, socket] of sessionSockets) {
+        if (socket === ws) sessionSockets.delete(sessionId);
+      }
     });
   });
 
