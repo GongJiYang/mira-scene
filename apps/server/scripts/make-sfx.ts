@@ -1,6 +1,11 @@
 /**
  * 反应音生成（§5）：在 real 模式下用 Fish TTS 合成 2–3 条短反应音，
- * 输出到 `apps/client/public/sfx/react-*.mp3`。
+ * 输出到 `apps/client/public/characters/<id>/sfx/react-*.mp3`。
+ *
+ * S6l-fix1 §5：
+ * - 反应音按角色 —— `--character <id>` 指定角色（缺省取第一个角色）；输出到该角色目录；
+ * - 音色用该角色的 `FISH_VOICE_ID_<ID>`（即 `pack.voice.fishVoiceIdEnv`，与会话层同一规则）；
+ * - 音色变量为空时**报错退出**（不得不传 `reference_id`，否则会用 Fish 默认音色 → 男声）。
  *
  * Key 缺失（或 Fish 返回 402 等）时，生成一段 300ms 的轻音占位，保证没有 Key 的人也能用。
  * 生成后的文件随仓库提交（本任务按用户要求不执行 git commit）。
@@ -9,11 +14,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createFishTts } from "../src/adapters/fish/fishTts";
+import { defaultCharacterId, loadPacks, type Pack } from "../src/characters/pack";
 import { normalizeV1, readRepoEnvFile } from "../src/config";
 
-const REACTIONS: ReadonlyArray<{ file: string; text: string }> = [
+/** 三条反应音（文本保持 S3 原样不变）。 */
+export const REACTIONS: ReadonlyArray<{ file: string; text: string }> = [
   { file: "react-hmm.mp3", text: "嗯……" },
   { file: "react-mm.mp3", text: "唔……" },
   { file: "react-ah.mp3", text: "这样啊。" },
@@ -29,6 +36,25 @@ function findRepoRoot(start: string): string {
     if (parent === dir) throw new Error("找不到仓库根目录（pnpm-workspace.yaml）");
     dir = parent;
   }
+}
+
+/**
+ * S6l-fix1 §5：按角色包解析反应音音色（与会话层 `resolveVoiceId` 同一规则）。
+ * 取该角色 `pack.voice.fishVoiceIdEnv` 对应的环境变量值；为空则抛错（不可用 Fish 默认音色）。
+ */
+export function resolveSfxVoiceId(pack: Pack, env: Record<string, string | undefined>): string {
+  const envName = pack.voice.fishVoiceIdEnv;
+  const value = (env[envName] ?? "").trim();
+  if (value === "") {
+    throw new Error(`缺少 TTS 音色环境变量 ${envName}（角色 ${pack.id} 需要，请在 .env 配置）`);
+  }
+  return value;
+}
+
+/** `--character <id>` 解析（缺省 undefined）。 */
+export function parseCharacterArg(argv: readonly string[]): string | undefined {
+  const index = argv.indexOf("--character");
+  return index >= 0 ? argv[index + 1] : undefined;
 }
 
 /** 手搓的静音 mp3（MPEG1 Layer3 / 128kbps / 44.1kHz）：没有 ffmpeg 时的兜底。 */
@@ -76,9 +102,21 @@ function writePlaceholder(file: string): void {
   writeFileSync(file, silentMp3(PLACEHOLDER_MS));
 }
 
+/** 反应音输出目录：`apps/client/public/characters/<id>/sfx`。 */
+export function sfxOutDir(root: string, characterId: string): string {
+  return join(root, "apps", "client", "public", "characters", characterId, "sfx");
+}
+
 async function main(): Promise<void> {
   const root = findRepoRoot(dirname(fileURLToPath(import.meta.url)));
-  const outDir = join(root, "apps", "client", "public", "sfx");
+
+  // S6l-fix1 §5：`--character <id>` 指定角色（缺省取第一个角色）。
+  const characterArg = parseCharacterArg(process.argv);
+  const packs = loadPacks();
+  const pack = characterArg !== undefined ? packs.get(characterArg) : packs.get(defaultCharacterId(packs));
+  if (!pack) throw new Error(`找不到角色包：${characterArg ?? "(缺省)"}`);
+
+  const outDir = sfxOutDir(root, pack.id);
   mkdirSync(outDir, { recursive: true });
 
   const env = readRepoEnvFile();
@@ -90,28 +128,34 @@ async function main(): Promise<void> {
     return;
   }
 
+  // S6l-fix1 §5：音色为空 → 报错退出（不静默用 Fish 默认音色）。
+  const voiceId = resolveSfxVoiceId(pack, env);
+
   const tts = createFishTts({
     baseUrl: normalizeV1((env.FISH_BASE_URL ?? "").trim() || "https://api.fish.audio"),
     apiKey,
-    voiceId: (env.FISH_VOICE_ID ?? "").trim(),
+    voiceId,
     model: (env.FISH_TTS_MODEL ?? "").trim() || "s2.1-pro-free",
   });
 
   for (const reaction of REACTIONS) {
     const file = join(outDir, reaction.file);
     try {
-      const audio = await tts.synthesize(reaction.text, { emotion: "neutral" }, new AbortController().signal);
+      const audio = await tts.synthesize(reaction.text, { emotion: "neutral", voiceId, characterId: pack.id }, new AbortController().signal);
       writeFileSync(file, audio.data);
-      console.log(`[make-sfx] ${reaction.file} ← Fish（${audio.data.byteLength}B）`);
+      console.log(`[make-sfx] ${pack.id}/${reaction.file} ← Fish（${audio.data.byteLength}B）`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[make-sfx] ${reaction.file} Fish 合成失败（${message}），改用占位轻音`);
+      console.warn(`[make-sfx] ${pack.id}/${reaction.file} Fish 合成失败（${message}），改用占位轻音`);
       writePlaceholder(file);
     }
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(`[make-sfx] 失败：${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-});
+const invokedPath = process.argv[1];
+if (invokedPath && pathToFileURL(invokedPath).href === import.meta.url) {
+  main().catch((error: unknown) => {
+    console.error(`[make-sfx] 失败：${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  });
+}

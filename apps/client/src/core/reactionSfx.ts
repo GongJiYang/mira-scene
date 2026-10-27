@@ -5,15 +5,12 @@
  * - 受 `audioStopToken` 控制：任何打断都要立即停止（`stop`）。
  * - 第一个真实 beat 开始播放时淡出（`fadeOut`，80ms）。
  *
+ * S6l-fix1 §5：反应音按角色（`/characters/<id>/sfx/react-*.mp3`）。URL 由 `urls()` 动态提供，
+ * 每次 `arm()` 时按当前角色取值；某角色没有反应音时返回空数组 → 不播（不回退到全局文件）。
+ *
  * 逻辑与音频实现分离：真实的播放/淡出由 audio.ts 注入，这里只做「什么时候播、什么时候停」，
  * 因此可以脱离 DOM 单测。
  */
-
-export const REACTION_SFX_URLS = [
-  "/sfx/react-hmm.mp3",
-  "/sfx/react-mm.mp3",
-  "/sfx/react-ah.mp3",
-] as const;
 
 /** 进入 thinking 后最迟这么多毫秒内播放（§5：150ms 内）。 */
 export const REACTION_ARM_DELAY_MS = 150;
@@ -28,7 +25,8 @@ export type ReactionPlayback = {
 };
 
 export type ReactionDeps = {
-  urls: readonly string[];
+  /** S6l-fix1 §5：按当前角色动态取反应音 URL（返回空数组表示该角色没有反应音 → 不播）。 */
+  urls: () => readonly string[];
   random: () => number;
   /** 定时器由外壳注入（D34：接到统一的时间线，带 turnId 以便整轮取消）。 */
   setTimer: (callback: () => void, ms: number, turnId: number) => number;
@@ -63,7 +61,8 @@ export function createReactionSfx(deps: ReactionDeps): ReactionSfx {
 
   return {
     arm(turnId) {
-      if (deps.urls.length === 0) return;
+      const urls = deps.urls();
+      if (urls.length === 0) return;
       clearTimer();
       stopActive();
       armedTurnId = turnId;
@@ -71,8 +70,8 @@ export function createReactionSfx(deps: ReactionDeps): ReactionSfx {
         () => {
           timer = null;
           if (armedTurnId !== turnId) return;
-          const index = Math.min(Math.floor(deps.random() * deps.urls.length), deps.urls.length - 1);
-          const url = deps.urls[index] ?? deps.urls[0];
+          const index = Math.min(Math.floor(deps.random() * urls.length), urls.length - 1);
+          const url = urls[index] ?? urls[0];
           if (url === undefined) return;
           active = deps.play(url);
         },

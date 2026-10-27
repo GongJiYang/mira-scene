@@ -70,6 +70,9 @@ const ERROR_EVENTS = new Set([
   "voice_fallback",
   "tts_pace_warning",
   "llm_beat_warning",
+  // S6l-fix1 §0：换背景失败 / 被拒计入错误统计（观测页可见）。
+  "scene_failed",
+  "scene_rejected",
 ]);
 
 const FIVE_MIN_MS = 5 * 60 * 1000;

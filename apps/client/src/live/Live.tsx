@@ -17,6 +17,7 @@ import { UI_TEXT } from "./uiText";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
 import { useSceneStatusStore } from "./scene/status";
+import { drainRestoredUserLines, useSessionRestoreStore } from "./sessionRestore";
 import { progressDots } from "./storyProgress";
 import { useGuideScheduler, useInteractionCooldowns, resolveTap } from "./interactionHooks";
 import "./live.css";
@@ -106,11 +107,21 @@ export function Live() {
   const orientation = layout === "desktop" ? "landscape" : "portrait";
   // S6c §5：换背景 ready 后换成新背景；否则用角色包默认背景（D43：只有忧奈）。
   const sceneBackground = useSceneStatusStore((state) => state.backgroundUrl);
+  // S6l-fix1 §2：刷新恢复的背景直接显示（不播交叉淡入）。
+  const backgroundDirect = useSceneStatusStore((state) => state.direct);
   const defaultBackground =
     orientation === "portrait" ? "/characters/yuna/bg-mobile.jpg" : "/characters/yuna/bg-desktop.jpg";
   const background = sceneBackground !== null
     ? (orientation === "portrait" ? sceneBackground.mobile : sceneBackground.desktop)
     : defaultBackground;
+
+  // S6l-fix1 §2：刷新恢复——把服务端下发的用户历史弹幕排空进弹幕列表（不重复添加）。
+  const restoreLines = useSessionRestoreStore((state) => state.userLines);
+  useEffect(() => {
+    if (restoreLines.length === 0) return;
+    const lines = drainRestoredUserLines();
+    if (lines.length > 0) dispatchDanmaku({ type: "RESTORE_USER", texts: lines });
+  }, [restoreLines]);
 
   // 用户自己发的文字进弹幕；语音转写同理（transcript 走 subtitle 之外的独立通道，这里用 subtitle 兜底）。
   const submit = useCallback(() => {
@@ -235,6 +246,7 @@ export function Live() {
       storyMedia={vm.storyMedia}
       orientation={orientation}
       backgroundUrl={background}
+      animateBackground={!backgroundDirect}
       turnId={vm.debug.turnId}
     />
   );

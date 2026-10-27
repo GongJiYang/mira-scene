@@ -3,6 +3,7 @@ import { handleTtsAudio, setPlaybackStartedReporter } from "./audio";
 import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./heartbeat";
 import { handleMediaReady, handleMediaRequest } from "./storyMediaLink";
 import { handleSceneStatus } from "../live/scene/status";
+import { applySessionRestore } from "../live/sessionRestore";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 import { currentChannelId } from "../live/channel";
 import { recordFirstAudioMs } from "../obs/hud";
@@ -220,6 +221,7 @@ export function createConnection(): Connection {
       useConnectionStore.setState({ sessionId: message.sessionId });
       storeSessionId(message.sessionId);
       dispatch({ type: "SERVER_MESSAGE", message });
+      if (message.type === "session") applySessionRestore(message.payload);
       pushEvent(`recv ${message.type} t${message.turnId}`);
       return;
     }
@@ -229,6 +231,8 @@ export function createConnection(): Connection {
     if (message.type === "session") {
       useConnectionStore.setState({ sessionId: message.sessionId });
       storeSessionId(message.sessionId);
+      // S6l-fix1 §2：恢复会话时把服务端下发的背景与对话记录落到客户端（刷新恢复）。
+      applySessionRestore(message.payload);
       // 恢复会话时 currentTurnId 的同步在 reducer 内完成（SERVER_MESSAGE + session），
       // 这里不再直接写 stage store（D4：唯一写入口是 reducer）。
     }

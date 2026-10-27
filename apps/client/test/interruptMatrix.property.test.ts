@@ -80,6 +80,8 @@ function createSim() {
   let playing: { turnId: number; seq: number } | null = null;
   let silentPending = false;
   let reactionActive = false;
+  // S6l-fix1 §6：本地兜底语音是否在播（打断后必须停）。
+  let localVoiceActive = false;
   const ready = new Set<number>();
   const decoding = new Set<number>();
   const sentInterrupts: number[] = [];
@@ -159,6 +161,8 @@ function createSim() {
       playing = null;
       silentPending = false;
       reactionActive = false;
+      // S6l-fix1 §6：打断同时停掉本地兜底语音。
+      localVoiceActive = false;
     },
     forceMouthClosed: mouthClosed,
     cancelTurn: (turnId) => timeline.cancelTurn(turnId),
@@ -169,6 +173,7 @@ function createSim() {
     log: () => {},
     audioPlaying: () => playing !== null,
     reactionActive: () => reactionActive,
+    localVoiceActive: () => localVoiceActive,
     mouth: () => B.mouth,
     subtitle: () => A.subtitle,
     oldTurnCommandCount: (turnId) => timelineCountForTurn(timeline.state(), turnId),
