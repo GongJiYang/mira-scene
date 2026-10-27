@@ -4,6 +4,7 @@ import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./hear
 import { handleMediaReady, handleMediaRequest } from "./storyMediaLink";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 import { currentChannelId } from "../live/channel";
+import { recordFirstAudioMs } from "../obs/hud";
 
 const SESSION_STORAGE_KEY = "mira.sessionId";
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000] as const;
@@ -173,6 +174,8 @@ export function createConnection(): Connection {
 
   // §6：音频层在第一个 beat 开始播放时通过这里上报 playback_started。
   setPlaybackStartedReporter((turnId, beatSeq, clientMs) => {
+    // S6h §3：旁路给 ?hud=1 角标（客户端自测首包延迟）。
+    recordFirstAudioMs(clientMs);
     sendEnvelope("playback_started", { turnId, seq: beatSeq, clientMs });
   });
 

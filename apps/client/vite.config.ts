@@ -31,6 +31,10 @@ export default defineConfig({
       "/generated": {
         target: `http://localhost:${serverPort}`,
       },
+      // S6h §2：观测页轮询的服务端汇总接口。
+      "/obs": {
+        target: `http://localhost:${serverPort}`,
+      },
     },
   },
 });

@@ -14,7 +14,21 @@ import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layo
 import { StageRenderer } from "./StageRenderer";
 import { UI_TEXT } from "./uiText";
 import { developProgress } from "../stage/develop";
+import { hudEnabled, useHudStore } from "../obs/hud";
+import { OBS_TEXT } from "../obs/obsText";
 import "./live.css";
+import "../obs/obs.css";
+
+/** S6h §3：?hud=1 时显示上一轮「首包 xxx ms」角标（数据来自客户端自测，不依赖服务端）。 */
+function FirstAudioHud() {
+  const ms = useHudStore((s) => s.firstAudioMs);
+  if (!hudEnabled() || ms === undefined) return null;
+  return (
+    <span className="live-hud-first-audio" data-testid="hud-first-audio">
+      {OBS_TEXT.firstAudioHud(ms)}
+    </span>
+  );
+}
 
 /** 监听窗口宽度 → 布局。 */
 function useLayout(): LiveLayout {
@@ -166,6 +180,7 @@ export function Live() {
                   {character.displayName}
                 </span>
                 <span className="live-hud-viewers">{UI_TEXT.viewers}</span>
+                <FirstAudioHud />
               </div>
               {vm.error && vm.debugMode && (
                 <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>

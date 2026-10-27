@@ -6,6 +6,7 @@ import { bootstrapConnection } from "./core/controller";
 import { Live } from "./live/Live";
 import { YunaPreview } from "./preview/YunaPreview";
 import { DocsApp } from "./docs/DocsApp";
+import { ObsApp } from "./obs/ObsApp";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("缺少 #root 容器");
@@ -14,6 +15,7 @@ const params = new URLSearchParams(window.location.search);
 
 // S6d：`?docs=1` → 开发文档窗口（D21，独立路由，不连服务端）。
 // S6a §1.4：`?preview=yuna` → 忧奈 Live2D 预览页（调试用，不连服务端）。
+// S6h §2：`?obs=1` → 观测页（独立路由，不连 WebSocket）。
 // S6b §4：默认渲染新直播间 UI；`?legacy=1` 保留旧的 Stage 视图。
 if (params.get("docs") === "1") {
   createRoot(container).render(
@@ -25,6 +27,12 @@ if (params.get("docs") === "1") {
   createRoot(container).render(
     <StrictMode>
       <YunaPreview />
+    </StrictMode>,
+  );
+} else if (params.get("obs") === "1") {
+  createRoot(container).render(
+    <StrictMode>
+      <ObsApp />
     </StrictMode>,
   );
 } else {
