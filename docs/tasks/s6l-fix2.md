@@ -1,4 +1,4 @@
-# S6l-fix2 任务说明：Claude 独立审查发现的 8 个问题
+# S6l-fix2 任务说明：Claude 独立审查发现的 9 个问题
 
 > 来源：Claude 对 S6c-fix1 / S6k / S6l 核心与易错部分的独立审查（2026-10-28，用户要求），以下问题均已对照代码核实。执行者：Command Code（deepseek-v4-flash）。在合并了 S6l-fix1 的 main 上做。
 
@@ -36,17 +36,23 @@
 ## §7 钩子轮 / poke / gift 被算作「用户说过话」（低）
 - 现状：`apps/server/src/prompts/renderPrompt.ts` 的 `userTurns = history.filter(role === "user").length`，主动开口轮的占位、poke/gift 的占位都算进去，用户一句没说也可能从 arrive 推进。
 - 修法：history 条目记录来源（`source: "user" | "nudge" | "poke" | "gift"`，缺省 user 兼容旧数据），`userTurns` 只数 `source === "user"`。
-- 测试：只有 nudge / poke / gift 时 arrive 不推进；有一句真实用户输入后按原规则推进。
+- **同源问题（S6l-fix1 合并后发现）**：刷新恢复的 `transcript`（`session.ts` 的 `resumePayload`）把主动开口占位「（客人安静地坐着，没有说话）」和 poke/gift 占位「（观众做出了一个动作，没有说话）」当作用户消息发回，客户端 `live/sessionRestore.ts` 会把它们显示成「你」发的弹幕。修法：transcript 只包含 `source === "user"` 的用户条目（assistant 条目照旧）。
+- 测试：只有 nudge / poke / gift 时 arrive 不推进；有一句真实用户输入后按原规则推进；resumePayload 的 transcript 不含 nudge / poke / gift 占位。
 
 ## §8 accent A 直接切到 B 时 A 瞬间消失（低）
 - 现状：`apps/client/src/live/StageRenderer.tsx` 的 accentRef 只记一个 accent，切换时直接覆盖。
 - 修法：保留「正在渐出的上一个 accent」（prev + 其 endedAt），渲染时两者都经 `accentParams` 取最大值；prev 渐出完成后丢弃。纯函数单测：切换瞬间 A 的权重从 1 线性降到 0（0.4s），B 从 0 升到 1。
 
-## §9 验收
+## §9 兜底语音在两句台词之间插播又被掐断（低）
+- 现状：S6l-fix1 的 `apps/client/src/core/localAudio.ts` 在每个 beat 的 `beatEnded()` 就播放排队的本地语音；一轮里两句之间的空档会开始播，下一句 `beatStarted()` 立刻把它停掉，听起来是一个被截断的短音。另外 `active` 在本地语音自然播完后不会清空（`isPlaying()` 一直为 true，`audio_overlap` 会误报）。
+- 修法：排队的本地语音只在**本轮结束、回到 idle**（或 listening）时播放，不在 beat 之间播；`play` 返回的句柄支持「播完回调」，播完把 `active` 置 null。
+- 测试：两个 beat 之间有排队语音 → beat 之间不播放，turn 结束后才播；本地语音播完后 `isPlaying()` 为 false。
+
+## §10 验收
 `pnpm test`、`pnpm typecheck` 全绿；`PROVIDER_MODE=mock pnpm smoke` 通过。报告 `docs/tasks/s6l-fix2-report.md`：每条修复 → 测试名、未决歧义。
 
 ## 关卡 1–5 结论（Claude 决定，均为正确性修复）
-1. **YAGNI**：只修这 8 条，不加功能。
+1. **YAGNI**：只修这 9 条，不加功能。
 2. **端口/适配器**：不碰外部服务。
 3. **函数式核心**：`isStageTapTarget`、`throttleEvent`、accent 渐变合成为纯函数；reducer 负责状态清理。
 4. **契约式设计**：舞台点击只认空白处；accent 只在其 beat 内生效、任何轮次切换都清除；点击打断后的倾听最长 5s；当前背景是持久状态、一次性提示另存。
