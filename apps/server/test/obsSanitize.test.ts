@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { sanitize } from "../src/obs/sanitize";
+import { redactSecrets, sanitize } from "../src/obs/sanitize";
 import type { LogRecord } from "../src/log";
 
 const WHITELIST = new Set([
@@ -34,6 +34,9 @@ const WHITELIST = new Set([
   "suggestAccepted",
   "advanceAccepted",
 ]);
+
+/** S6n §4：形如 Key 的字段名即使进 detail，值也一律 `[redacted]`。 */
+const SECRET_NAMES = new Set(["apiKey", "apikey", "api_key", "api-key", "authorization", "key", "token", "secret"]);
 
 /** 任意 JSON 值（含嵌套、Key 样式字符串）。 */
 const arbValue: fc.Arbitrary<unknown> = fc.oneof(
@@ -70,7 +73,7 @@ function assertNoLongStrings(value: unknown): void {
 }
 
 describe("sanitize", () => {
-  it("属性：任意 detail 进去，输出只含白名单字段，且字符串值 ≤ 40", () => {
+  it("属性：任意 detail 进去，输出只含白名单 / Key 名，且字符串值 ≤ 40", () => {
     fc.assert(
       fc.property(arbRecord, (record) => {
         const out = sanitize(record);
@@ -80,8 +83,13 @@ describe("sanitize", () => {
           expect(["ts", "sessionId", "turnId", "event", "ms", "detail"]).toContain(key);
         }
         if (out.detail !== undefined) {
-          for (const key of Object.keys(out.detail)) {
-            expect(WHITELIST.has(key)).toBe(true);
+          for (const [key, value] of Object.entries(out.detail)) {
+            // S6n §4：Key 名允许出现，但值必须是 [redacted]；其余只收白名单字段。
+            if (SECRET_NAMES.has(key)) {
+              expect(value).toBe("[redacted]");
+            } else {
+              expect(WHITELIST.has(key)).toBe(true);
+            }
           }
           assertNoLongStrings(out.detail);
         }
@@ -90,25 +98,34 @@ describe("sanitize", () => {
     );
   });
 
-  it("Key 样式字符串不会进 detail（非白名单字段被丢弃）", () => {
+  it("Key 样式字段名（apiKey / authorization / key / token）的值替换为 [redacted]", () => {
     const out = sanitize({
       ts: 1,
       event: "llm_usage",
       detail: {
         apiKey: "sk-abc1234567890abcdef",
+        authorization: "Bearer sk-abc1234567890abcdef",
+        key: "AKIAIOSFODNN7EXAMPLE",
+        token: "AKIAIOSFODNN7EXAMPLE",
         prompt: "给用户看的提示词",
         text: "用户输入的文字",
         say: "台词",
-        token: "AKIAIOSFODNN7EXAMPLE",
         code: "llm_timeout", // 白名单枚举，保留
       },
     });
-    expect(out.detail).toEqual({ code: "llm_timeout" });
-    expect(JSON.stringify(out)).not.toContain("sk-");
-    expect(JSON.stringify(out)).not.toContain("提示词");
-    expect(JSON.stringify(out)).not.toContain("用户输入");
-    expect(JSON.stringify(out)).not.toContain("台词");
-    expect(JSON.stringify(out)).not.toContain("AKIA");
+    expect(out.detail).toEqual({
+      apiKey: "[redacted]",
+      authorization: "[redacted]",
+      key: "[redacted]",
+      token: "[redacted]",
+      code: "llm_timeout",
+    });
+    const json = JSON.stringify(out);
+    expect(json).not.toContain("sk-");
+    expect(json).not.toContain("提示词");
+    expect(json).not.toContain("用户输入");
+    expect(json).not.toContain("台词");
+    expect(json).not.toContain("AKIA");
   });
 
   it("嵌套对象被整体丢弃（白名单字段也只收标量）", () => {
@@ -149,5 +166,28 @@ describe("sanitize", () => {
     expect(sanitize({ ts: 1, event: "x", ms: Number.NaN }).ms).toBeUndefined();
     expect(sanitize({ ts: 1, event: "x", ms: Number.POSITIVE_INFINITY }).ms).toBeUndefined();
     expect(sanitize({ ts: 1, event: "x", ms: 42 }).ms).toBe(42);
+  });
+});
+
+describe("redactSecrets（S6n §4：错误字符串里的 Key 一律替换）", () => {
+  const FEATURE = "sk-TESTKEY-xxxxxxxx";
+
+  it("Bearer 头被替换", () => {
+    const out = redactSecrets(`request failed: authorization: Bearer ${FEATURE}`);
+    expect(out).not.toContain(FEATURE);
+    expect(out).toContain("[redacted]");
+  });
+
+  it("键值对（api_key= / key=）被替换", () => {
+    expect(redactSecrets(`bad url https://x/v1?api_key=${FEATURE}&y=1`)).not.toContain(FEATURE);
+    expect(redactSecrets(`headers={key: ${FEATURE}}`)).not.toContain(FEATURE);
+  });
+
+  it("裸 sk- 字面量被替换", () => {
+    expect(redactSecrets(`payload ${FEATURE} end`)).not.toContain(FEATURE);
+  });
+
+  it("无 Key 的普通文本原样保留", () => {
+    expect(redactSecrets("Fish TTS 返回 400")).toBe("Fish TTS 返回 400");
   });
 });

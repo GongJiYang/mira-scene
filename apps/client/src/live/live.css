@@ -1001,3 +1001,183 @@ body,
 .action-panel-mobile {
   margin-top: 4px;
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * D49 / S6n §5：设置面板（模式 + 浏览器自带 Key）。样式只求清楚可用（S6u 统一重做）。
+ * ---------------------------------------------------------------------------------------------- */
+
+/* 顶栏模式小标签（桌面 / 手机共用）。 */
+.live-mode-badge {
+  padding: 2px 6px;
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--live-text-dim);
+}
+
+.live-mode-badge[data-mode="real"] {
+  color: var(--live-text);
+  border-color: var(--live-border);
+}
+
+/* 桌面：顶栏按钮 + 对话框。 */
+.settings-desktop {
+  position: relative;
+}
+
+.settings-dialog {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 12px;
+  background: rgba(15, 10, 20, 0.97);
+  border: 1px solid var(--live-border);
+  border-radius: var(--live-radius);
+  z-index: 50;
+}
+
+.settings-dialog-head,
+.settings-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--live-text);
+}
+
+.settings-close {
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text-dim);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* 手机：底部抽屉。 */
+.settings-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  padding: 10px 12px 16px;
+  background: rgba(15, 10, 20, 0.97);
+  border-top: 2px solid var(--live-border);
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-row,
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-label {
+  font-size: 12px;
+  color: var(--live-text-dim);
+}
+
+.settings-modes {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-mode {
+  flex: 1;
+  padding: 4px 6px;
+  background: var(--live-panel-2);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-mode[data-active="true"] {
+  color: var(--live-text);
+  border-color: var(--live-border);
+}
+
+.settings-secret {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-secret input,
+.settings-text {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text);
+  font-size: 12px;
+}
+
+.settings-secret-toggle {
+  padding: 2px 6px;
+  background: var(--live-panel-2);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settings-source {
+  padding: 1px 6px;
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  font-size: 11px;
+  color: var(--live-text-dim);
+}
+
+.settings-source[data-source="user"] {
+  color: var(--live-text);
+}
+
+.settings-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--live-text-dim);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-save,
+.settings-clear {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid var(--live-border);
+  border-radius: var(--live-radius);
+  background: var(--live-panel-2);
+  color: var(--live-text);
+  font-size: 12px;
+  cursor: pointer;
+}

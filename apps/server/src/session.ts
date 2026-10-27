@@ -12,6 +12,7 @@ import {
   type SceneState,
   type SceneStatusPayload,
   type ServerMessage,
+  type SessionCapabilities,
   type SessionPayload,
   type TranscriptPayload,
   type BeatPayload,
@@ -20,14 +21,17 @@ import {
   type StateSnapshotPayload,
   type ErrorPayload,
 } from "@mira/protocol";
-import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, type Fault } from "./adapters/faults";
+import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, withFaults, type Fault } from "./adapters/faults";
+import { isFishApiError } from "./adapters/fish/errors";
 import { isAbortError, throwIfAborted } from "./abort";
 import { clientPublicRoot, defaultCharacterId, type FallbackCategory, type Pack } from "./characters/pack";
 import { defaultOutDir } from "./adapters/media/imageGen";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
+import { redactSecrets } from "./obs/sanitize";
 import type { LLMHistoryEntry, MediaPort, Ports, SceneWriterPort, TTSAudio, TTSPort, TtsOptions } from "./ports";
 import type { HistorySource } from "./ports";
+import type { BuiltProviders, RequestedMode, SessionPlan } from "./providers";
 import { detectSceneRequest } from "./scene/detect";
 import { resolveReferencePath, type ReferenceDirs } from "./scene/referencePath";
 import { runSceneJob, type SceneRunnerDeps } from "./scene/runner";
@@ -102,6 +106,14 @@ type Session = {
   sceneWriter?: SceneWriterPort;
   sceneImageGen?: SceneRunnerDeps["image"];
   sceneReferencePaths?: SceneRunnerDeps["referencePaths"];
+  /** D49 / S6n §2：本会话实际生效的模式（`mock` 或 `real`）。 */
+  mode: "mock" | "real";
+  /** D49 / S6n §2：各类能力的来源（只说明来源，不含 Key）。 */
+  capabilities: SessionCapabilities;
+  /** D49 / S6n §3：访问者覆盖的 Fish 音色；非空时优先于角色包音色。 */
+  voiceIdUser: string;
+  /** D49 / S6n §2：剧情层媒体端口（随模式定，真实生图或预置照片）。 */
+  media: MediaPort;
 };
 
 /** 一轮输入的规范化形式：文字 / 语音 / 主动开口（D32）。 */
@@ -149,6 +161,19 @@ export type SessionDeps = Ports & {
    * 缺省按当前进程环境解析（index.ts 不需额外注入）。
    */
   referenceDirs?: ReferenceDirs;
+  /**
+   * D49 / S6n §2：把 hello 的 `mode` / `keys` 解析成模式与 capabilities（纯函数）。
+   * 缺省时一律按 mock 处理（旧测试无需提供）。
+   */
+  planSession?: (mode: RequestedMode, keys: import("@mira/protocol").HelloKeys | undefined) => SessionPlan;
+  /**
+   * D49 / S6n §1：按模式 + Key 组装适配器（工厂）。仅访问者自带 Key 的 real 会话会调用。
+   */
+  buildProviders?: (mode: "mock" | "real", keys: import("./providers").ProvidersKeys) => BuiltProviders;
+  /**
+   * D49 / S6n §1：全局共享的 Mock 适配器（无状态）；`auto`/`mock` 会话复用它，不重复构建。
+   */
+  mockProviders?: BuiltProviders;
 };
 
 export type SessionManager = {
@@ -194,6 +219,31 @@ function localDayKey(ms: number): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
+/**
+ * D49 / S6n §2：缺省（未注入 planSession）时的 mock 计划——旧测试与未配置模式的路径。
+ * 不读任何 Key，capabilities 全 `none`。
+ */
+function defaultMockPlan(): SessionPlan {
+  return {
+    ok: true,
+    mode: "mock",
+    capabilities: { llm: "none", voice: "none", image: "none" },
+    voiceIdUser: "",
+    keys: {
+      deepseek: { value: "", source: "none" },
+      fish: { value: "", source: "none" },
+      fishVoiceIdUser: "",
+      image: { value: "", source: "none", baseUrl: "", model: "" },
+    },
+  };
+}
+
+/** D49 / S6n §2：real 缺 Key 时的说明文字（点名缺哪一类，客户端据此提示）。 */
+function missingMessage(missing: ReadonlyArray<"llm" | "voice">): string {
+  const names = missing.map((item) => (item === "llm" ? "聊天" : "语音"));
+  return `真实模式缺少${names.join(" / ")}的 Key`;
+}
+
 type SynthOutcome = { ok: true; value: TTSAudio } | { ok: false; error: unknown };
 
 /** 每句最多尝试 2 次（先重试 1 次）；中止不重试。 */
@@ -210,6 +260,8 @@ async function synthesizeWithRetry(
     } catch (error) {
       lastError = error;
       if (signal.aborted || isAbortError(error)) break;
+      // D49 / S6n §3：音色 / 权限类 4xx 重试无意义（且不得省略 reference_id 重试）→ 立即返回。
+      if (isFishApiError(error) && error.code === "fish_voice") break;
     }
   }
   return { ok: false, error: lastError };
@@ -240,12 +292,25 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
   const sessionTurnLimit = deps.sessionTurnLimit ?? DEFAULT_SESSION_TURN_LIMIT;
   const dailyTurnLimit = deps.dailyTurnLimit ?? DEFAULT_DAILY_TURN_LIMIT;
   const sessions = new Map<string, Session>();
-  // 兜底媒体端口：立即就绪（未注入时用）；真实运行由 index.ts 注入预置照片适配器。
-  const media: MediaPort =
-    deps.media ??
-    { preset: (item) => Promise.resolve({ url: `/stage/photos/${item.id}.png`, status: "ready" as const }) };
   // S6b-fix1 §1：音色解析（按角色包）。缺省不解析（mock 旧行为）。
   const resolveVoiceId = deps.resolveVoiceId ?? (() => undefined);
+  // D49 / S6n §2：模式 / Key → 模式与 capabilities（纯函数）。缺省一律 mock（旧测试无需提供）。
+  const planFor = deps.planSession ?? defaultMockPlan;
+  // D49 / S6n §1：全局共享 Mock 适配器（无状态）。auto/mock 会话复用它，不重复构建。
+  const mockBuilt: BuiltProviders =
+    deps.mockProviders ?? {
+      ports: { stt: deps.stt, llm: deps.llm, tts: deps.tts },
+      sceneWriter: deps.sceneWriter ?? { write: async () => "" },
+      sceneImageGen: deps.sceneImageGen,
+      media:
+        deps.media ??
+        { preset: (item) => Promise.resolve({ url: `/stage/photos/${item.id}.png`, status: "ready" as const }) },
+    };
+  /** §1：mock 复用共享适配器；real 且访问者自带 Key → 为该会话单独构建。 */
+  function resolveBuilt(plan: Extract<SessionPlan, { ok: true }>): BuiltProviders {
+    if (plan.mode === "mock") return mockBuilt;
+    return deps.buildProviders ? deps.buildProviders(plan.mode, plan.keys) : mockBuilt;
+  }
   // S6l-fix1 §0：参考图路径解析目录。生成目录优先用生图配置里的 outDir（与落盘位置一致），
   // 否则按进程环境解析；客户端静态根固定。
   const referenceDirs: ReferenceDirs =
@@ -280,6 +345,11 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     deps.log({ ts: clock(), sessionId: session.id, turnId, event, detail });
   }
 
+  /** 尚未建会话时的日志（hello 阶段用；只带信封里的 sessionId / turnId）。 */
+  function logFor2(sessionId: string, turnId: number, event: string, detail?: unknown): void {
+    deps.log({ ts: clock(), sessionId, turnId, event, detail });
+  }
+
   /**
    * D27：投递剧情层媒体。后台异步任务，**不绑定轮次、不随打断中止**（有意为之的例外）：
    * 打断后仍然送达，只按 storyEventId 去重。
@@ -293,7 +363,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     const ctx = { pack: session.pack, history: [...session.history] };
     void (async () => {
       try {
-        const result = await media.preset(media_, ctx, session.mediaController.signal);
+        const result = await session.media.preset(media_, ctx, session.mediaController.signal);
         if (session.mediaController.signal.aborted) return;
         session.send?.(
           buildEnvelope(session, turnId, "media_ready", {
@@ -305,7 +375,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         logFor(session, turnId, "media_ready_sent", { storyEventId, status: result.status });
       } catch (error) {
         if (isAbortError(error) || session.mediaController.signal.aborted) return;
-        logFor(session, turnId, "media_failed", { storyEventId, message: error instanceof Error ? error.message : String(error) });
+        logFor(session, turnId, "media_failed", { storyEventId, message: redactSecrets(error instanceof Error ? error.message : String(error)) });
       }
     })();
   }
@@ -334,6 +404,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     let llmTimedOut = false;
     let ttsDegraded = false;
     let ttsFirstLogged = false;
+    // D49 / S6n §3：音色不可用后本轮不再发起新的 TTS（不静默降级、不换音色重试）。
+    let voiceFailed = false;
 
     const emit = <T extends keyof TurnPayloads>(type: T, payload: TurnPayloads[T]): boolean => {
       if (closed || signal.aborted || session.lastTurnId !== turnId) return false;
@@ -609,22 +681,33 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             if (outBeat.say !== "") {
               says.push(outBeat.say);
               const beatSeq = outBeat.seq;
-              // S6b-fix1 §1/§2：音色与 Mock 目录都按会话角色包决定。
-              const audio = synthesizeWithRetry(
-                session.ports.tts,
-                ttsText,
-                {
-                  emotion: outBeat.emotion,
-                  beatSeq: outBeat.seq,
-                  voiceId: session.voiceId,
-                  characterId: session.pack.id,
-                },
-                signal,
-              );
+              const ttsTextForBeat = ttsText;
+              const emotionForBeat = outBeat.emotion;
               ttsChain = ttsChain.then(async () => {
-                const result = await audio;
+                // D49 / S6n §3：上一句报 voice_unavailable 后，本轮不再发起新的 TTS。
+                if (voiceFailed) return;
+                // S6b-fix1 §1/§2：音色与 Mock 目录都按会话角色包决定。
+                const result = await synthesizeWithRetry(
+                  session.ports.tts,
+                  ttsTextForBeat,
+                  { emotion: emotionForBeat, beatSeq, voiceId: session.voiceId, characterId: session.pack.id },
+                  signal,
+                );
                 if (!result.ok) {
                   if (signal.aborted || isAbortError(result.error)) return;
+                  // D49 / S6n §3：Fish 4xx（音色 / 权限相关）→ voice_unavailable（会话级）。
+                  // 不省略 reference_id 重试（已在 synthesizeWithRetry 里停止重试），不静默回落默认音色。
+                  if (isFishApiError(result.error) && result.error.code === "fish_voice") {
+                    voiceFailed = true;
+                    logTurn("voice_unavailable");
+                    emitFinal("error", {
+                      code: "voice_unavailable",
+                      message: "这个 Fish Key 用不了当前音色",
+                      retryable: false,
+                      scope: "session",
+                    });
+                    return;
+                  }
                   // TTS 降级（D20）：这一句无声，本轮继续，只附一条不打断体验的提示。
                   if (!ttsDegraded) {
                     ttsDegraded = true;
@@ -692,7 +775,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         logTurn("turn_aborted");
         return;
       }
-      const message = error instanceof Error ? error.message : String(error);
+      // S6n §4：适配器报错可能回显请求头 / URL 参数，写日志与下发前统一脱敏（Key 绝不外泄）。
+      const message = redactSecrets(error instanceof Error ? error.message : String(error));
       // S6b §2：其余未预期错误 —— 服务端照常记录错误日志；客户端改播 pack 的 turn_failed 兜底台词，
       // 不再显示原始 error code/message（原始信息只在 ?debug=1 面板显示）。retryable 语义不变。
       logTurn("turn_failed", { message });
@@ -724,6 +808,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     const existing = resumedId ? sessions.get(resumedId) : undefined;
     let session: Session;
     if (existing) {
+      // §2：恢复会话沿用该会话原来的模式与 Key，不重新读 hello 里的 mode / keys。
       session = existing;
       logFor(session, session.lastTurnId, "session_resumed");
     } else {
@@ -744,8 +829,43 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         deps.closeConnection?.(send);
         return;
       }
+
+      // D49 / S6n §2：解析模式与 Key（纯函数）。显式 real 但缺 LLM / 语音 Key → real_unavailable，不建会话。
+      const plan = planFor(message.payload.mode ?? "auto", message.payload.keys);
+      logFor2(message.sessionId, message.turnId, "hello_provision", {
+        mode: plan.ok ? plan.mode : "real",
+        byok: {
+          llm: plan.ok ? plan.capabilities.llm === "user" : false,
+          voice: plan.ok ? plan.capabilities.voice === "user" : false,
+          image: plan.ok ? plan.capabilities.image === "user" : false,
+        },
+      });
+      if (!plan.ok) {
+        send({
+          v: 1,
+          sessionId: message.sessionId,
+          turnId: message.turnId,
+          seq: 0,
+          ts: clock(),
+          type: "error",
+          payload: {
+            code: "real_unavailable",
+            message: missingMessage(plan.missing),
+            retryable: false,
+            scope: "session",
+          },
+        });
+        return;
+      }
+
       const faults = parseFaults(message.payload.faults ?? deps.defaultFaults);
-      const ports = deps.createPorts ? deps.createPorts(faults) : { stt: deps.stt, llm: deps.llm, tts: deps.tts };
+      // §1：mock 复用全局共享的无状态适配器；real 且访问者自带 Key → 为该会话单独构建。
+      const built = resolveBuilt(plan);
+      const ports = faults.length === 0 ? built.ports : {
+        stt: withFaults(built.ports.stt, "stt", faults),
+        llm: withFaults(built.ports.llm, "llm", faults),
+        tts: withFaults(built.ports.tts, "tts", faults),
+      };
       session = {
         id: randomUUID(),
         send: null,
@@ -767,15 +887,20 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         turnStartedAt: null,
         mediaSent: new Set(),
         mediaController: new AbortController(),
-        voiceId: resolveVoiceId(pack),
+        // §3：访问者覆盖的音色优先于角色包音色。
+        voiceId: plan.voiceIdUser !== "" ? plan.voiceIdUser : resolveVoiceId(pack),
         sceneJob: initialSceneJobState(),
         sceneController: new AbortController(),
-        sceneWriter: deps.sceneWriter,
-        sceneImageGen: deps.sceneImageGen,
+        sceneWriter: built.sceneWriter,
+        sceneImageGen: built.sceneImageGen,
         sceneReferencePaths: deps.sceneReferencePaths,
+        mode: plan.mode,
+        capabilities: plan.capabilities,
+        voiceIdUser: plan.voiceIdUser,
+        media: built.media,
       };
       sessions.set(session.id, session);
-      logFor(session, 0, "session_created", { faults, characterId: pack.id });
+      logFor(session, 0, "session_created", { faults, characterId: pack.id, mode: plan.mode });
     }
 
     // 重连/重绑连接：旧连接上仍在跑的一轮没有意义，直接中止。
@@ -787,7 +912,12 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     session.send = send;
     session.lastActiveAt = clock();
 
-    send(buildEnvelope(session, session.lastTurnId, "session", { snapshot: session.scene, ...resumePayload(session) }));
+    send(buildEnvelope(session, session.lastTurnId, "session", {
+      snapshot: session.scene,
+      ...resumePayload(session),
+      mode: session.mode,
+      capabilities: session.capabilities,
+    }));
   }
 
   function handleInterrupt(session: Session, message: Extract<ClientMessage, { type: "interrupt" }>): void {

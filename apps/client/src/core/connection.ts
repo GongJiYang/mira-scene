@@ -6,13 +6,22 @@ import { handleSceneStatus } from "../live/scene/status";
 import { applySessionRestore } from "../live/sessionRestore";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 import { currentChannelId } from "../live/channel";
+import { currentSettings, helloKeysFrom, resolveRequestedMode, SETTINGS_TEXT, useSettingsStore } from "../live/settings";
 import { recordFirstAudioMs } from "../obs/hud";
+import { useFallbackStore } from "./fallback";
 
 const SESSION_STORAGE_KEY = "mira.sessionId";
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000] as const;
 
+/** D49 / S6n §2：hello 的 keys 载荷类型。 */
+type HelloKeys = {
+  deepseek?: { apiKey: string };
+  fish?: { apiKey: string; voiceId?: string };
+  image?: { apiKey: string; baseUrl: string; model?: string };
+};
+
 type ClientPayloads = {
-  hello: { resumeSessionId?: string; characterId?: string; faults?: string[] };
+  hello: { resumeSessionId?: string; characterId?: string; faults?: string[]; mode?: "mock" | "real" | "auto"; keys?: HelloKeys };
   text_input: { text: string; kind?: "text" | "poke" | "gift" };
   audio_input: { mime: string; dataBase64: string };
   interrupt: { interruptedTurnId: number };
@@ -37,6 +46,10 @@ export type Connection = {
    * 复用同一条连接：服务端按新的 characterId 建新会话。
    */
   switchCharacter?(characterId: string): void;
+  /**
+   * D49 / S6n §2：切换模式 = 新会话。清掉 `mira.sessionId` 后按当前设置重新 hello。
+   */
+  newSession?(): void;
 };
 
 function readStoredSessionId(): string | undefined {
@@ -115,6 +128,8 @@ export function createConnection(): Connection {
   // S6b-fix1 §3：切频道后「等待新会话」——收到新 hello 的 session 消息前，
   // 任何带旧 sessionId 的消息都丢弃（不再 storeSessionId，也不进 reducer）。
   let awaitingSession = false;
+  // D49 / S6n §2：real_unavailable 后本次重连用 mock（只回落一次）。
+  let fallbackToMock = false;
 
   function stopHeartbeat(): void {
     if (heartbeatTimer !== null) {
@@ -197,6 +212,26 @@ export function createConnection(): Connection {
 
     const message = parsed.data;
 
+    // D49 / S6n §2：显式 real 缺 Key → 服务端回 real_unavailable；客户端提示后自动回落 mock 重新建会话。
+    if (message.type === "error" && message.payload.code === "real_unavailable") {
+      pushEvent("real_unavailable → 回落 mock");
+      // 提示文字（铁律 6：文案来自 uiText；这里经 fallback 字幕区显示）。
+      useFallbackStore.setState({ subtitle: SETTINGS_TEXT.realUnavailable });
+      // 本次重连用 mock；只回退一次（避免每次 hello 都真）。
+      fallbackToMock = true;
+      // 重开会话：丢掉旧 sessionId，重新 hello。
+      clearStoredSessionId();
+      useConnectionStore.setState({ sessionId: null });
+      awaitingSession = true;
+      socket?.close();
+      return;
+    }
+
+    // D49 / S6n §3：Fish 4xx 音色错误 → 提示引导访客在设置里填自己的音色 ID（不静默降级）。
+    if (message.type === "error" && message.payload.code === "voice_unavailable") {
+      useFallbackStore.setState({ subtitle: SETTINGS_TEXT.voiceUnavailable });
+    }
+
     // S6b-fix1 §3：切频道等待新会话期间，session 消息锁定新 sessionId；
     // 之后任何 sessionId 不一致的消息一律丢弃（记调试事件），不再 storeSessionId。
     // S6b-fix2 §1：等待期间 pong 一律接受（不断线）；error 接受并结束等待——
@@ -231,6 +266,12 @@ export function createConnection(): Connection {
     if (message.type === "session") {
       useConnectionStore.setState({ sessionId: message.sessionId });
       storeSessionId(message.sessionId);
+      // D49 / S6n §2：记录本会话实际生效的模式与能力来源（顶栏标签 / 设置面板来源标签用）。
+      if (message.payload.mode !== undefined && message.payload.capabilities !== undefined) {
+        useSettingsStore.getState().applySession(message.payload.mode, message.payload.capabilities);
+      }
+      // 会话建立后清掉一次性回落标记（下次重连按设置走）。
+      fallbackToMock = false;
       // S6l-fix1 §2：恢复会话时把服务端下发的背景与对话记录落到客户端（刷新恢复）。
       applySessionRestore(message.payload);
       // 恢复会话时 currentTurnId 的同步在 reducer 内完成（SERVER_MESSAGE + session），
@@ -291,10 +332,17 @@ export function createConnection(): Connection {
         startHeartbeat(nextSocket);
         const faults = readUrlFaults(location.search);
         // S6b §1：hello 带上当前频道；缺省时服务端按 rin 处理。
+        // D49 / S6n §2：hello 带上模式与访问者自带的 Key（空 Key 不发送）。
         const payload: ClientPayloads["hello"] = {
           resumeSessionId: readStoredSessionId(),
           characterId: currentChannelId(),
+          // real_unavailable 后的这次重连强制 mock；否则按设置。
+          mode: fallbackToMock ? "mock" : resolveRequestedMode(currentSettings()),
         };
+        if (!fallbackToMock) {
+          const keys = helloKeysFrom(currentSettings());
+          if (keys !== undefined) payload.keys = keys;
+        }
         if (faults) payload.faults = faults;
         sendEnvelope("hello", payload);
       });
@@ -347,6 +395,28 @@ export function createConnection(): Connection {
       awaitingSession = true;
       const faults = readUrlFaults(location.search);
       const payload: ClientPayloads["hello"] = { characterId };
+      const mode = resolveRequestedMode(currentSettings());
+      payload.mode = mode;
+      const keys = helloKeysFrom(currentSettings());
+      if (keys !== undefined) payload.keys = keys;
+      if (faults) payload.faults = faults;
+      sendEnvelope("hello", payload);
+    },
+    /**
+     * D49 / S6n §2：切换模式 = 新会话。清掉 `mira.sessionId` 后按当前设置重新 hello。
+     * 与 `switchCharacter` 同一路径，只是保留当前频道。
+     */
+    newSession() {
+      clearStoredSessionId();
+      useConnectionStore.setState({ sessionId: null });
+      awaitingSession = true;
+      const faults = readUrlFaults(location.search);
+      const payload: ClientPayloads["hello"] = {
+        characterId: currentChannelId(),
+        mode: resolveRequestedMode(currentSettings()),
+      };
+      const keys = helloKeysFrom(currentSettings());
+      if (keys !== undefined) payload.keys = keys;
       if (faults) payload.faults = faults;
       sendEnvelope("hello", payload);
     },

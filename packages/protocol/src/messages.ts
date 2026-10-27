@@ -12,6 +12,19 @@ const envelopeFields = {
   ts: z.number(),
 };
 
+/**
+ * D49 / S6n §2：访问者自带的 Key（BYOK）。每类都可选：
+ * - `deepseek`：聊天（LLM）；
+ * - `fish`：语音（STT + TTS），可覆盖音色；
+ * - `image`：生图（OpenAI 兼容端点）。
+ * 这些值只在访问者自己的会话内存中使用，服务端不保存、不打印、不回传。
+ */
+export const helloKeysSchema = z.object({
+  deepseek: z.object({ apiKey: z.string() }).optional(),
+  fish: z.object({ apiKey: z.string(), voiceId: z.string().optional() }).optional(),
+  image: z.object({ apiKey: z.string(), baseUrl: z.string(), model: z.string().optional() }).optional(),
+});
+
 export const helloPayloadSchema = z.object({
   resumeSessionId: z.string().optional(),
   /**
@@ -24,6 +37,14 @@ export const helloPayloadSchema = z.object({
    * 服务端按会话生效；缺省时使用环境变量 FAULTS 的全局默认值。
    */
   faults: z.array(z.string()).optional(),
+  /**
+   * D49 / S6n §2：访问者请求的模式。缺省 `auto`——
+   * LLM 与语音都有可用 Key（访问者或服务端）则 real，否则 mock。
+   * 恢复会话（resumeSessionId）时忽略本字段，沿用会话原模式与 Key。
+   */
+  mode: z.enum(["mock", "real", "auto"]).optional(),
+  /** D49 / S6n §2：访问者自带的 Key（缺省则全部用服务端 `.env`）。 */
+  keys: helloKeysSchema.optional(),
 });
 
 export const textInputPayloadSchema = z.object({
@@ -66,12 +87,30 @@ export const sessionTranscriptEntrySchema = z.object({
   text: z.string(),
 });
 
+/**
+ * D49 / S6n §2：每一类能力的来源。只说明来源，**不含任何 Key**。
+ * - `"user"`：访问者在设置面板里填的 Key；
+ * - `"server"`：服务端 `.env` 里配置的 Key；
+ * - `"none"`：两边都没有。
+ */
+export const capabilitySourceSchema = z.enum(["user", "server", "none"]);
+
+export const sessionCapabilitiesSchema = z.object({
+  llm: capabilitySourceSchema,
+  voice: capabilitySourceSchema,
+  image: capabilitySourceSchema,
+});
+
 export const sessionPayloadSchema = z.object({
   snapshot: sceneStateSchema,
   background: z
     .object({ label: z.string(), urls: z.object({ desktop: z.string(), mobile: z.string() }) })
     .nullish(),
   transcript: z.array(sessionTranscriptEntrySchema).optional(),
+  /** D49 / S6n §2：本会话实际生效的模式（`mock` 或 `real`）。 */
+  mode: z.enum(["mock", "real"]).optional(),
+  /** D49 / S6n §2：各类能力的来源（只说明来源，不含 Key）。 */
+  capabilities: sessionCapabilitiesSchema.optional(),
 });
 
 export const transcriptPayloadSchema = z.object({
@@ -168,7 +207,10 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("scene_status"), payload: sceneStatusPayloadSchema }),
 ]);
 
+export type HelloKeys = z.infer<typeof helloKeysSchema>;
 export type HelloPayload = z.infer<typeof helloPayloadSchema>;
+export type CapabilitySource = z.infer<typeof capabilitySourceSchema>;
+export type SessionCapabilities = z.infer<typeof sessionCapabilitiesSchema>;
 export type TextInputPayload = z.infer<typeof textInputPayloadSchema>;
 export type AudioInputPayload = z.infer<typeof audioInputPayloadSchema>;
 export type InterruptPayload = z.infer<typeof interruptPayloadSchema>;

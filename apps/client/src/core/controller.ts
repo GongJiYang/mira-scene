@@ -13,6 +13,7 @@ import { timeline, pushTimelineLog, timelineCountForTurn, timelineStoryCount } f
 import { initialNudgeLimitState, nudgeLimit, type NudgeLimitState } from "../state/nudge";
 import { characterOrDefault } from "../live/characters";
 import { setChannel, useChannelStore } from "../live/channel";
+import { useSettingsStore } from "../live/settings";
 import { resetSceneStatus } from "../live/scene/status";
 import { installSceneFallback, resetSceneFallback } from "../live/scene/sceneFallback";
 import { initialPerformanceState } from "../state/performance";
@@ -33,6 +34,14 @@ export type Intents = {
   gift(): void;
   /** S6l §6：点击打断（说话时点画面任何位置）。 */
   tapInterrupt(): void;
+  /**
+   * D49 / S6n §5：保存设置并重新连接（新会话）。清轮次、复位本地状态后按新设置 hello。
+   */
+  saveSettings(next: import("../live/settings").Settings): void;
+  /** D49 / S6n §5：清除本设备保存的 Key（不重连）。 */
+  clearKeys(): void;
+  /** D49 / S6n §5：仅切换模式（不入面板字段），保存并重新连接。 */
+  applyMode(mode: import("../live/settings").RequestedMode): void;
 };
 
 export type ControllerDeps = { connection: Connection; recorder: Recorder };
@@ -233,7 +242,43 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
         },
       });
     },
+
+    /**
+     * D49 / S6n §5：保存设置并重新连接（新会话）。
+     * 与切频道同样的复位路径（不保留聊天记录），保留当前频道。
+     */
+    saveSettings(next) {
+      useSettingsStore.getState().update(next);
+      reconnectAsNewSession("保存设置");
+    },
+
+    /** D49 / S6n §5：清除本设备保存的 Key（不重连）。 */
+    clearKeys() {
+      pushEvent("清除我的 Key");
+      useSettingsStore.getState().clearKeys();
+    },
+
+    /** D49 / S6n §5：仅切换模式 → 保存并重新连接。 */
+    applyMode(mode) {
+      const next = { ...useSettingsStore.getState().settings, mode };
+      useSettingsStore.getState().update(next);
+      reconnectAsNewSession(`切换模式 → ${mode}`);
+    },
   };
+
+  /** §5：切模式 = 新会话——清轮次与本地状态，按设置重新 hello。 */
+  function reconnectAsNewSession(reason: string): void {
+    const { currentTurnId, phase } = getStageState();
+    pushEvent(reason);
+    if (phase.kind !== "idle") performInterrupt("text", currentTurnId);
+    dispatch({ type: "RESET" });
+    usePerformanceStore.setState(initialPerformanceState);
+    dispatchStoryMedia({ type: "PHASE", phase: "idle" });
+    useFallbackStore.setState({ subtitle: null });
+    resetSceneStatus();
+    resetSceneFallback();
+    connection.newSession?.();
+  }
 }
 
 const connection = createConnection();

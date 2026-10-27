@@ -129,6 +129,15 @@ function readCredentials(env: NodeJS.ProcessEnv): ProviderCredentials {
 }
 
 /**
+ * D49 / S6n §1：始终读取 `.env` 里的服务端凭据（不论 `PROVIDER_MODE`）。
+ * 供「服务端真实是否可用」的判定用——BYOK 模式下访客可选 real，服务端 `.env` 有 Key 时也能兜底。
+ * 与 `loadConfig` 的 mock 分支不同：这里只读取到内存供组装判定，绝不打印。
+ */
+export function readServerCredentials(env: NodeJS.ProcessEnv = process.env): ProviderCredentials {
+  return readCredentials(env);
+}
+
+/**
  * 读取配置。默认从 `process.env` 读；`PROVIDER_MODE` 默认 `mock`。
  * 只有 `real` 模式才会读取凭据，mock 模式下绝不触碰任何 Key（Q10）。
  */
