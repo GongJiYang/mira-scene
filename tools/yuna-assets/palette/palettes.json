@@ -1,0 +1,43 @@
+{
+  "palettes": [
+    {
+      "name": "sakura",
+      "rules": [
+        {
+          "from": 235,
+          "to": 310,
+          "target": 340,
+          "saturation": 0.85,
+          "lightnessShift": 0.03,
+          "minSaturation": 0.18
+        }
+      ]
+    },
+    {
+      "name": "mint",
+      "rules": [
+        {
+          "from": 235,
+          "to": 310,
+          "target": 160,
+          "saturation": 0.75,
+          "lightnessShift": 0.03,
+          "minSaturation": 0.18
+        }
+      ]
+    },
+    {
+      "name": "mono",
+      "rules": [
+        {
+          "from": 235,
+          "to": 310,
+          "target": 270,
+          "saturation": 0.15,
+          "lightnessShift": 0.0,
+          "minSaturation": 0.18
+        }
+      ]
+    }
+  ]
+}
