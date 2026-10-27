@@ -7,7 +7,7 @@ import { createMockTts } from "../src/adapters/mock/mockTts";
 import type { LogRecord } from "../src/log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPack, testPacks } from "./helpers/pack";
+import { testPack, testPacksWithRinVisible } from "./helpers/pack";
 
 /**
  * S6b §2：情景化兜底。
@@ -51,7 +51,7 @@ function setup(options: SetupOptions = {}): Harness {
       llm: withFaults(base.llm, "llm", faults),
       tts: withFaults(base.tts, "tts", faults),
     }),
-    packs: testPacks(),
+    packs: testPacksWithRinVisible(),
     firstTokenTimeoutMs: options.firstTokenTimeoutMs,
     log: (record) => logs.push(record),
     idleTimeoutMs: 24 * 60 * 60 * 1000,

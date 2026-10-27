@@ -29,6 +29,8 @@ export const UI_TEXT = {
   connecting: "连接中",
   /** 麦克风不可用提示。 */
   micUnavailable: "麦克风不可用",
+  /** S6f §2：文字输入时的倾听提示。 */
+  listening: "正在听",
 } as const;
 
 export type UiText = typeof UI_TEXT;

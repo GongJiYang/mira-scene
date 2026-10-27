@@ -1,4 +1,5 @@
 import { useMicStore } from "./store";
+import { rmsFromTimeDomain } from "./audioLevel";
 
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/mp4"] as const;
 const MIN_RECORDING_MS = 300;
@@ -10,6 +11,8 @@ export type Recorder = {
   start(): Promise<boolean>;
   /** 停止录音；不足 300ms（误触）、没有数据或录音器出错时返回 null。 */
   stop(): Promise<Recording | null>;
+  /** S6f §2：当前输入音量（RMS 0–1），未录音时返回 0。倾听声波据此跳动。 */
+  level(): number;
 };
 
 export async function blobToBase64(blob: Blob): Promise<string> {
@@ -32,6 +35,34 @@ export function createRecorder(): Recorder {
   let failed = false;
   // stop() 早于 getUserMedia 完成时置位：避免用户松开后才开始录音。
   let cancelled = false;
+  // S6f §2：录音音量（倾听声波）。AudioContext 懒建一次，stream 接入 analyser。
+  let audioContext: AudioContext | null = null;
+  let analyserSource: MediaStreamAudioSourceNode | null = null;
+  let analyser: AnalyserNode | null = null;
+  let analyserBuffer: Float32Array<ArrayBuffer> | null = null;
+
+  function attachAnalyser(nextStream: MediaStream): void {
+    try {
+      if (typeof AudioContext === "undefined") return;
+      audioContext ??= new AudioContext();
+      analyserSource?.disconnect();
+      analyserSource = audioContext.createMediaStreamSource(nextStream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      analyserBuffer = new Float32Array(analyser.fftSize);
+      analyserSource.connect(analyser);
+    } catch {
+      analyser = null;
+      analyserBuffer = null;
+    }
+  }
+
+  function detachAnalyser(): void {
+    analyserSource?.disconnect();
+    analyserSource = null;
+    analyser = null;
+    analyserBuffer = null;
+  }
 
   function begin(): Promise<boolean> {
     if (starting) {
@@ -47,6 +78,7 @@ export function createRecorder(): Recorder {
           return false;
         }
         stream = nextStream;
+        attachAnalyser(nextStream);
         const mimeType = MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate));
         mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
         chunks = [];
@@ -120,7 +152,14 @@ export function createRecorder(): Recorder {
       stream?.getTracks().forEach((track) => track.stop());
       stream = null;
       mediaRecorder = null;
+      detachAnalyser();
       return finished.promise;
+    },
+
+    level() {
+      if (!analyser || !analyserBuffer) return 0;
+      analyser.getFloatTimeDomainData(analyserBuffer);
+      return rmsFromTimeDomain(analyserBuffer);
     },
   };
 }

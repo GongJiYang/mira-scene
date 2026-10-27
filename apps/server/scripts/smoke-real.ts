@@ -23,6 +23,8 @@ function fail(reason: string): never {
 
 function pickEnv(): Record<string, string> {
   const file = readRepoEnvFile();
+  // S6f §1：各角色音色变量由角色包的 fishVoiceIdEnv 决定（隐藏角色不需要）；
+  // 这里把两个已知变量都带上，存在才注入。
   const keys = [
     "LLM_PROVIDER",
     "COMMANDCODE_MODEL",
@@ -31,6 +33,7 @@ function pickEnv(): Record<string, string> {
     "DEEPSEEK_MODEL",
     "FISH_API_KEY",
     "FISH_VOICE_ID",
+    "FISH_VOICE_ID_YUNA",
     "FISH_TTS_MODEL",
   ];
   const out: Record<string, string> = {};

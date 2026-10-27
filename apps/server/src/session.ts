@@ -19,7 +19,7 @@ import {
 } from "@mira/protocol";
 import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, type Fault } from "./adapters/faults";
 import { isAbortError, throwIfAborted } from "./abort";
-import { DEFAULT_CHARACTER_ID, type FallbackCategory, type Pack } from "./characters/pack";
+import { defaultCharacterId, type FallbackCategory, type Pack } from "./characters/pack";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
 import type { LLMHistoryEntry, MediaPort, Ports, TTSAudio, TTSPort, TtsOptions } from "./ports";
@@ -499,10 +499,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       session = existing;
       logFor(session, session.lastTurnId, "session_resumed");
     } else {
-      // S6b §1：缺省角色 rin（兼容旧客户端与既有测试）；未知 id → error{unknown_character} 并关闭会话，不回退。
-      const characterId = message.payload.characterId ?? DEFAULT_CHARACTER_ID;
+      // S6f §1：缺省角色 = 第一个未隐藏角色；未知或隐藏 id → error{unknown_character} 并关闭会话，不回退。
+      const characterId = message.payload.characterId ?? (deps.packs ? defaultCharacterId(deps.packs) : "rin");
       const pack = deps.packs?.get(characterId);
-      if (!pack) {
+      if (!pack || pack.hidden) {
         deps.log({ ts: clock(), sessionId: message.sessionId, turnId: message.turnId, event: "unknown_character", detail: { characterId } });
         send({
           v: 1,

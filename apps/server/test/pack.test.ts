@@ -47,9 +47,10 @@ describe("角色包：两个角色都能加载（S6b §1）", () => {
     for (const [id, pack] of packs) expect(pack.id).toBe(id);
   });
 
-  it("rin：分层渲染、FISH_VOICE_ID、提示词与内容路径齐全", () => {
+  it("rin：分层渲染、FISH_VOICE_ID、提示词与内容路径齐全；S6f §1 起为隐藏角色", () => {
     const pack = loadPack(join(ROOT, "rin"));
     expect(pack.displayName).toBe("夏凛");
+    expect(pack.hidden).toBe(true);
     expect(pack.renderer).toEqual({ kind: "layered" });
     expect(pack.voice.fishVoiceIdEnv).toBe("FISH_VOICE_ID");
     expect(pack.promptVersion).toBe("rin.v1");

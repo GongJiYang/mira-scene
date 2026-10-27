@@ -14,7 +14,7 @@ import type { LogRecord } from "../src/log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
 import { createInitialScene } from "../src/story";
-import { testPack, testPacks } from "./helpers/pack";
+import { testPack, testPacksWithRinVisible } from "./helpers/pack";
 
 /** 兜底台词取自 rin 角色包（S6b §2）。 */
 const RIN_FALLBACK = testPack("rin").fallback;
@@ -97,7 +97,7 @@ function setup(options: SetupOptions = {}): Harness {
     defaultFaults: parseFaults(options.defaultFaults),
     firstTokenTimeoutMs: options.firstTokenTimeoutMs,
     dropConnection: options.dropConnection,
-    packs: testPacks(),
+    packs: testPacksWithRinVisible(),
     log: (record) => logs.push(record),
     idleTimeoutMs: 24 * 60 * 60 * 1000,
   });

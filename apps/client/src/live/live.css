@@ -526,10 +526,62 @@ body,
   z-index: 20;
 }
 
+/* S6f §2：倾听声波（随输入音量跳动；--level 由 JS 每帧写入） */
+.live-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 0 8px;
+  height: 100%;
+}
+.live-wave i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--live-accent-2, #b48ce8);
+  height: calc(4px + 14px * var(--level, 0));
+  transition: height 80ms linear;
+}
+.live-wave i:nth-child(2) {
+  height: calc(6px + 20px * var(--level, 0));
+}
+.live-wave i:nth-child(3) {
+  height: calc(4px + 12px * var(--level, 0));
+}
+.live-wave-label {
+  margin-left: 6px;
+  align-self: center;
+  font-size: 11px;
+  color: var(--live-text-dim);
+  font-family: var(--live-pixel-font);
+}
+
+/* S6f §2：思考「……」三点动画（字幕区内，不是聊天气泡） */
+.live-thinking-dots i {
+  display: inline-block;
+  font-style: normal;
+  opacity: 0.25;
+  animation: live-thinking-blink 1.2s infinite;
+}
+.live-thinking-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.live-thinking-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes live-thinking-blink {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 1; }
+}
+
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   .live-mobile-stage,
   .live-channel {
     transition: none;
+  }
+  .live-thinking-dots i {
+    animation: none;
+    opacity: 1;
   }
 }

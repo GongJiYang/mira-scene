@@ -52,6 +52,8 @@ const stageSchema = z.object({
 export const packFileSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
+  /** S6f §1：隐藏角色——不出现在频道列表、不可连接；素材与剧本保留。缺省 false。 */
+  hidden: z.boolean().optional(),
   renderer: rendererSchema,
   voice: voiceSchema,
   /** 相对角色包目录的提示词文件名，例如 `prompt.v1.md`。 */
@@ -109,6 +111,8 @@ export type NudgeBeat = { say: string; emotion: Emotion; suggest?: Action };
 export type Pack = {
   id: string;
   displayName: string;
+  /** S6f §1：隐藏角色（缺省 false）。 */
+  hidden: boolean;
   renderer: z.infer<typeof rendererSchema>;
   voice: z.infer<typeof voiceSchema>;
   revealIntents: readonly IntentSlot[];
@@ -217,6 +221,7 @@ export function parsePack(input: {
     pack: {
       id: packParsed.data.id,
       displayName: packParsed.data.displayName,
+      hidden: packParsed.data.hidden ?? false,
       renderer: packParsed.data.renderer,
       voice: packParsed.data.voice,
       revealIntents: packParsed.data.revealIntents,
@@ -297,7 +302,9 @@ export function loadPack(dir: string): Pack {
 export function loadPacks(root: string = charactersRoot()): Map<string, Pack> {
   if (!existsSync(root)) throw new Error(`找不到角色包目录：${root}`);
   const packs = new Map<string, Pack>();
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
+  // S6f §1：按目录名排序遍历，保证「第一个未隐藏角色」作为缺省角色时顺序确定。
+  const entries = readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const dir = join(root, entry.name);
     if (!existsSync(join(dir, "pack.json"))) continue;
@@ -309,5 +316,10 @@ export function loadPacks(root: string = charactersRoot()): Map<string, Pack> {
   return packs;
 }
 
-/** 缺省角色（S6b §1）。 */
-export const DEFAULT_CHARACTER_ID = "rin";
+/** S6f §1：缺省角色 = 第一个未隐藏的角色（按 characters/ 目录排序）；没有未隐藏角色时抛错。 */
+export function defaultCharacterId(packs: ReadonlyMap<string, Pack>): string {
+  for (const pack of packs.values()) {
+    if (!pack.hidden) return pack.id;
+  }
+  throw new Error("没有未隐藏的角色包，无法确定缺省角色");
+}

@@ -5,7 +5,7 @@ import { createMockStt } from "../src/adapters/mock/mockStt";
 import { silentLogger } from "../src/log";
 import type { TTSAudio, TTSPort, TtsOptions } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPacks } from "./helpers/pack";
+import { testPacksWithRinVisible } from "./helpers/pack";
 
 /**
  * S6b-fix1 §1/§2：TTS 音色按会话角色包决定；Mock 按角色分目录。
@@ -32,7 +32,7 @@ function setup(captured: Captured[], resolveVoiceId: (packId: string) => string 
     stt: createMockStt({ delayMs: 0 }),
     llm: createMockLlm({ beatDelayMs: 0 }),
     tts: recordingTts(captured),
-    packs: testPacks(),
+    packs: testPacksWithRinVisible(),
     resolveVoiceId: (pack) => resolveVoiceId(pack.id),
     log: silentLogger,
     idleTimeoutMs: 24 * 60 * 60 * 1000,

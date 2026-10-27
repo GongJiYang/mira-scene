@@ -17,6 +17,8 @@ export type ClientCharacter = {
   offlineLine: string;
   /** 渲染器种类：决定舞台用分层立绘还是 Live2D。 */
   renderer: "layered" | "live2d";
+  /** S6f §1：隐藏角色——不出现在频道栏、不参与切换；条目保留以便显式加载。 */
+  hidden?: boolean;
 };
 
 export const CLIENT_CHARACTERS: readonly ClientCharacter[] = [
@@ -26,6 +28,7 @@ export const CLIENT_CHARACTERS: readonly ClientCharacter[] = [
     avatar: "/stage/assets/parts/master_clean.png",
     offlineLine: "……喂？好像断线了。",
     renderer: "layered",
+    hidden: true,
   },
   {
     id: "yuna",
@@ -36,12 +39,15 @@ export const CLIENT_CHARACTERS: readonly ClientCharacter[] = [
   },
 ];
 
-export const DEFAULT_CHANNEL_ID = "rin";
+/** S6f §1：频道栏只显示未隐藏角色。 */
+export const VISIBLE_CHARACTERS: readonly ClientCharacter[] = CLIENT_CHARACTERS.filter((character) => !character.hidden);
+
+export const DEFAULT_CHANNEL_ID = (VISIBLE_CHARACTERS[0] as ClientCharacter).id;
 
 export function findCharacter(id: string): ClientCharacter | undefined {
   return CLIENT_CHARACTERS.find((character) => character.id === id);
 }
 
 export function characterOrDefault(id: string): ClientCharacter {
-  return findCharacter(id) ?? (CLIENT_CHARACTERS[0] as ClientCharacter);
+  return findCharacter(id) ?? (VISIBLE_CHARACTERS[0] as ClientCharacter);
 }
