@@ -51,6 +51,12 @@ export type StageStoryMedia = {
   status: StoryMediaStatus;
   storyEventId: string | null;
   media: Media | null;
+  /** S6a §3：视频槽位（与照片槽位独立）。 */
+  video: {
+    status: StoryMediaStatus;
+    storyEventId: string | null;
+    media: Media | null;
+  };
 };
 
 export type StageView = {
@@ -111,6 +117,11 @@ export function toStageView(input: StageViewInput): StageView {
       status: storyMedia.status,
       storyEventId: storyMedia.storyEventId,
       media: storyMedia.media,
+      video: {
+        status: storyMedia.video.status,
+        storyEventId: storyMedia.video.storyEventId,
+        media: storyMedia.video.media,
+      },
     },
     pendingNudge: input.pendingNudge ?? false,
   };

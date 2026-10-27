@@ -1,0 +1,15 @@
+Everything is in order. The `apps/client/public/characters/` appeared (unrelated to my changes — likely from another session). 
+
+Done. fix2 executed end-to-end:
+
+**What I did**
+- Added `apps/client/src/render/live2d/cubism/fit.ts`: `MODEL_BOUNDS` (measured visible region), `FIT_PRESETS` (desktop/mobile, both `heightRatio: 0.92`, centered), `presetFor`, and the pure `fitModel(canvasW, canvasH, bounds, preset)`.
+- Rewired `yunaRenderer.ts` to use `fitModel` (deleted the old guessed `MODEL_WIDTH_UNITS`/`VIEW_OFFSET_*` constants), added devicePixelRatio (cap 2) and separated physical-pixel viewport from CSS-pixel composition. Fixed a projection bug that squashed tall canvases.
+- `YunaPreview.tsx`/`preview.css`: canvas now fills the left area (ResizeObserver), no fixed 2:3 card.
+- e2e `yuna-preview.spec.ts`: desktop 1440×900 + mobile 390×844 screenshots (`e2e/out/yuna-fit-{desktop,mobile}.png`) with a 4px-edge-band no-pixel assertion; widened the auto-blink window (framework blink interval is 1–7 s, the old 8 s window was flaky).
+
+**Results**: `pnpm test` 547 passed, `pnpm typecheck` clean, `pnpm e2e` 15 passed / 13 skipped. Nothing committed.
+
+**Two things flagged for your call in the report's fix2 section**:
+1. The model's own drawable content ends at the thigh (lowest vertex `y=-0.6794` vs canvas bottom `-0.6926`) — there are no legs/feet in the asset, so "完整显示" can only mean showing all visible content without canvas cropping (which it does, all four edges clear).
+2. `apps/server/test/director.property.test.ts` is a pre-existing flaky (passes on rerun), unrelated to this batch.

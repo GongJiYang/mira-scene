@@ -1,40 +1,37 @@
-# PROGRESS（更新于 2026-10-27 18:30，最新提交 1d22b6b）
+# PROGRESS（更新于 2026-10-27，最新提交 1b2ef1e；S6a 已派发、未提交）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6a · 关卡 1/9 · YAGNI】先问清用户要谈的**语音**事项（忧奈的 Fish 音色、Mock 预录语音按角色分开）；然后调用 mira-code-gate + sdframe，就「S5-fix + 角色包 + 忧奈 Live2D 接入」提出 5 个关卡问题和建议答案，等用户批准。
+【S6a · 关卡 8/9 · 验收】cmd 正在后台执行 `docs/tasks/s6a.md`（日志 `docs/tasks/.s6a-cmd.log`，报告 `docs/tasks/s6a-report.md`）。跑完后：自己重跑 test/typecheck/smoke/e2e + `pnpm smoke:real`（LLM_PROVIDER=commandcode）→ 核对关卡结论 → **开浏览器 `/?preview=yuna` 给用户看忧奈** → 提交。
 
 ## 当前位置
-S5 已验收并提交。题目对照表见 `docs/checklist.md`（每次存档时一起更新）。
+S6a 关卡 1–6 已过（D39）。范围：① 忧奈 Live2D 预览页 ② Command Code LLM 适配器 ③ S5-fix。
 
 ## 已完成（最近的在前）
 | 批次 | 结果 | 提交 |
 |---|---|---|
+| S6a 关卡 1–6 | D39、docs/tasks/s6a.md | 未提交 |
 | S5 Mock 语音 B / 移动端 / 照片避脸 / WebM 视频 | 479 个测试、e2e 通过；D37 | 1d22b6b |
 | D34 可打断时间线 | Q1=0.10ms；432 个测试 | 6edb91a |
 | S4 舞台 | 背景/雨/推镜/拍立得/主动开口 | 12cdab1 / 8c5e86c |
 | S3 真实语音链路 | Fish TTS/STT、导演层 | 423c55f |
-| S5-1 故障注入 + G2 探针 | 首句 P50 766ms | 485982d |
 
 ## 排队（按顺序）
-1. **S6a**：
-   - S5-fix：ending 前的空白相纸、reveal 照片被视频替换；
-   - 角色包：夏凛和忧奈都做成配置；
-   - 忧奈 Live2D：用 Cubism Web SDK 5，贴图另出 2048–4096 的网页版本，自己做呼吸，四情绪用参数组合，模型放进 `assets/models/yuna`（源文件在 `/Users/gjy/tools/models/yuna/`，分析见同目录的 REPORT.md）。
-2. 忧奈的故事、提示词和 Mock 剧本：方向一「下播之后」（D38）。**台词和提示词由用户写**，风格参考《主播女孩重度依赖》。
-3. UI 设计：用户会往《主播女孩重度依赖》的方向靠，等设计稿。
-4. 开发文档窗口（D21）。
-5. S6 交付：README（已知问题里写「Live2D 自动管线效果不理想」）、AI_USAGE.md、录屏（先排好演示路线、预演）、部署。
+1. **S6b**：角色包（夏凛 + 忧奈配置化）、直播间 UI v1（仿 Twitch：左画面右弹幕、底部弹幕框 + 麦克风、最左窄栏切频道、手机上下结构，风格参考《主播女孩重度依赖》）、忧奈剧情/提示词/Mock 剧本（**Claude 写初稿给用户审**）、忧奈 Fish 音色 + Mock 语音按角色分开。
+2. **S6a 推迟项，必须补上**：14 个按键表情 exp3、流泪动作、4096 贴图/压缩纹理。
+3. 开发文档窗口（D21）。
+4. S6 交付：README（已知问题写「Live2D 自动管线效果不理想」）、AI_USAGE.md、录屏、部署（**cmd 在服务器上怎么用**要解决）。
+估计：S6a 1 天 + S6b 1.5 天 + 文档 0.5 天 + 交付 1 天 ≈ 4 个工作日。
 
-## 关键决策（完整记录见 decisions.md D1–D38）
-- 每批代码都走 mira-code-gate 的 9 个关卡；所有代码由 Command Code（`cmd`）的 DeepSeek 写。派发时先用一条单独的 Bash 命令 `cd` 到项目目录，再执行裸的 `cmd -p …`（允许规则只匹配这个形式）。
-- 余额/额度不在项目范围，只提醒用户（D37）。
-- 打断时照片保留，视频就此结束（D37）。
-- 两个角色都保留：夏凛用分层立绘，忧奈用正版 Live2D（D38，授权已确认，可以放进公开仓库）。
+## 关键决策（完整记录见 decisions.md D1–D39）
+- 每批代码走 mira-code-gate 9 关；代码全部由 cmd 的 DeepSeek 写。派发：先单独一条 `cd ~/mira-scene`，再裸的 `cmd -p …`。
+- LLM 先走 Command Code 额度（`LLM_PROVIDER=commandcode`），首句约 2.5–3s；DeepSeek 适配器保留（D39）。
+- Fish 用免费 `s2.1-pro-free`，TTS/STT 实测可用，免费期到 2026-11-30（D39）。
+- 余额/额度只提醒，不写降级（D37）。打断时照片保留、视频结束（D37）。
+- 两个角色都保留，都做主播；忧奈用正版 Live2D，可公开（D38）。
 
-## 待用户处理（阻塞项）
-- 给 Fish 和 DeepSeek 充值（402）；之后跑 `pnpm smoke:real` 和 `pnpm voices:record`。
-- 语音的事（用户要谈）；忧奈的台词和提示词；UI 设计稿；审阅 `prompts/rin.v1.md` 和信中「暗号」那句话。
-- iPhone 真机手测 iOS 音频（清单见 `docs/tasks/s5-report.md` §7）。
+## 待用户处理
+- 审阅忧奈台词/提示词初稿（S6b 时提供）；审阅 `prompts/rin.v1.md` 和信中「暗号」那句。
+- iPhone 真机手测 iOS 音频（`docs/tasks/s5-report.md` §7）。
 
 ## 不要碰
 - `skills/live2d-auto/SKILL.md`、`tools/live2d-pipeline/*`：Live2D 管线会话的改动，不归 Claude 提交。

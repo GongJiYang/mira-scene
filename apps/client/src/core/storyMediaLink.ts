@@ -4,6 +4,7 @@ import { getStageState, useStageStore } from "./store";
 import {
   initialStoryMediaState,
   storyMediaReducer,
+  type MediaKind,
   type StoryMediaAction,
   type StoryMediaState,
 } from "../state/storyMedia";
@@ -28,9 +29,10 @@ export function handleMediaReady(message: Extract<ServerMessage, { type: "media_
 /**
  * D27：带 media 的 beat 一到就向 C 登记显影请求。
  * 服务端的异步生成在 beat 产出时就已开始，客户端尽早登记可避免「ready 先于 REQUEST」的乱序。
+ * S6a §3：传入媒体种类 —— 视频走视频槽位，不占照片槽位。
  */
-export function handleMediaRequest(storyEventId: string): void {
-  dispatchStoryMedia({ type: "REQUEST", storyEventId });
+export function handleMediaRequest(storyEventId: string, kind: MediaKind): void {
+  dispatchStoryMedia({ type: "REQUEST", storyEventId, kind });
 }
 
 /** 订阅 A 的 phase；返回取消订阅函数。 */

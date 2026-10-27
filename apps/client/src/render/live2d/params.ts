@@ -46,7 +46,8 @@ const EYE_OPEN: Record<Blink, { l: number; r: number }> = {
   closed: { l: 0, r: 0 },
 };
 
-const MOUTH_OPEN: Record<MouthShape, number> = { closed: 0, small: 0.5, open: 1 };
+/** 口型三档 → `ParamMouthOpenY`（`params.ts` 是 Live2D 参数映射的唯一出处，S6a-fix1 §4）。 */
+export const MOUTH_OPEN: Record<MouthShape, number> = { closed: 0, small: 0.5, open: 1 };
 
 export type Live2dParamInput = {
   phase: StagePhaseKind;

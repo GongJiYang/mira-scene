@@ -14,7 +14,7 @@ const run = (state: StoryMediaState, ...actions: StoryMediaAction[]): StoryMedia
   actions.reduce(storyMediaReducer, state);
 
 const requested = (storyEventId = "story-1"): StoryMediaState =>
-  storyMediaReducer(initialStoryMediaState, { type: "REQUEST", storyEventId });
+  storyMediaReducer(initialStoryMediaState, { type: "REQUEST", storyEventId, kind: "photo" });
 
 describe("C：显影生命周期", () => {
   it("REQUEST：none → developing，不绑定轮次", () => {
@@ -111,13 +111,13 @@ describe("C：按 storyEventId 去重", () => {
     });
     expect(duplicateFallback).toBe(state);
 
-    const duplicateRequest = storyMediaReducer(state, { type: "REQUEST", storyEventId: "story-1" });
+    const duplicateRequest = storyMediaReducer(state, { type: "REQUEST", storyEventId: "story-1", kind: "photo" });
     expect(duplicateRequest).toBe(state);
   });
 
   it("不同的 storyEventId 可以先后展示", () => {
     let state = storyMediaReducer(initialStoryMediaState, { type: "READY", storyEventId: "story-1", media: PHOTO });
-    state = storyMediaReducer(state, { type: "REQUEST", storyEventId: "story-2" });
+    state = storyMediaReducer(state, { type: "REQUEST", storyEventId: "story-2", kind: "photo" });
     expect(state.status).toBe("developing");
     state = storyMediaReducer(state, { type: "READY", storyEventId: "story-2", media: LETTER_REVEAL });
     expect(state.status).toBe("shown");

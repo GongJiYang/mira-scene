@@ -23,7 +23,16 @@ function fail(reason: string): never {
 
 function pickEnv(): Record<string, string> {
   const file = readRepoEnvFile();
-  const keys = ["DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "FISH_API_KEY", "FISH_VOICE_ID", "FISH_TTS_MODEL"];
+  const keys = [
+    "LLM_PROVIDER",
+    "COMMANDCODE_MODEL",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "FISH_API_KEY",
+    "FISH_VOICE_ID",
+    "FISH_TTS_MODEL",
+  ];
   const out: Record<string, string> = {};
   for (const key of keys) {
     const value = (file[key] ?? "").trim();
@@ -40,7 +49,11 @@ function numberDetail(record: LogRecord, key: string): number | null {
 
 async function main(): Promise<void> {
   const fileEnv = readRepoEnvFile();
-  const missing = ["DEEPSEEK_API_KEY", "FISH_API_KEY"].filter((name) => (fileEnv[name] ?? "").trim() === "");
+  // S6a §2：按 provider 走。commandcode 用本地 `cmd` 的额度，不需要 DeepSeek Key。
+  const llmProvider = (fileEnv.LLM_PROVIDER ?? "deepseek").trim() || "deepseek";
+  const required = ["FISH_API_KEY"];
+  if (llmProvider !== "commandcode") required.push("DEEPSEEK_API_KEY");
+  const missing = required.filter((name) => (fileEnv[name] ?? "").trim() === "");
   if (missing.length > 0) {
     console.log(`[smoke:real] 跳过：.env 里缺少 ${missing.join(", ")}（需要真实 Key 才会运行）`);
     return;

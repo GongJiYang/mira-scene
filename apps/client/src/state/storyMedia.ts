@@ -11,27 +11,46 @@ export type StoryMediaStatus = "none" | "developing" | "ready" | "shown" | "fall
 export type StoryMediaMark = Exclude<StoryMediaStatus, "none">;
 
 export type StoryMediaState = {
+  /** 照片槽位：显影生命周期、当前展示的媒体。空白相纸只在这里出现。 */
   status: StoryMediaStatus;
   storyEventId: string | null;
   media: Media | null;
+  /** 视频槽位（S6a §3）：与照片槽位相互独立，视频不占用照片的槽位。 */
+  video: StoryVideoSlot;
   /** storyEventId → 已处理到哪一步；命中的事件一律忽略。 */
   processed: Readonly<Record<string, StoryMediaMark>>;
+  /** storyEventId → 媒体种类（REQUEST 时按 beat.media.type 登记）。 */
+  kinds: Readonly<Record<string, MediaKind>>;
   /** A 的 phase 镜像：ready 到达时据此决定立即 shown 还是排队。 */
   phase: StagePhaseKind;
 };
 
+/** S6a §3：媒体种类，决定 REQUEST 落到照片槽位还是视频槽位。 */
+export type MediaKind = "photo" | "video";
+
+/** S6a §3：视频槽位。status 与照片槽位的 `StoryMediaStatus` 同形，便于复用展示条件。 */
+export type StoryVideoSlot = {
+  status: StoryMediaStatus;
+  storyEventId: string | null;
+  media: Media | null;
+};
+
 export type StoryMediaAction =
-  | { type: "REQUEST"; storyEventId: string }
+  | { type: "REQUEST"; storyEventId: string; kind: MediaKind }
   | { type: "READY"; storyEventId: string; media: Media }
   | { type: "FALLBACK"; storyEventId: string; media: Media }
   | { type: "IMAGE_FAILED"; storyEventId: string; media: Media }
   | { type: "PHASE"; phase: StagePhaseKind };
 
+const EMPTY_VIDEO_SLOT: StoryVideoSlot = { status: "none", storyEventId: null, media: null };
+
 export const initialStoryMediaState: StoryMediaState = {
   status: "none",
   storyEventId: null,
   media: null,
+  video: EMPTY_VIDEO_SLOT,
   processed: {},
+  kinds: {},
   phase: "idle",
 };
 
@@ -160,10 +179,23 @@ export function storyMediaReducer(state: StoryMediaState, action: StoryMediaActi
   switch (action.type) {
     case "REQUEST": {
       if (state.processed[action.storyEventId]) return state;
-      // 一次只显影一张：上一张还在显影 / 排队时，新的请求丢弃（S4 才会有并发剧情事件）。
+      const kinds: Record<string, MediaKind> = { ...state.kinds, [action.storyEventId]: action.kind };
+
+      // S6a §3：视频请求不落照片槽位 —— 不显影空白相纸、也不覆盖 reveal 的照片。
+      if (action.kind === "video") {
+        return {
+          ...state,
+          kinds,
+          video: { status: "developing", storyEventId: action.storyEventId, media: null },
+          processed: mark(state, action.storyEventId, "developing"),
+        };
+      }
+
+      // 照片：一次只显影一张：上一张还在显影 / 排队时，新的请求丢弃（S4 才会有并发剧情事件）。
       if (state.status !== "none" && state.status !== "shown") return state;
       return {
         ...state,
+        kinds,
         status: "developing",
         storyEventId: action.storyEventId,
         media: null,
@@ -175,6 +207,20 @@ export function storyMediaReducer(state: StoryMediaState, action: StoryMediaActi
       // 去重只针对「已经到过 READY/FALLBACK」的事件；REQUEST 留下的 developing 标记不拦。
       const already = state.processed[action.storyEventId];
       if (already === "ready" || already === "shown" || already === "fallback") return state;
+
+      // S6a §3：视频事件落视频槽位，照片槽位保持不变（reveal 的照片因此保留）。
+      if (state.kinds[action.storyEventId] === "video") {
+        const active = state.video.status === "developing" || state.video.status === "ready" || state.video.status === "fallback";
+        if (active && state.video.storyEventId !== action.storyEventId) return state;
+        const arrived: StoryMediaMark = action.type === "READY" ? "ready" : "fallback";
+        const videoStatus: StoryMediaStatus = isShowable(state.phase) ? "shown" : arrived;
+        return {
+          ...state,
+          video: { status: videoStatus, storyEventId: action.storyEventId, media: action.media },
+          processed: mark(state, action.storyEventId, videoStatus === "shown" ? "shown" : arrived),
+        };
+      }
+
       const active =
         state.status === "developing" || state.status === "ready" || state.status === "fallback";
       // 另一张还在显影 / 排队：忽略，避免覆盖当前正在展示的那张。
@@ -202,19 +248,30 @@ export function storyMediaReducer(state: StoryMediaState, action: StoryMediaActi
     }
     case "PHASE": {
       if (state.phase === action.phase) return state;
+      const showable = isShowable(action.phase);
+
+      // 视频槽位：ready / fallback → shown（thinking 期间也可以显影，D28 补充）。
+      const video =
+        (state.video.status === "ready" || state.video.status === "fallback") &&
+        showable &&
+        state.video.storyEventId !== null
+          ? { ...state.video, status: "shown" as StoryMediaStatus }
+          : state.video;
+
       if (
         (state.status === "ready" || state.status === "fallback") &&
-        isShowable(action.phase) &&
+        showable &&
         state.storyEventId !== null
       ) {
         return {
           ...state,
+          video,
           status: "shown",
           phase: action.phase,
           processed: mark(state, state.storyEventId, "shown"),
         };
       }
-      return { ...state, phase: action.phase };
+      return { ...state, video, phase: action.phase };
     }
   }
 }

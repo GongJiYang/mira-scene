@@ -142,15 +142,19 @@ test.describe("S5 §5 剧情视频", () => {
     await expect(video).toHaveAttribute("data-status", "playing", { timeout: 30_000 });
     await expect(video).toBeVisible();
 
+    // S6a §3 ②：视频不占照片槽位 —— reveal 的照片在视频播放期间仍然在。
+    await expect(page.getByTestId("stage-photo")).toHaveCount(1);
+
     // 中途打断：按住说话 → 视频立即暂停并淡出，不恢复。
     await pressPtt(page);
     await expect(video).toBeHidden({ timeout: 300 });
     await expect(stage).toHaveAttribute("data-phase", "listening");
     await releasePtt(page);
 
-    // 不恢复：等一会儿仍然是隐藏的。
+    // 不恢复：等一会儿仍然是隐藏的；照片也仍在（打断时照片保留，D37）。
     await page.waitForTimeout(1_000);
     await expect(video).toBeHidden();
+    await expect(page.getByTestId("stage-photo")).toHaveCount(1);
   });
 });
 

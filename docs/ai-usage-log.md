@@ -84,3 +84,9 @@
 - DeepSeek 发现任务说明和现有测试冲突（导演层的不变量规定 ending 不带 media）后，**停下来逐条报告**，只改了字面值，并把不变量扩写到视频分支。另外主动列出 4 处越出授权范围的必要偏差，交给 Claude 裁定（D37 补充）。
 - Claude 验收：typecheck、test、smoke、e2e 全部独立复跑，仓库里 Key 泄露为 0。读代码后发现报告里提到、但被当作「观感问题」带过的两个缺陷：ending 前会先出现空白相纸、reveal 的照片被视频替换掉。这两处在录屏里会很明显，所以排进 S5-fix。
 - 过程里的人工纠偏：用户口头说的「command go」被 Claude 误解成了 OpenCode Go，用户纠正后改回 Command Code（`cmd`）。另外，派发 `--yolo` 代理被自动模式拦截，用户授权加了 `Bash(cmd -p:*)` 规则后才放行。
+
+## S6a · 2026-10-27（Command Code · DeepSeek；mira-code-gate 关卡 1–9，含 fix1 / fix2）
+- 交付：忧奈 Live2D 预览页 `/?preview=yuna`（Cubism Web SDK 5，贴图 8192→2048，模型 48.7→7.6 MiB）；纯函数 `yunaParams`（视线经 `params.ts` 唯一出处、X 取反、正弦呼吸、四情绪参数组合、舒适区间属性测试）；Command Code LLM 适配器（`LLM_PROVIDER=commandcode`，每轮 `cmd -p` + NDJSON 流式，首句约 3.4s）；S5-fix（ending 前不再出空白相纸、视频不再挤掉 reveal 照片）。547 个测试。
+- DeepSeek 自己发现并停下报告：官方 CDN 的 Cubism Core 是 5.1.0，与「最新框架 5-r.5」不兼容，只能配 5-r.4——Claude 裁定接受。还指出任务说明把 `MOUTH_OPEN` 的位置写错了（实际在 `params.ts`）。
+- Claude 验收（用户要求改为「审核心逻辑 + 架构合规」，不全量重跑）：读 `yunaParams` / 渲染外壳 / 适配器后发现 4 个 DeepSeek 自测没抓到的问题——切换情绪后旧参数残留、自动眨眼每帧被常量覆盖、`approach()` 写了没用、口型常量重复定义；另外报告里写「warm/sad 实测生效」，但截图对比 sad 几乎看不出——派 fix1 修。用户看预览后反馈人物偏小、显示不全——派 fix2（纯函数 `fitModel` + 可见包围盒 + e2e 四边无像素断言）。
+- 其它：DeepSeek 余额为 0 时用户决定 LLM 先走 cmd 额度；Claude 实测 Fish 免费 TTS/STT 可用，确认 402 只来自 DeepSeek。忧奈背景由 Claude 用生图中转生成（首版画出了真实饮料品牌，重生成无品牌版；用户提议「让背景适应角色」后改为低机位地面 + 软垫，适配模型固定的半蹲姿势）。

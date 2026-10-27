@@ -7,7 +7,7 @@ const FALLBACK: Media = { type: "photo", id: "photo_rain_street", storyEventId: 
 
 /** 走到 shown（ready 到达时 A 已经 idle）。 */
 function shown(): StoryMediaState {
-  let state = storyMediaReducer(initialStoryMediaState, { type: "REQUEST", storyEventId: "s:1:0" });
+  let state = storyMediaReducer(initialStoryMediaState, { type: "REQUEST", storyEventId: "s:1:0", kind: "photo" });
   state = storyMediaReducer(state, { type: "READY", storyEventId: "s:1:0", media: PHOTO });
   return state;
 }
@@ -26,7 +26,7 @@ describe("C：图片加载失败 → 换另一张预置照片（Q8）", () => {
   });
 
   it("不在 shown 时不处理（还没上桌）", () => {
-    const requested = storyMediaReducer(initialStoryMediaState, { type: "REQUEST", storyEventId: "s:1:0" });
+    const requested = storyMediaReducer(initialStoryMediaState, { type: "REQUEST", storyEventId: "s:1:0", kind: "photo" });
     expect(storyMediaReducer(requested, { type: "IMAGE_FAILED", storyEventId: "s:1:0", media: FALLBACK })).toBe(requested);
   });
 

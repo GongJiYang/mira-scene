@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 
 export type ProviderMode = "mock" | "real";
 
+/** D39 / S6a §2：LLM 走哪家。`deepseek` 保持现有行为（默认），`commandcode` 走 `cmd -p`。 */
+export type LlmProvider = "deepseek" | "commandcode";
+
 export type DeepSeekCredentials = {
   apiKey: string;
   /** 统一成以 `/v1` 结尾。 */
@@ -26,6 +29,10 @@ export type ProviderCredentials = {
 
 export type ServerConfig = {
   providerMode: ProviderMode;
+  /** D39 / S6a §2：LLM 走哪家（默认 deepseek）。mock 模式下不生效。 */
+  llmProvider: LlmProvider;
+  /** S6a §2：`LLM_PROVIDER=commandcode` 时用的模型，`COMMANDCODE_MODEL` 覆盖。 */
+  commandCodeModel: string;
   port: number;
   /** 每会话最多轮数（Q12，默认 30）。 */
   sessionTurnLimit: number;
@@ -43,6 +50,7 @@ export type ServerConfig = {
 };
 
 const SUPPORTED_MODES: readonly ProviderMode[] = ["mock", "real"];
+const SUPPORTED_LLM_PROVIDERS: readonly LlmProvider[] = ["deepseek", "commandcode"];
 
 export const DEFAULT_SESSION_TURN_LIMIT = 30;
 export const DEFAULT_DAILY_TURN_LIMIT = 300;
@@ -53,6 +61,8 @@ export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 export const DEFAULT_FISH_BASE_URL = "https://api.fish.audio";
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 export const DEFAULT_FISH_TTS_MODEL = "s2.1-pro-free";
+/** S6a §2：commandcode 适配器默认模型。 */
+export const DEFAULT_COMMANDCODE_MODEL = "deepseek/deepseek-v4-flash";
 
 const EMPTY_PROVIDERS: ProviderCredentials = {
   deepseek: { apiKey: "", baseUrl: "", model: "" },
@@ -61,6 +71,10 @@ const EMPTY_PROVIDERS: ProviderCredentials = {
 
 function isProviderMode(value: string): value is ProviderMode {
   return (SUPPORTED_MODES as readonly string[]).includes(value);
+}
+
+function isLlmProvider(value: string): value is LlmProvider {
+  return (SUPPORTED_LLM_PROVIDERS as readonly string[]).includes(value);
 }
 
 /** 正整数环境变量；非法值直接抛错，不静默降级。 */
@@ -110,8 +124,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error(`非法的 PORT="${rawPort}"`);
   }
+  // D39 / S6a §2：LLM provider；非法值直接抛错。
+  const rawLlmProvider = (env.LLM_PROVIDER ?? "deepseek").trim() || "deepseek";
+  if (!isLlmProvider(rawLlmProvider)) {
+    throw new Error(`不支持的 LLM_PROVIDER="${rawLlmProvider}"，只支持 ${SUPPORTED_LLM_PROVIDERS.join(", ")}`);
+  }
   return {
     providerMode: rawMode,
+    llmProvider: rawLlmProvider,
+    commandCodeModel: (env.COMMANDCODE_MODEL ?? "").trim() || DEFAULT_COMMANDCODE_MODEL,
     port,
     sessionTurnLimit: readPositiveInt(env, "SESSION_TURN_LIMIT", DEFAULT_SESSION_TURN_LIMIT),
     dailyTurnLimit: readPositiveInt(env, "DAILY_TURN_LIMIT", DEFAULT_DAILY_TURN_LIMIT),

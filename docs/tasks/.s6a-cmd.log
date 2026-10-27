@@ -1,0 +1,22 @@
+Done. §1 → §2 → §3 all complete, verified end-to-end.
+
+## What I did
+
+**§1 忧奈 Live2D 预览**
+- `tools/yuna-assets/build.sh`: repeatable, source read-only; 48.7 MiB → **7.6 MiB**, ASCII names, 2048 textures, watermarks `Param1–10` kept.
+- Cubism Core **5.1.0** from the specified URL + framework `5-r.4` in `apps/client/vendor/`, wired via vite/tsconfig aliases.
+- `yunaParams.ts` pure function (`yunaParams`/`approach`/`applyEyeOpen` + constant tables) with fast-check comfort-range test; shell `cubism/yunaRenderer.ts` (no decision logic); preview page at `/?preview=yuna` with error card fallback.
+- Renders in-browser — verified head-to-thigh centered, all four emotions visually confirmed (sad=八字眉, warm=blush+smile, guarded=narrowed eyes).
+
+**§2 Command Code LLM adapter** — `flattenMessages` + `parseCmdNdjson` pure functions, `spawn` shell, `LLM_PROVIDER` config, startup `cmd`/login check. Real `pnpm smoke:real` passed: **LLM 首句 ≈ 3.3 s**.
+
+**§3 S5-fix** — separate video slot in C state; ending video no longer shows blank polaroid, reveal photo persists. Reducer tests + e2e assertion.
+
+**Results**: `pnpm test` 530 passed · `pnpm typecheck` clean · `pnpm smoke` OK · `pnpm e2e` 12 passed · no commits.
+
+## Two things I need you to rule on (written up in `docs/tasks/s6a-report.md`)
+
+1. **Version conflict (铁律 1)**: the mandated Core URL serves **5.1.0**, which is incompatible with the latest `5-r.5` tag (double-arg `csmGetMocVersion`, no `Model.offscreens`, `Model.fromMoc`). It matches **`5-r.4`**, so I pinned the framework to `5-r.4` — the only pairing that keeps both the fixed URL and untouched framework source. If you require `5-r.5`, you'd need to supply a matching Core 5.0.x (CDN has no versioned path).
+2. **Eye-open semantics**: the model's `ParamEyeLOpen` is `[0,2]` with default `1` (already half-lidded). I scale `blinkOpen∈[0,1]` → up to `EYE_OPEN_MAX=1.9` so eyes visibly open; if you want `1` = model default, change the one constant.
+
+I did **not** touch `skills/live2d-auto/*`, `tools/live2d-pipeline/*`, `decisions.md`, or `PROGRESS.md` (pre-modified by the dispatching session).

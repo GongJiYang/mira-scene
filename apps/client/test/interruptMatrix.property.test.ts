@@ -179,7 +179,7 @@ function createSim() {
     dispatchA({ type: "SERVER_MESSAGE", message });
     if (message.type === "beat" && message.turnId === A.currentTurnId) {
       const storyEventId = message.payload.beat.media?.storyEventId;
-      if (storyEventId) C = storyMediaReducer(C, { type: "REQUEST", storyEventId });
+      if (storyEventId) C = storyMediaReducer(C, { type: "REQUEST", storyEventId, kind: "photo" });
     }
     if (message.type === "media_ready") {
       const { storyEventId, media, status } = message.payload;

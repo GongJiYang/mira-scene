@@ -251,9 +251,10 @@ export function Stage() {
     dispatchVideo({ type: "TURN", turnId: currentTurnId });
   }, [currentTurnId]);
 
-  const videoMedia =
-    vm.storyMedia.status === "shown" && vm.storyMedia.media?.type === "video" ? vm.storyMedia.media : null;
-  const videoEventId = videoMedia ? storyEventId : null;
+  // S6a §3：视频从独立槽位驱动（不再占用照片槽位），所以 reveal 的照片在视频播完后仍在。
+  const videoSlot = vm.storyMedia.video;
+  const videoMedia = videoSlot.status === "shown" && videoSlot.media?.type === "video" ? videoSlot.media : null;
+  const videoEventId = videoMedia ? videoSlot.storyEventId : null;
 
   useEffect(() => {
     if (!videoMedia || !videoEventId) return;

@@ -3,6 +3,8 @@ import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { parseClientMessage, type ServerMessage } from "@mira/protocol";
+import { createCommandCodeLlm } from "./adapters/commandcode/commandCodeLlm";
+import { assertCommandCodeReady } from "./adapters/commandcode/preflight";
 import { createDeepSeekLlm } from "./adapters/deepseek/deepseekLlm";
 import { withSttErrorDegrade } from "./adapters/fish/degrade";
 import { createFishStt } from "./adapters/fish/fishStt";
@@ -56,6 +58,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   const tokens = createTokenStore();
   const { providers } = config;
 
+  // S6a §2 契约：real + commandcode 时，启动检查 cmd 可执行且已登录；不满足直接报错退出，不降级。
+  if (config.providerMode === "real" && config.llmProvider === "commandcode") {
+    await assertCommandCodeReady();
+    logger({ ts: Date.now(), event: "commandcode_ready" });
+  }
+
   // 按模式选择适配器：real 模式下缺 Key 的端口单独回退到 Mock，并记 provider_fallback（§4）。
   function buildPorts(): Ports {
     const wantReal = config.providerMode === "real";
@@ -75,7 +83,14 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     }
 
     let llm: LLMPort;
-    if (wantReal && providers.deepseek.apiKey !== "") {
+    if (wantReal && config.llmProvider === "commandcode") {
+      // D39 / S6a §2：走 Command Code 的额度。启动契约已在 startServer 里检查过。
+      llm = createCommandCodeLlm({
+        model: config.commandCodeModel,
+        prompt: loadPromptTemplate(),
+        log: logger,
+      });
+    } else if (wantReal && providers.deepseek.apiKey !== "") {
       llm = createDeepSeekLlm({
         baseUrl: providers.deepseek.baseUrl,
         apiKey: providers.deepseek.apiKey,

@@ -24,7 +24,12 @@ describe("toStageView：G1-c 新增字段", () => {
       activeAction: null,
       idleSince: null,
     });
-    expect(view.storyMedia).toEqual({ status: "none", storyEventId: null, media: null });
+    expect(view.storyMedia).toEqual({
+      status: "none",
+      storyEventId: null,
+      media: null,
+      video: { status: "none", storyEventId: null, media: null },
+    });
     expect(view.pendingNudge).toBe(false);
   });
 
@@ -58,6 +63,7 @@ describe("toStageView：G1-c 新增字段", () => {
       status: "shown",
       storyEventId: "story-1",
       media: { type: "photo", id: "photo_letters" },
+      video: { status: "none", storyEventId: null, media: null },
     });
     expect(view.pendingNudge).toBe(true);
   });

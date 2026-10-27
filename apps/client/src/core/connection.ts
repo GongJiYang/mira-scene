@@ -160,8 +160,8 @@ export function createConnection(): Connection {
     if (message.type === "tts_audio") handleTtsAudio(message);
     // D27：带 media 的 beat 一到就登记 C 的显影请求（服务端已在异步生成）。
     if (message.type === "beat" && message.turnId === getStageState().currentTurnId) {
-      const storyEventId = message.payload.beat.media?.storyEventId;
-      if (storyEventId) handleMediaRequest(storyEventId);
+      const media = message.payload.beat.media;
+      if (media?.storyEventId) handleMediaRequest(media.storyEventId, media.type);
     }
     // D27：media_ready 是剧情层消息，不经过 A 的 turnId 过滤，直接进 C。
     if (message.type === "media_ready") handleMediaReady(message);
