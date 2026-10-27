@@ -9,12 +9,14 @@ import {
   type StoryStep,
 } from "./beat";
 import {
+  accentSchema,
   actionSchema,
   cameraSchema,
   emotionSchema,
   fxSchema,
   handsSchema,
   storyNodeSchema,
+  type Accent,
   type Action,
   type Camera,
   type Emotion,
@@ -34,6 +36,7 @@ export type NormalizedLlmBeat = {
   emotion: Emotion;
   suggest: Action | null;
   advance: StoryNode | null;
+  accent: Accent | null;
 };
 
 export type LlmBeatParseResult = {
@@ -45,6 +48,7 @@ const EMPTY_BEAT: Beat = {
   seq: 0,
   say: "",
   emotion: "neutral",
+  accent: null,
   hands: "cup",
   action: null,
   camera: null,
@@ -58,6 +62,7 @@ const EMPTY_LLM_BEAT: NormalizedLlmBeat = {
   emotion: "neutral",
   suggest: null,
   advance: null,
+  accent: null,
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -129,6 +134,7 @@ export function parseBeatLenient(input: unknown): BeatParseResult {
   }
 
   const emotion = enumField<Emotion>(emotionSchema, input.emotion, "neutral", "emotion", "neutral", warnings);
+  const accent = nullableObject<Accent>(accentSchema, input.accent, "accent", warnings);
   const hands = enumField<Hands>(handsSchema, input.hands, "cup", "hands", "cup", warnings);
   const action = nullableObject<Action>(actionSchema, input.action, "action", warnings);
   const camera = nullableObject<Camera>(cameraSchema, input.camera, "camera", warnings);
@@ -140,6 +146,7 @@ export function parseBeatLenient(input: unknown): BeatParseResult {
     seq,
     say,
     emotion,
+    accent,
     hands,
     action,
     camera,
@@ -181,8 +188,9 @@ export function parseLlmBeatLenient(input: unknown): LlmBeatParseResult {
   const emotion = enumField<Emotion>(emotionSchema, input.emotion, "neutral", "emotion", "neutral", warnings);
   const suggest = nullableObject<Action>(actionSchema, input.suggest, "suggest", warnings);
   const advance = nullableObject<StoryNode>(storyNodeSchema, input.advance, "advance", warnings);
+  const accent = nullableObject<Accent>(accentSchema, input.accent, "accent", warnings);
 
-  const llmBeat: NormalizedLlmBeat = { say, emotion, suggest, advance };
+  const llmBeat: NormalizedLlmBeat = { say, emotion, suggest, advance, accent };
 
   if (!llmBeatSchema.safeParse(llmBeat).success) {
     return {

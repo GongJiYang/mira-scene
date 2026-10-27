@@ -11,7 +11,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { actionSchema, cameraSchema, emotionSchema, fxSchema, mediaSchema, storyNodeSchema, type Action, type Camera, type Emotion, type Fx, type Media, type StoryNode } from "@mira/protocol";
+import { accentSchema, actionSchema, cameraSchema, emotionSchema, fxSchema, mediaSchema, storyNodeSchema, type Accent, type Action, type Camera, type Emotion, type Fx, type Media, type StoryNode } from "@mira/protocol";
 
 /* ------------------------------------------------------------------------------------------------
  * 通用意图槽位（S6b §1）。意图不进 protocol：它是「Mock 剧本 + 提示词」层的概念。
@@ -124,7 +124,7 @@ const nodeLinesSchema = z.record(intentSlotSchema, z.tuple([z.string(), z.string
 const nodeSchema = z.object({
   label: z.string().min(1),
   guidance: z.string().min(1),
-  look: z.object({ emotion: emotionSchema, silentAction: actionSchema }),
+  look: z.object({ emotion: emotionSchema, silentAction: actionSchema, accent: accentSchema.nullish() }),
   lines: nodeLinesSchema,
 });
 
@@ -132,6 +132,7 @@ const nudgeBeatSchema = z.object({
   say: z.string(),
   emotion: emotionSchema,
   suggest: actionSchema.optional(),
+  accent: accentSchema.optional(),
 });
 
 export const contentFileSchema = z.object({
@@ -158,9 +159,9 @@ export const contentFileSchema = z.object({
  * 组合后的角色包
  * ---------------------------------------------------------------------------------------------- */
 
-export type NodeLook = { emotion: Emotion; silentAction: Action };
+export type NodeLook = { emotion: Emotion; silentAction: Action; accent: Accent | null };
 export type NodeScript = { label: string; guidance: string; look: NodeLook; lines: Record<IntentSlot, readonly [string, string]> };
-export type NudgeBeat = { say: string; emotion: Emotion; suggest?: Action };
+export type NudgeBeat = { say: string; emotion: Emotion; suggest?: Action; accent?: Accent };
 
 export type Pack = {
   id: string;
@@ -278,7 +279,14 @@ export function parsePack(input: {
     }
   }
 
-  const nodes = contentParsed.data.nodes as Record<StoryNode, NodeScript>;
+  // D47：look.accent 缺省 / undefined → null（NodeLook 契约）。
+  // zod 的 record 类型与 NodeScript 的映射不完全重叠（REQUIRED_NODES 已由 crossCheck 保证），故经 unknown 转换。
+  const nodes = Object.fromEntries(
+    Object.entries(contentParsed.data.nodes).map(([node, script]) => [
+      node,
+      { ...script, look: { ...script.look, accent: script.look.accent ?? null } },
+    ]),
+  ) as unknown as Record<StoryNode, NodeScript>;
 
   return {
     ok: true,

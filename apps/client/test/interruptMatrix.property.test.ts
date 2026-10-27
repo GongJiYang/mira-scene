@@ -21,6 +21,7 @@ function makeBeat(seq: number, overrides: Partial<Beat> = {}): Beat {
     seq,
     say: `第${seq}句`,
     emotion: "warm",
+    accent: null,
     hands: "cup",
     action: null,
     camera: null,

@@ -16,8 +16,27 @@ export const cameraSchema = z.enum(["wide", "close_up"]);
 export const fxSchema = z.enum(["rain_heavy", "rain_stop", "lights_dim", "warm_glow", "stream_dim", "hearts"]);
 export const storyNodeSchema = z.enum(["arrive", "probe", "reveal", "ending"]);
 export const mediaTypeSchema = z.enum(["photo", "video"]);
+/**
+ * D47：忧奈全部表情开关按语境使用（S6k）。
+ * LLM 可在每句额外给一个 `accent`（与必有的 `emotion` 分开）；词表外 / 非字符串 → null。
+ * love 爱心眼 / heart 爱心飘浮 / shy 脸红 / amazed 吓一跳 / cry 哭出来 / angry 生气 /
+ * black 脸黑无语 / dark 黑眼圈困 / fly_head 脑袋飞出去 / fly_pet 宠物飞出来。
+ */
+export const accentSchema = z.enum([
+  "love",
+  "heart",
+  "shy",
+  "amazed",
+  "cry",
+  "angry",
+  "black",
+  "dark",
+  "fly_head",
+  "fly_pet",
+]);
 
 export type Emotion = z.infer<typeof emotionSchema>;
+export type Accent = z.infer<typeof accentSchema>;
 export type Hands = z.infer<typeof handsSchema>;
 export type Action = z.infer<typeof actionSchema>;
 export type Camera = z.infer<typeof cameraSchema>;

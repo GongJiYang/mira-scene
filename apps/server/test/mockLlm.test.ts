@@ -20,7 +20,7 @@ const TEXT_BY_INTENT: Record<Intent, string> = {
   other: "今天弹幕很安静",
 };
 
-const LLM_BEAT_KEYS = ["say", "emotion", "suggest", "advance"];
+const LLM_BEAT_KEYS = ["say", "emotion", "suggest", "advance", "accent"];
 
 function context(overrides: Partial<LLMContext> = {}): LLMContext {
   return { history: [], scene: createInitialScene(), userText: "你好", pack, ...overrides };

@@ -5,6 +5,7 @@ const baseBeat: Beat = {
   seq: 0,
   say: "今晚的雨真大。",
   emotion: "calm",
+  accent: null,
   hands: "cup",
   action: null,
   camera: null,
@@ -33,6 +34,8 @@ describe("parseBeatLenient", () => {
     { field: "action", patch: { action: "wave" }, expected: { action: null } },
     { field: "camera", patch: { camera: "zoom" }, expected: { camera: null } },
     { field: "fx", patch: { fx: "snow" }, expected: { fx: null } },
+    { field: "accent", patch: { accent: "sparkle" }, expected: { accent: null } },
+    { field: "accent", patch: { accent: 42 }, expected: { accent: null } },
     {
       field: "media.type",
       patch: { media: { type: "gif", id: "photo_letters" } },
@@ -62,6 +65,7 @@ describe("parseBeatLenient", () => {
   it("合法的 media / story / action / camera / fx 被保留", () => {
     const full: Beat = {
       ...baseBeat,
+      accent: "angry",
       action: "drink",
       camera: "close_up",
       fx: "warm_glow",
@@ -102,6 +106,7 @@ describe("parseBeatLenient", () => {
         seq: 0,
         say: "",
         emotion: "neutral",
+        accent: null,
         hands: "cup",
         action: null,
         camera: null,

@@ -15,7 +15,8 @@
       "guidance": "她以为直播间没人了，刚卸下营业状态，发现还有一个观众，有点尴尬，想用直播腔糊弄过去。",
       "look": {
         "emotion": "calm",
-        "silentAction": "drink"
+        "silentAction": "drink",
+        "accent": "amazed"
       },
       "lines": {
         "greeting": [
@@ -49,7 +50,8 @@
       "guidance": "对方在关心她为什么还不睡、为什么不开心。她用玩笑岔开，只给线索不点破：后台数据、喝了一半的饮料、空掉的弹幕。对方每关心一次 trust +1。",
       "look": {
         "emotion": "guarded",
-        "silentAction": "phone"
+        "silentAction": "phone",
+        "accent": "black"
       },
       "lines": {
         "greeting": [
@@ -83,7 +85,8 @@
       "guidance": "她把第一次开播的截图给对方看，那天直播间只有三个人。她说出心里话：最近一直在犹豫要不要毕业，不再直播。",
       "look": {
         "emotion": "sad",
-        "silentAction": "show_item"
+        "silentAction": "show_item",
+        "accent": "shy"
       },
       "lines": {
         "greeting": [
@@ -117,7 +120,8 @@
       "guidance": "她做出决定，向最后这个观众告别，结局视频是直播间的「离线」画面。",
       "look": {
         "emotion": "warm",
-        "silentAction": "glance"
+        "silentAction": "glance",
+        "accent": "heart"
       },
       "lines": {
         "greeting": [

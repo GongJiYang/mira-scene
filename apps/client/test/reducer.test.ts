@@ -7,6 +7,7 @@ const makeBeat = (seq: number, overrides: Partial<Beat> = {}): Beat => ({
   seq,
   say: `第 ${seq} 句`,
   emotion: "warm",
+  accent: null,
   hands: "cup",
   action: null,
   camera: null,
@@ -300,6 +301,7 @@ describe("beat 与视觉/字幕", () => {
       action: "glance",
       camera: "close_up",
       fx: "rain_stop",
+      accent: null,
     });
   });
 
@@ -334,9 +336,27 @@ describe("beat 与视觉/字幕", () => {
       action: "glance",
       camera: "close_up",
       fx: "rain_stop",
+      accent: null,
     });
     expect(state.media).toEqual({ type: "photo", id: "photo" });
     expect(state.phase).toEqual({ kind: "speaking", seq: 1 });
+  });
+
+  it("D47：accent 逐句生效，下一句为 null 时立即清掉", () => {
+    let state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { accent: "amazed" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+    );
+    expect(state.visual.accent).toBe("amazed");
+
+    state = run(
+      state,
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(1, { accent: null })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 1 },
+    );
+    expect(state.visual.accent).toBeNull();
   });
 
   it("重复 seq 的 beat 被忽略", () => {
@@ -374,6 +394,7 @@ describe("beat 与视觉/字幕", () => {
       action: null,
       camera: "close_up",
       fx: "lights_dim",
+      accent: null,
     });
 
     const afterSnapshot = reducer(state, {
@@ -390,6 +411,7 @@ describe("beat 与视觉/字幕", () => {
       action: null,
       camera: null,
       fx: null,
+      accent: null,
     });
   });
 });

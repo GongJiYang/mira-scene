@@ -134,7 +134,7 @@ export function Live() {
 
   if (layout === "desktop") {
     return (
-      <main className="live-root" data-testid="live" data-layout="desktop" data-phase={vm.phase} data-connection={vm.connection}>
+      <main className="live-root" data-testid="live" data-layout="desktop" data-phase={vm.phase} data-connection={vm.connection} data-accent={vm.visual.accent ?? ""}>
         <div className="live-desktop">
           <nav className="live-sidebar" aria-label={UI_TEXT.channels}>
             {VISIBLE_CHARACTERS.map((item) => (
@@ -348,6 +348,7 @@ function MobileLive(props: MobileProps) {
       data-layout="mobile"
       data-phase={vm.phase}
       data-connection={vm.connection}
+      data-accent={vm.visual.accent ?? ""}
     >
       <div
         className="live-mobile"

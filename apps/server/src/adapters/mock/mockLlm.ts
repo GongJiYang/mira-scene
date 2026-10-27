@@ -39,6 +39,7 @@ export function composeBeats(ctx: LLMContext, pack: Pack): LlmBeat[] {
       emotion: beat.emotion,
       suggest: beat.suggest ?? null,
       advance: null,
+      accent: beat.accent ?? null,
     }));
   }
 
@@ -47,9 +48,10 @@ export function composeBeats(ctx: LLMContext, pack: Pack): LlmBeat[] {
   const [first, second] = script.lines[intent];
 
   const beats: LlmBeat[] = [
-    { say: first, emotion: script.look.emotion, suggest: null, advance: null },
-    { say: second, emotion: script.look.emotion, suggest: null, advance: null },
-    { say: "", emotion: script.look.emotion, suggest: script.look.silentAction, advance: null },
+    // D47：Mock 演示 —— 节点 look 的 accent 放在这一轮第一句上（不新写台词）。
+    { say: first, emotion: script.look.emotion, suggest: null, advance: null, accent: script.look.accent },
+    { say: second, emotion: script.look.emotion, suggest: null, advance: null, accent: null },
+    { say: "", emotion: script.look.emotion, suggest: script.look.silentAction, advance: null, accent: null },
   ];
 
   const advance = proposeStory(pack, node, intent, countPriorUserTurns(ctx.history));

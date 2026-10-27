@@ -23,6 +23,7 @@ const beat: Beat = {
   seq: 0,
   say: "你来了。",
   emotion: "warm",
+  accent: null,
   hands: "polaroid",
   action: null,
   camera: "close_up",

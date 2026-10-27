@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  accentSchema,
   actionSchema,
   cameraSchema,
   emotionSchema,
@@ -29,6 +30,8 @@ export const beatSchema = z.object({
   seq: z.number().int().nonnegative(),
   say: z.string(),
   emotion: emotionSchema,
+  /** D47：语境表情 accent（导演层产出；null 表示这一句没有额外表情）。 */
+  accent: accentSchema.nullable(),
   hands: handsSchema,
   action: actionSchema.nullable(),
   camera: cameraSchema.nullable(),
@@ -39,7 +42,7 @@ export const beatSchema = z.object({
 
 /**
  * 契约 ①：LLM 原始输出。
- * LLM 只能给台词、情绪、可选建议动作、可选剧情推进；视觉其余字段由导演层决定（D29）。
+ * LLM 只能给台词、情绪、可选建议动作、可选剧情推进、可选语境表情；视觉其余字段由导演层决定（D29）。
  * 本批只定义 schema，暂不接入流水线。
  */
 export const llmBeatSchema = z.object({
@@ -47,6 +50,7 @@ export const llmBeatSchema = z.object({
   emotion: emotionSchema,
   suggest: actionSchema.nullish(),
   advance: storyNodeSchema.nullish(),
+  accent: accentSchema.nullish(),
 });
 
 export type Media = z.infer<typeof mediaSchema>;

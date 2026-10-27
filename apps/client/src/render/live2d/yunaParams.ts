@@ -14,7 +14,8 @@
  * 说话叠加哭哭 / 流泪 / 首句惊讶；待机有随机小动作（抱熊 / 瞟向一侧 / 耳朵轻动）。
  */
 import { clampView, MOUTH_OPEN, VIEW_BY_PHASE, type ViewLook } from "./params";
-import type { Action } from "@mira/protocol";
+import { accentParams } from "./accentParams";
+import type { Accent, Action } from "@mira/protocol";
 import type { MouthShape, StagePhaseKind } from "../../state/performance";
 
 export { MOUTH_OPEN };
@@ -49,6 +50,12 @@ export type YunaParamInput = {
   heart?: boolean;
   /** S6g-A §3.2：hearts 特效已进入的秒数（0.4s 渐入用；未传直接给 1）。 */
   heartSinceSec?: number;
+  /** D47：这一句的语境表情（来自 beat.accent）；缺省 / null 表示无额外表情。 */
+  accent?: Accent | null;
+  /** D47：accent 开始以来的秒数（0.4s 渐入用；未传按 0）。 */
+  accentSinceSec?: number;
+  /** D47：beat 结束时 accent 已持续的秒数（0.4s 渐出用；未传表示 beat 尚未结束，不渐出）。 */
+  accentEndedSinceSec?: number;
   /** S6f §2：待机小动作的种子（0–1，调用方每 8–14s 换一个新的）；纯函数可测。 */
   seed?: number;
 };
@@ -202,17 +209,30 @@ export function petGradient(elapsedSec: number, durationSec: number): number {
 
 
 /**
- * S6f §2 禁止参数：任何输入下都必须为 0。
- * 飞头 / 飞宠 / 脸黑 / 黑眼圈 / 生气 + 水印授权文字 Param1–Param10。
+ * D47 修订：禁止参数只保留水印 / 授权文字 `Param1`–`Param10`（任何输入下都必须为 0）。
+ *
+ * `ParamFlyHead` / `ParamFlyHead2` / `ParamFlyPet` / `ParamBlack` / `ParamDark` / `ParamAngry` /
+ * `ParamLove` 已改为默认 0、由 accent 控制（`ParamFlyHead2` 始终 0，见 `ACCENT_KEYS`）。
  */
-export const FORBIDDEN_KEYS: readonly string[] = [
+export const FORBIDDEN_KEYS: readonly string[] = Array.from({ length: 10 }, (_, i) => `Param${i + 1}`);
+
+/**
+ * D47：由 accent 控制、但必须始终出现在输出里（默认 0）的键。
+ * accent 未激活时给 0，保证输出键集合恒定（S6a-fix1 §1）。
+ * 注意 `ParamFlyHead2` **不**由任何 accent 写，但仍在键集合里恒为 0。
+ */
+export const ACCENT_KEYS: readonly string[] = [
+  "ParamLove",
+  "ParamHeart",
+  "ParamShy",
+  "ParamAmazed",
+  "ParamCry",
+  "ParamAngry",
+  "ParamBlack",
+  "ParamDark",
   "ParamFlyHead",
   "ParamFlyHead2",
   "ParamFlyPet",
-  "ParamBlack",
-  "ParamDark",
-  "ParamAngry",
-  ...Array.from({ length: 10 }, (_, i) => `Param${i + 1}`),
 ];
 
 /* ------------------------------------------------------------------------------------------------
@@ -453,13 +473,15 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
 
   // §1（残留）：先给所有情绪键铺 0，再用当前情绪覆盖，保证输出键集合恒定。
   for (const name of EMOTION_KEYS) out[name] = 0;
+  // S6f §2：禁止参数与水印参数恒为 0（任何输入下）。
+  for (const name of FORBIDDEN_KEYS) out[name] = 0;
+  // D47：accent 控制的键始终出现（默认 0，保证键集合恒定）；`ParamFlyHead2` 恒为 0。
+  // 注意：必须在情绪覆盖**之前**铺 0，否则会把 warm 的 ParamShy / sad 的 ParamCry 覆盖掉。
+  for (const name of ACCENT_KEYS) out[name] = 0;
   // 情绪叠加（calm / neutral 为空表）；眼睛开合由 applyEyeOpen 处理，不被覆盖。
   for (const [name, value] of Object.entries(EMOTION_PARAMS[input.emotion])) {
     out[name] = value;
   }
-
-  // S6f §2：禁止参数与水印参数恒为 0（任何输入下）。
-  for (const name of FORBIDDEN_KEYS) out[name] = 0;
 
   // S6f §2：待机小动作（只剩「瞟向一侧」；由 idleSinceSec + seed 决定）。
   if (input.phase === "idle") {
@@ -513,6 +535,14 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
   // S6c-fix1 §8b.2：猫耳朵必须可见。`ParamEarOFF` 是「耳朵关闭」开关，任何情绪下都显式写 0
   //（S6g-A 删掉耳朵轻动后不再有参数覆盖它，这里保证不会残留隐藏值把耳朵关掉）。
   out.ParamEarOFF = 0;
+
+  // D47：accent 贡献与已有效果**取最大值**合并
+  // （warm 自带 ParamShy、sad 自带 ParamCry + 泪、首句 ParamAmazed、hearts 特效 ParamHeart）。
+  for (const [name, value] of Object.entries(
+    accentParams(input.accent ?? null, input.accentSinceSec ?? 0, input.accentEndedSinceSec),
+  )) {
+    out[name] = Math.max(out[name] ?? 0, value);
+  }
 
   // 后置条件：最后统一截断到舒适区间。
   for (const name of Object.keys(out)) {

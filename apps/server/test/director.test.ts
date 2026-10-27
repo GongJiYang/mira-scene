@@ -14,13 +14,14 @@ import { testPack } from "./helpers/pack";
 const NODE_VISUALS = testPack("yuna").nodeVisuals;
 
 function llmBeat(overrides: Partial<NormalizedLlmBeat> = {}): NormalizedLlmBeat {
-  return { say: "雨还在下。", emotion: "calm", suggest: null, advance: null, ...overrides };
+  return { say: "雨还在下。", emotion: "calm", suggest: null, advance: null, accent: null, ...overrides };
 }
 
 function context(overrides: Partial<DirectorContext> = {}): DirectorContext {
   return {
     scene: createInitialScene(),
     recentActions: [],
+    recentAccents: [],
     advancedThisTurn: false,
     beatsThisTurn: 0,
     nodeVisuals: NODE_VISUALS,
@@ -241,7 +242,10 @@ describe("导演层：迁移自 mockLlm 的 reveal 验收", () => {
     let ctx = context({ scene: sceneAt("probe") });
     const pack = testPack("yuna");
     const directed = composeBeats({ history: [], scene: ctx.scene, userText: "还不睡吗？", pack }, pack).flatMap((beat) => {
-      const result = direct({ ...beat, suggest: beat.suggest ?? null, advance: beat.advance ?? null }, ctx);
+      const result = direct(
+        { ...beat, suggest: beat.suggest ?? null, advance: beat.advance ?? null, accent: beat.accent ?? null },
+        ctx,
+      );
       ctx = result.ctx;
       return result.beats.map(({ beat: directedBeat }) => directedBeat);
     });
@@ -256,6 +260,45 @@ describe("导演层：迁移自 mockLlm 的 reveal 验收", () => {
     });
     expect(directed.some((beat) => beat.story?.advance === "reveal")).toBe(true);
     expect(ctx.scene.node).toBe("reveal");
+  });
+});
+
+describe("导演层：D47 语境表情 accent", () => {
+  it("accent 只放在切分后的第一个 beat，第二个 beat 为 null", () => {
+    const result = direct(
+      llmBeat({ say: "第一句很短，第二句稍微长一点点也没有关系。", accent: "shy" }),
+      context(),
+    );
+    expect(result.beats).toHaveLength(2);
+    expect(result.beats[0]?.beat.accent).toBe("shy");
+    expect(result.beats[1]?.beat.accent).toBeNull();
+  });
+
+  it("无 accent / 冲突 / 冷却时第一个 beat 的 accent 为 null", () => {
+    expect(direct(llmBeat(), context()).beats[0]?.beat.accent).toBeNull();
+    expect(direct(llmBeat({ emotion: "sad", accent: "love" }), context()).beats[0]?.beat.accent).toBeNull();
+    expect(
+      direct(llmBeat({ accent: "angry" }), context({ recentAccents: ["angry", null, null] })).beats[0]?.beat.accent,
+    ).toBeNull();
+  });
+
+  it("规则触发：suggested 为空且台词含熬夜 → dark", () => {
+    const result = direct(llmBeat({ say: "你又熬夜了。" }), context());
+    expect(result.beats[0]?.beat.accent).toBe("dark");
+  });
+
+  it("ctx.recentAccents 更新：保留最近 10 个 beat 的 accent（含 null）", () => {
+    const result = direct(llmBeat({ accent: "shy" }), context());
+    expect(result.ctx.recentAccents).toEqual(["shy"]);
+  });
+
+  it("recentAccents 只保留最近 10 个", () => {
+    const result = direct(
+      llmBeat({ accent: "shy" }),
+      context({ recentAccents: ["love", "heart", "cry", "angry", "black", "dark", "fly_head", "fly_pet", "amazed", "shy"] }),
+    );
+    expect(result.ctx.recentAccents).toHaveLength(10);
+    expect(result.ctx.recentAccents.at(-1)).not.toBe("shy");
   });
 });
 

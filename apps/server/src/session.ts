@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   isTurnIdAcceptable,
   parseLlmBeatLenient,
+  type Accent,
   type Action,
   type Beat,
   type ClientMessage,
@@ -64,6 +65,8 @@ type Session = {
   history: LLMHistoryEntry[];
   scene: SceneState;
   recentActions: readonly (Action | null)[];
+  /** D47：最近 10 个产出 beat 的 accent（含 null），供导演层 accent 冷却判定。 */
+  recentAccents: readonly (Accent | null)[];
   lastTurnId: number;
   /** 已接受的轮数（Q12 会话限额）。 */
   turnsUsed: number;
@@ -181,6 +184,7 @@ function fallbackBeat(session: Session, category: FallbackCategory): Beat {
     seq: 0,
     say: session.pack.fallback[category],
     emotion: "guarded",
+    accent: null,
     hands: session.scene.hands,
     action: null,
     camera: null,
@@ -345,6 +349,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       let directorCtx: DirectorContext = {
         scene: session.scene,
         recentActions: session.recentActions,
+        recentAccents: session.recentAccents,
         // 主动开口轮禁止推进剧情：不计入 trust（D32）。
         advancedThisTurn: isNudge,
         beatsThisTurn: 0,
@@ -383,6 +388,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
               seq: 0,
               say: session.pack.fallback.scene_busy,
               emotion: "guarded",
+              accent: null,
               hands: session.scene.hands,
               action: null,
               camera: null,
@@ -482,6 +488,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
           directorCtx = directed.ctx;
           session.scene = directorCtx.scene;
           session.recentActions = directorCtx.recentActions;
+          session.recentAccents = directorCtx.recentAccents;
 
           const suggested = parsed.llmBeat.suggest;
           const proposedAdvance = parsed.llmBeat.advance;
@@ -664,6 +671,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         history: [],
         scene: createInitialScene(),
         recentActions: [],
+        recentAccents: [],
         lastTurnId: 0,
         turnsUsed: 0,
         controller: null,
