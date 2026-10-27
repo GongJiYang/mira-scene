@@ -16,7 +16,7 @@ main 已经包含 S6c-fix1（换背景旁路修复 + 4 个界面问题）和 S6k
    - 点击打断
    - 设定为成年：22 岁、刚毕业的个人势主播
    - 输入框文案「发条弹幕，或按住麦克风说话」
-2b. **S6l-fix1**（`docs/tasks/s6l-fix1.md`，已写好）：①第二次换背景必失败（参考图路径映射到了不存在的 client/public/generated，实际在 var/generated；且失败不记日志）；②刷新后生成背景和用户弹幕丢失（服务端 `session` 消息只回 snapshot）。S6l 合并后立即派发（两批都改 `session.ts`/`messages.ts`，不能并行）。
+2b. **S6l-fix1**（`docs/tasks/s6l-fix1.md`，已写好）：①第二次换背景必失败（参考图路径映射到了不存在的 client/public/generated，实际在 var/generated；且失败不记日志）；②刷新后生成背景和用户弹幕丢失（服务端 `session` 消息只回 snapshot）；③思考时的反应音是 Fish 默认音色（「男声」），改为按角色用忧奈音色重录。S6l 合并后立即派发（两批都改 `session.ts`/`messages.ts`，不能并行）。
 3. **S6m 动作表面板（用户 2026-10-28 要求，取代单独的动作对比页）**：主界面放一个可收起的「动作表」（桌面在弹幕窗口顶部做可展开标签，手机收进右上角菜单，默认收起），列出情绪 6 种、accent 表情 10 种、现有动作 4 种（drink/glance/phone/show_item）、新动作（挥手 / 摇尾 / 抖耳 / 身体晃，**只做一版：参数法**，用户 2026-10-28 说不需要 A/B 对比；效果不好就砍）。点一下忧奈在舞台上演一遍；**只在本地预览**，不发服务端、不算一轮、不影响剧情；说话中置灰。样式按 S6u 设计稿，S6u 时在设计稿里补一张面板图。
 4. **S6u Web UI 重设计**：用户不喜欢 DeepSeek 的界面风格。**设计稿用户已批准（2026-10-28）**：https://claude.ai/artifact/JW9iubkP3j5wQQuxpZuqgA（「深夜推流」4 张：桌面说话中 / 手机说话中 / 手机按住说话 / 设计规范）。写 `docs/tasks/s6u.md` 时先用 Artifact read 取回源文件，把 token、布局、四态状态牌、字幕名牌、引导弹幕样式逐条抄进任务说明，cmd 按稿实现。
 5. **冻结点**

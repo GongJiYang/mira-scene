@@ -1,4 +1,4 @@
-# S6l-fix1 任务说明：第二次换背景必失败 + 刷新后恢复生成背景和聊天记录
+# S6l-fix1 任务说明：第二次换背景必失败 + 刷新恢复 + 反应音音色
 
 > 来源：用户 2026-10-28 实测反馈「生成的背景和聊天记录一刷新就没了」。Claude 已核实原因。执行者：Command Code（deepseek-v4-flash）。在合并了 S6l 的 main 上做。
 > 关卡 1–5 结论见末尾（小修，Claude 决定）。
@@ -34,6 +34,14 @@
 - 客户端单测：reducer / store 收到带 background、transcript 的 session 消息后，背景 url 正确、弹幕里有用户的历史消息且不重复。
 - e2e（Mock）：发一条消息 → 触发换背景并等到成功 → `page.reload()` → 断言背景仍是生成图、用户刚发的弹幕仍在、剧情进度不变。
 - `pnpm test`、`pnpm typecheck` 全绿；`PROVIDER_MODE=mock pnpm smoke` 通过。
+
+## §5 思考时的反应音是「男声」（用户实测：说话前偶尔冒出很短的陌生音色）
+- 根因（Claude 已核实）：`apps/client/public/sfx/react-{hmm,mm,ah}.mp3` 是 S3 时 `apps/server/scripts/make-sfx.ts` 用 `FISH_VOICE_ID` 合成的；本机 `.env` 里 `FISH_VOICE_ID` 为空（只有 `FISH_VOICE_ID_YUNA`），所以没传 `reference_id`，用了 Fish 默认音色。反应音全局共用、不分角色（`core/reactionSfx.ts` 的 `REACTION_SFX_URLS`）。
+- 修法：
+  - 反应音按角色：`apps/client/public/characters/<id>/sfx/react-*.mp3`，客户端按当前角色取 URL；某角色没有反应音时**不播**（不回退到全局文件）。删除旧的全局 `public/sfx/react-*.mp3` 及其引用。
+  - `make-sfx.ts` 加 `--character <id>`，音色用该角色的 `FISH_VOICE_ID_<ID>`（与会话层 `resolveVoiceId` 同一规则，复用而不是重写）；音色变量为空时**报错退出**，不得不传 `reference_id`。
+  - 运行一次 `pnpm --filter @mira/server exec tsx scripts/make-sfx.ts --character yuna` 重新合成（真实 Fish 调用，只在这里）；文本保持原来三条不变。Fish 报错就停下写报告。
+- 测试：单测——反应音 URL 随角色变化、无反应音的角色 `arm()` 不播放；脚本在音色变量为空时退出码非 0（用注入 env 测，不发网络）。
 
 ## §4 报告 `docs/tasks/s6l-fix1-report.md`
 
