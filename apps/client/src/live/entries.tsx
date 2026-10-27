@@ -9,6 +9,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { UI_TEXT } from "./uiText";
+import type { StagePhase } from "../view/useStageViewModel";
+import { ActionPanelMobile } from "./ActionPanel";
 
 /** 文档窗口默认打开的文档（DocsApp 支持 `?docs=1&doc=<path>`）。 */
 export const DOCS_URL = "?docs=1&doc=docs/architecture/00-%E5%AF%BC%E8%AF%BB.md";
@@ -29,9 +31,11 @@ export function LiveEntries() {
   );
 }
 
-/** 手机端可展开菜单：一个「☰」按钮 + 展开后的入口链接。 */
-export function MobileMenu() {
+/** 手机端可展开菜单：一个「☰」按钮 + 展开后的入口链接 + S6m §3 的「动作表」项。 */
+export function MobileMenu({ phase }: { phase: StagePhase }) {
   const [open, setOpen] = useState(false);
+  // S6m §3：菜单里的「动作表」点开为底部抽屉。
+  const [actionOpen, setActionOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // 点击外部收起菜单。
@@ -45,27 +49,56 @@ export function MobileMenu() {
   }, [open]);
 
   return (
-    <div className="live-mobile-menu" data-testid="mobile-menu" ref={rootRef}>
-      <button
-        type="button"
-        className="live-mobile-mic"
-        data-testid="mobile-menu-toggle"
-        aria-label={UI_TEXT.menu}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        ☰
-      </button>
-      {open && (
-        <div className="live-mobile-menu-panel" data-testid="mobile-menu-panel">
-          <a className="live-entry" data-testid="entry-docs" href={DOCS_URL}>
-            {UI_TEXT.docs}
-          </a>
-          <a className="live-entry" data-testid="entry-obs" href={OBS_URL}>
-            {UI_TEXT.obs}
-          </a>
+    <>
+      <div className="live-mobile-menu" data-testid="mobile-menu" ref={rootRef}>
+        <button
+          type="button"
+          className="live-mobile-mic"
+          data-testid="mobile-menu-toggle"
+          aria-label={UI_TEXT.menu}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          ☰
+        </button>
+        {open && (
+          <div className="live-mobile-menu-panel" data-testid="mobile-menu-panel">
+            {/* S6m §3：打开动作表（底部抽屉）。 */}
+            <button
+              type="button"
+              className="live-entry"
+              data-testid="action-toggle"
+              onClick={() => {
+                setActionOpen(true);
+                setOpen(false);
+              }}
+            >
+              {UI_TEXT.actionPanel}
+            </button>
+            <a className="live-entry" data-testid="entry-docs" href={DOCS_URL}>
+              {UI_TEXT.docs}
+            </a>
+            <a className="live-entry" data-testid="entry-obs" href={OBS_URL}>
+              {UI_TEXT.obs}
+            </a>
+          </div>
+        )}
+      </div>
+      {/* S6m §3：手机底部抽屉（含关闭按钮）。 */}
+      {actionOpen && (
+        <div className="action-panel-mobile-wrap" data-no-stage-tap>
+          <button
+            type="button"
+            className="action-panel-close"
+            data-testid="action-panel-close"
+            aria-label={UI_TEXT.close}
+            onClick={() => setActionOpen(false)}
+          >
+            {UI_TEXT.close}
+          </button>
+          <ActionPanelMobile phase={phase} open={actionOpen} />
         </div>
       )}
-    </div>
+    </>
   );
 }

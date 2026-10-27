@@ -925,11 +925,14 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       return;
     }
     // S6l-fix2 §6：服务端限量 poke / gift——冷却内重复请求直接忽略（不起新轮、不扣轮数、记日志）。
+    // S6m §0：但客户端发出 poke / gift 时已 beginTurn 进入 thinking，等不到 turn_end 会一直卡着；
+    // 因此被限流时仍回一条**无 beat**的 turn_end{reason:"throttled"}，客户端按现有规则回 idle。
     const kind = message.payload.kind;
     if (kind === "poke" || kind === "gift") {
       const lastAt = kind === "poke" ? session.lastPokeAt : session.lastGiftAt;
       if (!throttleEvent(lastAt, clock(), kind)) {
         logFor(session, message.turnId, "input_throttled", { kind });
+        session.send?.(buildEnvelope(session, message.turnId, "turn_end", { reason: "throttled" }));
         return;
       }
       if (kind === "poke") session.lastPokeAt = clock();
