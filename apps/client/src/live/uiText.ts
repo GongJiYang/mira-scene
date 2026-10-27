@@ -53,6 +53,10 @@ export const UI_TEXT = {
   viewerFallback: "观众",
   /** S6m §3：动作表入口 / 面板标题。 */
   actionPanel: "动作表",
+  /** S6m §3：动作表入口副标题。 */
+  actionPanelHint: "点一下，她就做一遍",
+  /** S6m §3：动作表底部说明。 */
+  actionPanelNote: "只在你这里预览，不会算作对话。她说话时按钮会暂时变灰。",
   /** S6m §3：忧奈在思考 / 说话时动作表整组禁用，禁用原因。 */
   actionSpeaking: "她在说话",
   /** S6m §3：动作表分组标题。 */
@@ -60,6 +64,89 @@ export const UI_TEXT = {
   actionGroupAccent: "表情",
   actionGroupAction: "动作",
   actionGroupLocal: "新动作",
+
+  // ---- S6u §2/§3：状态牌（读 phase） ----
+  /** 待机。 */
+  chipIdle: "发呆中",
+  /** 倾听。 */
+  chipListening: "在听你说",
+  /** 思考。 */
+  chipThinking: "想一想",
+  /** 说话。 */
+  chipSpeaking: "说话中",
+  /** 说话态状态牌的英文系统标签。 */
+  stateSpeakingEn: "SPEAKING",
+
+  // ---- S6u §2/§3：桌面顶栏 / 字幕 / 弹幕 ----
+  /** 观看人数占位（S6u：静态占位，无真实数据源）。 */
+  viewerCount: "1 viewer",
+  /** 开播时长占位（S6u：静态占位，无真实数据源）。 */
+  durationPlaceholder: "02:14:37",
+  /** 说话时字幕下方的打断提示。 */
+  interruptHint: "点画面任意位置可以打断她",
+  /** 兜底台词的名牌（琥珀样式）。 */
+  fallbackSpeaker: "忧奈 · 网络卡了",
+  /** 主播名牌（说话中）。 */
+  speakerName: "忧奈",
+  /** 用户自己的弹幕昵称。 */
+  you: "你",
+  /** 弹幕窗口副标题（系统数字）。 */
+  chatOnline: (n: number) => `CHAT · ${n} online`,
+  /** 引导弹幕的小前缀。 */
+  guidePrefix: "↳ ",
+  /** 系统弹幕（居中、暗色）。 */
+  systemDanmaku: (text: string) => `— ${text} —`,
+
+  // ---- S6u §3：手机录音面板 ----
+  /** 录音面板的松开发送提示。 */
+  recordingSend: "松开发送",
+} as const;
+
+/**
+ * D49 / S6n §5 → S6u §4：设置面板文案。
+ * S6u 起集中到 `uiText.ts`（铁律 4：UI 文案只在这里）；`settings.ts` 再导出以保持既有引用。
+ */
+export const SETTINGS_TEXT = {
+  /** 入口按钮 / 面板标题。 */
+  title: "设置",
+  modeGroup: "模式",
+  modeAuto: "自动",
+  modeMock: "Mock",
+  modeReal: "真实",
+  /** 模式说明（自动规则 + 当前生效）。 */
+  modeNote: "自动：有聊天和语音的 Key 就用真实模型，否则用 Mock。",
+  modeNoteCurrent: "当前：",
+  /** 顶栏模式小标签。 */
+  badgeMock: "Mock",
+  badgeReal: "真实",
+  llmGroup: "聊天",
+  voiceGroup: "语音",
+  imageGroup: "生图",
+  llmProvider: "DeepSeek",
+  voiceProvider: "Fish Audio",
+  imageProvider: "OpenAI 兼容",
+  deepseekKey: "填你自己的 API Key（可留空）",
+  fishKey: "填你自己的 API Key（可留空）",
+  fishVoiceId: "音色 ID（可选，留空用忧奈的音色）",
+  imageKey: "API Key",
+  imageBaseUrl: "Base URL",
+  imageModel: "模型（可选）",
+  show: "显示",
+  hide: "隐藏",
+  save: "保存并重新连接",
+  clear: "清除我的 Key",
+  /** 来源标签（来自 session.capabilities）。 */
+  sourceServer: "服务器已配置",
+  sourceUser: "使用你填的",
+  sourceNone: "未配置",
+  /** 生图未配置时的补充说明。 */
+  imageNotConfiguredNote: "未配置 · 换背景用示例图",
+  /** §5：一行安全说明。 */
+  privacyNote: "Key 只保存在这台设备的浏览器里，每次连接时发给服务器使用，服务器不保存。",
+  /** §2：real 缺 Key 时客户端提示（自动回落 mock）。 */
+  realUnavailable: "真实模式缺少聊天 / 语音的 Key，已切回 Mock",
+  /** §3：Fish Key 用不了当前音色时的客户端提示（引导填自己的音色 ID）。 */
+  voiceUnavailable: "这个 Fish Key 用不了忧奈的音色，可以在设置里填自己的音色 ID",
 } as const;
 
 /** S6m §3：动作表按钮文案（按 id → 中文名）。 */

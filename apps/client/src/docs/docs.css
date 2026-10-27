@@ -1,15 +1,15 @@
-/* 开发文档窗口（S6d §2）。颜色用 CSS 变量，深色背景 + 粉紫，与直播间风格协调。 */
+/* 开发文档窗口（S6d §2）。颜色统一到 S6u 设计 token（深色背景 + 淡紫，与直播间风格协调）。 */
 
 :root {
-  --docs-bg: #0d0a15;
-  --docs-panel: #171226;
-  --docs-panel-2: #1e1733;
-  --docs-border: rgba(180, 150, 255, 0.18);
-  --docs-text: #e9e4f5;
-  --docs-text-dim: #a99fc4;
-  --docs-accent: #c08bff;
-  --docs-accent-2: #ff86c8;
-  --docs-code-bg: #120e20;
+  --docs-bg: var(--ink);
+  --docs-panel: var(--panel);
+  --docs-panel-2: var(--panel-2);
+  --docs-border: var(--line);
+  --docs-text: var(--text);
+  --docs-text-dim: var(--muted);
+  --docs-accent: var(--accent);
+  --docs-accent-2: var(--live);
+  --docs-code-bg: var(--ink);
 }
 
 .docs-root {
@@ -74,7 +74,7 @@
   padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid var(--docs-border);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(201, 167, 255, 0.08);
   color: var(--docs-text);
   font-size: 0.95rem;
 }
@@ -83,7 +83,7 @@
   padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid var(--docs-border);
-  background: rgba(192, 139, 255, 0.18);
+  background: rgba(201, 167, 255, 0.18);
   color: var(--docs-text);
   cursor: pointer;
 }
@@ -146,12 +146,12 @@
 }
 
 .docs-tree-item:hover {
-  background: rgba(192, 139, 255, 0.12);
+  background: rgba(201, 167, 255, 0.12);
   color: var(--docs-text);
 }
 
 .docs-tree-item[data-active="1"] {
-  background: linear-gradient(90deg, rgba(192, 139, 255, 0.28), rgba(255, 134, 200, 0.18));
+  background: linear-gradient(90deg, rgba(201, 167, 255, 0.28), rgba(255, 95, 162, 0.18));
   color: var(--docs-text);
   font-weight: 600;
 }
@@ -192,7 +192,7 @@
 
 .docs-toc a:hover {
   color: var(--docs-accent);
-  background: rgba(192, 139, 255, 0.1);
+  background: rgba(201, 167, 255, 0.1);
 }
 
 .docs-toc li[data-level="1"] a { font-weight: 600; color: var(--docs-text); }
@@ -272,7 +272,7 @@
   margin: 1em 0;
   padding: 4px 16px;
   border-left: 3px solid var(--docs-accent);
-  background: rgba(192, 139, 255, 0.07);
+  background: rgba(201, 167, 255, 0.07);
   color: var(--docs-text-dim);
 }
 

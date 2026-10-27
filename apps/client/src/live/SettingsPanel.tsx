@@ -35,12 +35,12 @@ function SecretInput({ value, placeholder, onChange }: { value: string; placehol
   );
 }
 
-/** 一组 Key 的名称 + 来源标签。 */
-function SourceLabel({ source }: { source: CapabilitySource | undefined }) {
+/** 一组 Key 的名称 + 来源标签（`caps` 来自 session.capabilities；未连接时不显示）。 */
+function SourceLabel({ source, note }: { source: CapabilitySource | undefined; note?: string }) {
   if (source === undefined) return null;
   return (
     <span className="settings-source" data-source={source} data-testid={`settings-source-${source}`}>
-      {capabilityLabel(source)}
+      {note !== undefined && source === "none" ? note : capabilityLabel(source)}
     </span>
   );
 }
@@ -60,15 +60,21 @@ export function SettingsBody({ vm, onClose }: { vm: StageViewModel; onClose: () 
 
   const set = (patch: Partial<Settings>): void => setDraft((current) => ({ ...current, ...patch }));
 
+  // 当前生效模式的中文（自动判定的结果：sessionMode）。
+  const currentModeLabel =
+    vm.sessionMode === "real" ? SETTINGS_TEXT.modeReal : vm.sessionMode === "mock" ? SETTINGS_TEXT.modeMock : "—";
+
   return (
     <div className="settings-body" data-testid="settings-body">
       <div className="settings-row">
         <span className="settings-label">{SETTINGS_TEXT.modeGroup}</span>
-        <div className="settings-modes" data-testid="settings-mode">
+        <div className="settings-modes" data-testid="settings-mode" role="radiogroup" aria-label={SETTINGS_TEXT.modeGroup}>
           {MODES.map((mode) => (
             <button
               key={mode.value}
               type="button"
+              role="radio"
+              aria-checked={draft.mode === mode.value}
               className="settings-mode"
               data-testid={`settings-mode-${mode.value}`}
               data-active={draft.mode === mode.value}
@@ -78,11 +84,16 @@ export function SettingsBody({ vm, onClose }: { vm: StageViewModel; onClose: () 
             </button>
           ))}
         </div>
+        <p className="settings-mode-note">
+          {`${SETTINGS_TEXT.modeNote}${SETTINGS_TEXT.modeNoteCurrent}`}
+          <span className="settings-mode-note-current">{currentModeLabel}</span>
+        </p>
       </div>
 
       <div className="settings-group">
         <div className="settings-group-head">
           <span className="settings-label">{SETTINGS_TEXT.llmGroup}</span>
+          <span className="settings-provider">{SETTINGS_TEXT.llmProvider}</span>
           <SourceLabel source={caps?.llm} />
         </div>
         <SecretInput value={draft.deepseekKey} placeholder={SETTINGS_TEXT.deepseekKey} onChange={(value) => set({ deepseekKey: value })} />
@@ -91,6 +102,7 @@ export function SettingsBody({ vm, onClose }: { vm: StageViewModel; onClose: () 
       <div className="settings-group">
         <div className="settings-group-head">
           <span className="settings-label">{SETTINGS_TEXT.voiceGroup}</span>
+          <span className="settings-provider">{SETTINGS_TEXT.voiceProvider}</span>
           <SourceLabel source={caps?.voice} />
         </div>
         <SecretInput value={draft.fishKey} placeholder={SETTINGS_TEXT.fishKey} onChange={(value) => set({ fishKey: value })} />
@@ -106,33 +118,36 @@ export function SettingsBody({ vm, onClose }: { vm: StageViewModel; onClose: () 
       <div className="settings-group">
         <div className="settings-group-head">
           <span className="settings-label">{SETTINGS_TEXT.imageGroup}</span>
-          <SourceLabel source={caps?.image} />
+          <span className="settings-provider">{SETTINGS_TEXT.imageProvider}</span>
+          <SourceLabel source={caps?.image} note={SETTINGS_TEXT.imageNotConfiguredNote} />
         </div>
         <SecretInput value={draft.imageKey} placeholder={SETTINGS_TEXT.imageKey} onChange={(value) => set({ imageKey: value })} />
-        <input
-          type="text"
-          className="settings-text"
-          value={draft.imageBaseUrl}
-          placeholder={SETTINGS_TEXT.imageBaseUrl}
-          onChange={(event) => set({ imageBaseUrl: event.target.value })}
-        />
-        <input
-          type="text"
-          className="settings-text"
-          value={draft.imageModel}
-          placeholder={SETTINGS_TEXT.imageModel}
-          onChange={(event) => set({ imageModel: event.target.value })}
-        />
+        <div className="settings-grid-2">
+          <input
+            type="text"
+            className="settings-text"
+            value={draft.imageBaseUrl}
+            placeholder={SETTINGS_TEXT.imageBaseUrl}
+            onChange={(event) => set({ imageBaseUrl: event.target.value })}
+          />
+          <input
+            type="text"
+            className="settings-text"
+            value={draft.imageModel}
+            placeholder={SETTINGS_TEXT.imageModel}
+            onChange={(event) => set({ imageModel: event.target.value })}
+          />
+        </div>
       </div>
 
       <p className="settings-note">{SETTINGS_TEXT.privacyNote}</p>
 
       <div className="settings-actions">
-        <button type="button" className="settings-save" data-testid="settings-save" onClick={() => { vm.intents.saveSettings(draft); onClose(); }}>
-          {SETTINGS_TEXT.save}
-        </button>
         <button type="button" className="settings-clear" data-testid="settings-clear" onClick={() => { vm.intents.clearKeys(); setDraft((current) => ({ ...current, deepseekKey: "", fishKey: "", fishVoiceId: "", imageKey: "", imageBaseUrl: "", imageModel: "" })); }}>
           {SETTINGS_TEXT.clear}
+        </button>
+        <button type="button" className="settings-save" data-testid="settings-save" onClick={() => { vm.intents.saveSettings(draft); onClose(); }}>
+          {SETTINGS_TEXT.save}
         </button>
       </div>
     </div>

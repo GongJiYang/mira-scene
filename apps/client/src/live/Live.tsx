@@ -1,9 +1,8 @@
 /**
- * 直播间 UI v1（S6b §4）。
+ * 直播间 UI v2（S6u「深夜推流」）。
  *
  * 约束（D14）：**只读** `useStageViewModel()`；不直接 import store / connection / audio。
- * 布局：宽 ≥ 900px 桌面（仿 Twitch），否则手机（仿 TikTok / Instagram 直播）。
- * 风格参考《主播女孩重度依赖》：粉紫配色、像素字体点缀、老式系统窗口边框（只借风格）。
+ * 布局：宽 ≥ 900px 桌面（舞台窗口 + 输入条 / 右侧弹幕窗口），否则手机（竖屏全屏）。
  */
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useStageViewModel } from "../view/useStageViewModel";
@@ -16,6 +15,7 @@ import { LiveEntries, MobileMenu } from "./entries";
 import { ActionPanelDesktop } from "./ActionPanel";
 import { ModeBadge, SettingsDialogDesktop } from "./SettingsPanel";
 import { UI_TEXT } from "./uiText";
+import { stateChipFor } from "./stateChip";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
 import { useSceneStatusStore } from "./scene/status";
@@ -23,6 +23,7 @@ import { drainRestoredUserLines, useSessionRestoreStore } from "./sessionRestore
 import { progressDots } from "./storyProgress";
 import { useGuideScheduler, useInteractionCooldowns, resolveTap } from "./interactionHooks";
 import { isStageTapTarget, resolveStageTap } from "./interaction";
+import type { StagePhase } from "../view/useStageViewModel";
 import "./live.css";
 import "../obs/obs.css";
 
@@ -49,8 +50,8 @@ function useLayout(): LiveLayout {
 }
 
 /**
- * S6l §2：直播间顶部剧情阶段——`streamTitle` + 4 个进度点（当前节点高亮）。
- * 只认服务端下发的当前节点；节点切换时 0.3s 淡入。
+ * S6l §2 / S6u §2：剧情阶段——`streamTitle` + 4 个进度点（当前节点高亮）。
+ * 只认服务端下发的当前节点；节点切换时 0.3s 淡入。S6u：移入舞台标题栏。
  */
 function StoryHeader({ characterId, node }: { characterId: string; node: string }) {
   const character = characterOrDefault(characterId);
@@ -71,8 +72,42 @@ function StoryHeader({ characterId, node }: { characterId: string; node: string 
 }
 
 /**
- * S6l §3：一条弹幕。观众引导弹幕带随机昵称、可点（hover / 按下态 + 小提示「点一下替你说」）；
- * 用户弹幕与语音转写沿用原样式。
+ * S6u §2/§3：舞台右上角状态牌（读 phase）。映射逻辑在纯函数 `stateChipFor`。
+ * 四态：待机灰点 / 倾听蓝耳朵 / 思考琥珀三点 / 说话淡紫声波柱。
+ */
+function StateChip({ phase }: { phase: StagePhase }) {
+  const { tone, label } = stateChipFor(phase);
+  return (
+    <div className="live-state-chip" data-testid="state-chip" data-tone={tone} aria-live="polite">
+      {tone === "idle" && <span className="live-state-dot" aria-hidden />}
+      {tone === "listen" && (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+          <path d="M6 14a6 6 0 1 1 12 0c0 3-3 3-3 6a3 3 0 0 1-6 0" />
+        </svg>
+      )}
+      {tone === "think" && (
+        <span className="live-state-think" aria-hidden>
+          ···
+        </span>
+      )}
+      {tone === "speak" && (
+        <span className="live-state-wave" aria-hidden>
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
+      <span className="live-state-label">{label}</span>
+      {tone === "speak" && <span className="live-state-en">{UI_TEXT.stateSpeakingEn}</span>}
+    </div>
+  );
+}
+
+/**
+ * S6l §3 / S6u §2：一条弹幕。
+ * 观众引导弹幕（guide）：彩色昵称 + 虚线淡紫框 + 「↳ 点一下替你说」，可点。
+ * 用户弹幕（user）：淡紫粗体昵称「你」。语音转写（transcript）：暗色。
  */
 function DanmakuItem({ item, onGuideClick, style }: { item: Danmaku; onGuideClick?: (text: string) => void; style?: React.CSSProperties }) {
   if (item.kind === "guide") {
@@ -87,16 +122,58 @@ function DanmakuItem({ item, onGuideClick, style }: { item: Danmaku; onGuideClic
         title={UI_TEXT.guideHint}
         onClick={() => onGuideClick?.(item.text)}
       >
-        <span className="live-danmaku-nick">{item.nickname ?? UI_TEXT.viewerFallback}:</span>
+        <span className="live-danmaku-nick">{item.nickname ?? UI_TEXT.viewerFallback}</span>
         <span className="live-danmaku-text">{item.text}</span>
-        <span className="live-danmaku-hint">{UI_TEXT.guideHint}</span>
+        <span className="live-danmaku-hint">{`${UI_TEXT.guidePrefix}${UI_TEXT.guideHint}`}</span>
       </button>
+    );
+  }
+  if (item.kind === "transcript") {
+    return (
+      <p className="live-danmaku live-danmaku-system" data-kind="transcript" style={style}>
+        {UI_TEXT.systemDanmaku(item.text)}
+      </p>
     );
   }
   return (
     <p className="live-danmaku" data-kind={item.kind} style={style}>
-      {item.text}
+      <span className="live-danmaku-nick live-danmaku-nick-user">{UI_TEXT.you}</span>
+      <span className="live-danmaku-text">{item.text}</span>
     </p>
+  );
+}
+
+/**
+ * S6u §2：字幕对话框（底部居中，宽 ≤ 680）。
+ * 「忧奈」名牌 + 正文；兜底台词（fallbackSubtitle）用琥珀名牌「忧奈 · 网络卡了」。
+ * 逐字进度：现状没有该状态，整句亮显示（不为视觉改字幕逻辑）。
+ * 说话时下方显示一行小字「点画面任意位置可以打断她」。
+ */
+function SubtitleBox({ subtitle, fallback, thinking, speaking }: { subtitle: string; fallback: boolean; thinking: boolean; speaking: boolean }) {
+  if (subtitle === "" && !thinking) return null;
+  return (
+    <div className="live-subtitle-box" data-no-stage-tap>
+      <div className="live-subtitle-name" data-fallback={fallback ? "1" : "0"}>
+        {fallback ? UI_TEXT.fallbackSpeaker : UI_TEXT.speakerName}
+      </div>
+      <p className="live-subtitle" data-testid="subtitle" data-fallback={fallback ? "1" : "0"}>
+        {subtitle}
+        {/* S6f §2：思考时字幕区出现「……」三点动画（不是聊天气泡，不改字幕区结构）。 */}
+        {thinking && (
+          <span className="live-thinking-dots" data-testid="thinking-dots" aria-hidden>
+            <i>.</i>
+            <i>.</i>
+            <i>.</i>
+          </span>
+        )}
+      </p>
+      {/* S6u §2：说话时字幕下方小字提示。 */}
+      {speaking && (
+        <div className="live-interrupt-hint" data-testid="interrupt-hint">
+          {UI_TEXT.interruptHint}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -259,122 +336,132 @@ export function Live() {
     return (
       <main className="live-root" data-testid="live" data-layout="desktop" data-phase={vm.phase} data-connection={vm.connection} data-accent={vm.visual.accent ?? ""}>
         <div className="live-desktop">
-          <nav className="live-sidebar" aria-label={UI_TEXT.channels}>
-            {VISIBLE_CHARACTERS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="live-channel"
-                data-testid={`channel-${item.id}`}
-                data-active={item.id === character.id}
-                aria-label={item.displayName}
-                onClick={() => switchTo(item.id)}
-              >
-                <img src={item.avatar} alt="" />
-              </button>
-            ))}
-          </nav>
+          {/* 舞台窗口：40px 标题栏（主播信息 + 剧情进度 + 入口） + 舞台体 */}
+          <section className="live-stage-window" aria-label="直播画面">
+            <div className="live-stage-bar" data-testid="stage-bar" data-no-stage-tap>
+              {/* D43：频道栏只留忧奈；按钮从旧左侧栏迁到标题栏头像位（保 testid）。 */}
+              {VISIBLE_CHARACTERS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="live-channel"
+                  data-testid={`channel-${item.id}`}
+                  data-active={item.id === character.id}
+                  aria-label={item.displayName}
+                  onClick={() => switchTo(item.id)}
+                >
+                  <img src={item.avatar} alt="" />
+                </button>
+              ))}
+              <span className="live-stage-name" data-testid="live-name">
+                {character.displayName}
+              </span>
+              <span className="live-badge">{UI_TEXT.live}</span>
+              <span className="live-stage-meta">
+                {`${UI_TEXT.viewerCount} · ${UI_TEXT.durationPlaceholder}`}
+              </span>
+              <span className="live-stage-spacer" />
+              {/* S6l §2：剧情标题 + 进度点（移入标题栏）。 */}
+              <StoryHeader characterId={character.id} node={vm.node} />
+              <span className="live-stage-divider" />
+              {/* S6g-A §5：桌面顶栏右侧的「文档」「观测」入口。 */}
+              <LiveEntries />
+              {/* D49 / S6n §5：桌面顶栏「设置」入口（对话框）。 */}
+              <SettingsDialogDesktop vm={vm} />
+              {/* D49 / S6n §5：顶栏模式小标签（Mock / 真实）。 */}
+              <ModeBadge vm={vm} />
+              <FirstAudioHud />
+            </div>
 
-          <section className="live-main">
             <div className="live-stage" data-testid="live-stage">
               <StageTapLayer onTap={onStageTap} />
-              {/* S6l §2：顶部剧情阶段（标题 + 进度点）。 */}
-              <StoryHeader characterId={character.id} node={vm.node} />
               {stage}
               {/* S6c §5：换背景转场状态条（右上角） */}
               <SceneStatusBar />
-              <div className="live-hud" data-no-stage-tap>
-                <span className="live-badge">{UI_TEXT.live}</span>
-                <span className="live-hud-name" data-testid="live-name">
-                  {character.displayName}
-                </span>
-                <span className="live-hud-viewers">{UI_TEXT.viewers}</span>
-                <FirstAudioHud />
-                {/* D49 / S6n §5：顶栏模式小标签（Mock / 真实）。 */}
-                <ModeBadge vm={vm} />
-                {/* S6g-A §5：桌面顶栏右侧的「文档」「观测」入口。 */}
-                <LiveEntries />
-                {/* D49 / S6n §5：桌面顶栏「设置」入口（对话框）。 */}
-                <SettingsDialogDesktop vm={vm} />
-              </div>
+              {/* S6u §2：状态牌（读 phase）。 */}
+              <StateChip phase={vm.phase} />
               {vm.error && vm.debugMode && (
                 <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>
               )}
+              {/* S6u §2：字幕对话框（底部居中）。 */}
+              <SubtitleBox subtitle={subtitle} fallback={vm.subtitle === null && vm.fallbackSubtitle !== null} thinking={vm.phase === "thinking"} speaking={vm.phase === "speaking"} />
             </div>
-            <p className="live-subtitle" data-testid="subtitle" data-no-stage-tap>
-              {subtitle}
-              {/* S6f §2：思考时字幕区出现「……」三点动画（不是聊天气泡，不改字幕区结构）。 */}
-              {vm.phase === "thinking" && (
-                <span className="live-thinking-dots" data-testid="thinking-dots" aria-hidden>
-                  <i>.</i>
-                  <i>.</i>
-                  <i>.</i>
-                </span>
-              )}
-            </p>
           </section>
 
+          {/* 输入条 */}
+          <form
+            className="live-input-bar"
+            data-no-stage-tap
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit();
+            }}
+          >
+            <input
+              className="live-input"
+              data-testid="text-input"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={UI_TEXT.inputPlaceholder}
+              aria-label={UI_TEXT.inputPlaceholder}
+            />
+            <button
+              type="button"
+              className="live-gift"
+              data-testid="gift"
+              aria-label={UI_TEXT.gift}
+              title={UI_TEXT.gift}
+              onClick={cooldowns.gift}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="8" width="18" height="13" rx="2" />
+                <path d="M12 8v13M3 12h18M12 8c-1.5-3-5-3.5-5-1.2C7 8 9.5 8 12 8zM12 8c1.5-3 5-3.5 5-1.2C17 8 14.5 8 12 8z" />
+              </svg>
+            </button>
+            <button type="submit" className="live-send">
+              {UI_TEXT.send}
+            </button>
+            <button
+              type="button"
+              className="live-ptt-pill"
+              data-testid="ptt"
+              data-active={vm.phase === "listening"}
+              aria-label={UI_TEXT.mic}
+              onPointerDown={startPtt}
+              onPointerUp={endPtt}
+              onPointerLeave={endPtt}
+              onPointerCancel={endPtt}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+              {UI_TEXT.mic}
+            </button>
+            {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
+            {listening && (
+              <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
+                <i />
+                <i />
+                <i />
+                <span className="live-wave-label">{UI_TEXT.listening}</span>
+              </span>
+            )}
+          </form>
+
+          {/* 弹幕窗口（占两行） */}
           <aside className="live-chat">
+            <div className="live-chat-bar">
+              <span className="live-chat-bar-title">{UI_TEXT.chat}</span>
+              <span className="live-chat-bar-meta">{UI_TEXT.chatOnline(danmaku.items.length)}</span>
+            </div>
             {/* S6m §3：桌面在弹幕窗口顶部做一个可展开的「动作表」标签（默认收起）。 */}
             <ActionPanelDesktop phase={vm.phase} />
-            <h2 className="live-chat-title">{UI_TEXT.chat}</h2>
             <div className="live-chat-list" data-testid="danmaku-list">
               {danmaku.items.map((item) => (
                 <DanmakuItem key={item.id} item={item} onGuideClick={sendGuide} />
               ))}
             </div>
-            <form
-              className="live-compose"
-              data-no-stage-tap
-              onSubmit={(event) => {
-                event.preventDefault();
-                submit();
-              }}
-            >
-              <input
-                className="live-input"
-                data-testid="text-input"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder={UI_TEXT.inputPlaceholder}
-                aria-label={UI_TEXT.inputPlaceholder}
-              />
-              <button type="submit" className="live-button">
-                {UI_TEXT.send}
-              </button>
-              <button
-                type="button"
-                className="live-button"
-                data-testid="gift"
-                aria-label={UI_TEXT.gift}
-                title={UI_TEXT.gift}
-                onClick={cooldowns.gift}
-              >
-                🎁
-              </button>
-              <button
-                type="button"
-                className="live-button"
-                data-testid="ptt"
-                data-active={vm.phase === "listening"}
-                aria-label={UI_TEXT.mic}
-                onPointerDown={startPtt}
-                onPointerUp={endPtt}
-                onPointerLeave={endPtt}
-                onPointerCancel={endPtt}
-              >
-                ●
-              </button>
-              {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
-              {listening && (
-                <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
-                  <i />
-                  <i />
-                  <i />
-                  <span className="live-wave-label">{UI_TEXT.listening}</span>
-                </span>
-              )}
-            </form>
           </aside>
         </div>
       </main>
@@ -496,6 +583,23 @@ function MobileLive(props: MobileProps) {
   // S6l §5/§6：滑动切频道与点击打架——短按（无明显位移）才当作点击交给 tap 层。
   const tap = useRef<{ x: number; y: number; t: number } | null>(null);
 
+  // S6u §3：录音面板计时（连续 0 起的本地计时，VT323 显示 mm:ss）。无上滑取消功能。
+  const [recordMs, setRecordMs] = useState(0);
+  const recordStartRef = useRef(0);
+  useEffect(() => {
+    if (!listening) {
+      setRecordMs(0);
+      return;
+    }
+    recordStartRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+    setRecordMs(0);
+    const timer = window.setInterval(() => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      setRecordMs(now - recordStartRef.current);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [listening]);
+
   const onTouchStart = (event: React.TouchEvent): void => {
     const point = event.touches[0];
     if (!point) return;
@@ -564,39 +668,49 @@ function MobileLive(props: MobileProps) {
           data-testid="live-stage"
           style={{ transform: `translateY(${slide * 100}%)` }}
         >
-          {/* S6l §2：顶部剧情阶段（标题 + 进度点）。 */}
-          <StoryHeader characterId={characterId} node={vm.node} />
           {stage}
           {/* S6c §5：换背景转场状态条（右上角，手机同样显示）。 */}
           <SceneStatusBar />
         </div>
 
-        <div className="live-mobile-top" data-no-stage-tap>
-          <div className="live-mobile-avatar">
-            <img src={character.avatar} alt="" />
+        {/* 顶栏：主播信息胶囊 + 菜单；下方剧情标题胶囊 + 进度点。 */}
+        <header className="live-mobile-header" data-no-stage-tap>
+          <div className="live-mobile-top">
+            <div className="live-mobile-id">
+              <div className="live-mobile-avatar">
+                <img src={character.avatar} alt="" />
+              </div>
+              <div className="live-mobile-id-text">
+                <span className="live-mobile-name" data-testid="live-name">
+                  {character.displayName}
+                </span>
+                <span className="live-mobile-viewers">{UI_TEXT.viewerCount}</span>
+              </div>
+              <span className="live-badge">{UI_TEXT.live}</span>
+            </div>
+            <span className="live-mobile-spacer" />
+            {/* D49 / S6n §5：手机顶栏模式小标签。 */}
+            <ModeBadge vm={vm} />
+            <button
+              type="button"
+              className="live-mobile-mic"
+              data-testid="switch-channel"
+              aria-label={UI_TEXT.switchChannel}
+              onClick={() => {
+                const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, "next");
+                switchTo(next);
+              }}
+            >
+              ⇅
+            </button>
+            {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口 + S6m §3 动作表 + 设置）。 */}
+            <MobileMenu phase={vm.phase} vm={vm} />
           </div>
-          <span className="live-mobile-name" data-testid="live-name">
-            {character.displayName}
-          </span>
-          <span className="live-badge">{UI_TEXT.live}</span>
-          <span className="live-mobile-spacer" />
-          {/* D49 / S6n §5：手机顶栏模式小标签。 */}
-          <ModeBadge vm={vm} />
-          <button
-            type="button"
-            className="live-mobile-mic"
-            data-testid="switch-channel"
-            aria-label={UI_TEXT.switchChannel}
-            onClick={() => {
-              const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, "next");
-              switchTo(next);
-            }}
-          >
-            ⇅
-          </button>
-          {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口 + S6m §3 动作表）。 */}
-          <MobileMenu phase={vm.phase} vm={vm} />
-        </div>
+          <StoryHeader characterId={characterId} node={vm.node} />
+        </header>
+
+        {/* S6u §3：状态牌（顶栏下方右侧）。 */}
+        <StateChip phase={vm.phase} />
 
         <div className="live-mobile-danmaku" data-testid="danmaku-list" data-no-stage-tap>
           {visible.map((item, index) => (
@@ -604,7 +718,7 @@ function MobileLive(props: MobileProps) {
           ))}
         </div>
 
-        <p className="live-mobile-subtitle" data-testid="subtitle" data-no-stage-tap>
+        <p className="live-mobile-subtitle" data-testid="subtitle" data-no-stage-tap data-fallback={vm.subtitle === null && vm.fallbackSubtitle !== null ? "1" : "0"}>
           {subtitle}
           {vm.phase === "thinking" && (
             <span className="live-thinking-dots" data-testid="thinking-dots" aria-hidden>
@@ -614,6 +728,31 @@ function MobileLive(props: MobileProps) {
             </span>
           )}
         </p>
+
+        {/* S6u §3：按住说话时底部录音面板（声波随音量、计时、松开发送）。无「上滑取消」。 */}
+        {listening && (
+          <div className="live-recording-panel" data-testid="recording-panel" data-no-stage-tap>
+            <div className="live-recording-wave" style={{ ["--level" as never]: level }} aria-hidden>
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+            <button type="button" className="live-recording-send" aria-label={UI_TEXT.recordingSend} onPointerUp={endPtt} onPointerCancel={endPtt} onPointerLeave={endPtt}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+            </button>
+            <div className="live-recording-meta">
+              <span>{UI_TEXT.recordingSend}</span>
+              <span className="live-recording-timer" data-testid="recording-timer">{formatDuration(recordMs)}</span>
+            </div>
+          </div>
+        )}
 
         <form
           className="live-mobile-compose"
@@ -633,17 +772,20 @@ function MobileLive(props: MobileProps) {
           />
           <button
             type="button"
-            className="live-mobile-mic"
+            className="live-mobile-circle"
             data-testid="gift"
             aria-label={UI_TEXT.gift}
             title={UI_TEXT.gift}
             onClick={onGift}
           >
-            🎁
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="8" width="18" height="13" rx="2" />
+              <path d="M12 8v13M3 12h18M12 8c-1.5-3-5-3.5-5-1.2C7 8 9.5 8 12 8zM12 8c1.5-3 5-3.5 5-1.2C17 8 14.5 8 12 8z" />
+            </svg>
           </button>
           <button
             type="button"
-            className="live-mobile-mic"
+            className="live-mobile-mic live-mobile-mic-round"
             data-testid="ptt"
             data-active={vm.phase === "listening"}
             aria-label={UI_TEXT.mic}
@@ -652,7 +794,10 @@ function MobileLive(props: MobileProps) {
             onPointerLeave={endPtt}
             onPointerCancel={endPtt}
           >
-            ●
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
           </button>
           {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
           {listening && (
@@ -672,4 +817,12 @@ function MobileLive(props: MobileProps) {
       </div>
     </main>
   );
+}
+
+/** S6u §3：录音面板计时显示（mm:ss，VT323）。 */
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const mm = String(Math.floor(total / 60)).padStart(2, "0");
+  const ss = String(total % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
 }

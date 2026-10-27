@@ -55,15 +55,16 @@ describe("danmakuReducer：追加、最多条数、淡出顺序", () => {
     expect(state.nextId).toBe(2);
   });
 
-  it("手机浮层最多 6 条，新的在下（数组末尾）", () => {
+  it("手机浮层最多 3 条（S6u §3），新的在下（数组末尾）", () => {
     let state = initialDanmakuState;
     for (let index = 1; index <= 10; index += 1) {
       state = danmakuReducer(state, { type: "APPEND", kind: "user", text: `第${index}条` });
     }
     const visible = visibleDanmaku(state.items);
     expect(visible).toHaveLength(MAX_MOBILE_DANMAKU);
+    expect(MAX_MOBILE_DANMAKU).toBe(3);
     expect(visible.at(-1)?.text).toBe("第10条");
-    expect(visible[0]?.text).toBe("第5条");
+    expect(visible[0]?.text).toBe("第8条");
   });
 
   it("淡出顺序：越旧越淡，最新完全不透明", () => {

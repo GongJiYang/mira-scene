@@ -26,8 +26,8 @@ export type DanmakuState = {
 
 /** 桌面弹幕栏保留的条数（手机浮层另有更小的上限，见 `MAX_MOBILE_DANMAKU`）。 */
 export const MAX_DESKTOP_DANMAKU = 50;
-/** 手机浮层最多 6 条（S6b §4）。 */
-export const MAX_MOBILE_DANMAKU = 6;
+/** 手机浮层最多 3 条（S6u §3：设计稿为 3 条）。 */
+export const MAX_MOBILE_DANMAKU = 3;
 
 export const initialDanmakuState: DanmakuState = { items: [], nextId: 1 };
 

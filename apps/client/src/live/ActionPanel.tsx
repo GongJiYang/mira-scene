@@ -1,5 +1,5 @@
 /**
- * S6m §3：主界面「动作表」面板（可收起）。
+ * S6m §3 / S6u §2：主界面「动作表」面板（可收起，按 ActionPanel.dc.html 重做）。
  *
  * - 桌面：放在弹幕窗口（`.live-chat`）顶部的一个可展开标签（默认收起）。
  * - 手机：由 `entries.tsx` 的 `MobileMenu` 里「动作表」项触发，点开为底部抽屉。
@@ -7,12 +7,11 @@
  * 点一下 = **只在本地预览**（不改 reducer 的 `visual`、不发网络、不算一轮），
  * 合成在渲染外壳里由纯函数 `composePreview` 完成。忧奈在 thinking / speaking 时整组禁用。
  *
- * 文案全部来自 `uiText.ts`（铁律 6）。样式只求清楚可用（S6u 统一重做）。
+ * 文案全部来自 `uiText.ts`（铁律 4）。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "zustand";
-import { usePreviewStore, previewDisabled, type PreviewItem } from "./previewStore";
-import { previewDurationSec } from "./previewStore";
+import { usePreviewStore, previewDisabled, previewDurationSec, type PreviewItem } from "./previewStore";
 import { ACTION_LABELS, UI_TEXT } from "./uiText";
 import type { StagePhase } from "../view/useStageViewModel";
 import type { Accent, Emotion } from "@mira/protocol";
@@ -38,17 +37,36 @@ const emotionItem = (value: Emotion): PreviewItem => ({ kind: "emotion", value }
 const accentItem = (value: Accent): PreviewItem => ({ kind: "accent", value });
 const actionItem = (value: string): PreviewItem => ({ kind: "action", value: value as never });
 
+/** 预览高亮的剩余秒数：从时长倒数，每 250ms 刷新一次。 */
+function usePreviewCountdown(item: PreviewItem | null, startedAtMs: number): { value: string | null; remaining: number } {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (item === null) return;
+    const timer = window.setInterval(() => setTick((n) => n + 1), 250);
+    return () => window.clearInterval(timer);
+  }, [item]);
+  if (item === null) return { value: null, remaining: 0 };
+  const total = previewDurationSec(item);
+  const elapsed = (nowMs() - startedAtMs) / 1000;
+  const remaining = Math.max(0, Math.ceil(total - elapsed));
+  return { value: item.value, remaining };
+}
+
 /**
  * 动作表按钮网格（分组）。桌面标签与手机抽屉共用。
- * `phase` 决定整组是否禁用；`onPick` 触发预览。
+ * `phase` 决定整组是否禁用；`onPick` 触发预览。预览中的项高亮并显示剩余秒数。
  */
 export function ActionButtons({ phase, onPick }: { phase: StagePhase; onPick: (item: PreviewItem) => void }) {
   const disabled = previewDisabled(phase);
-  const groups: Array<{ title: string; items: PreviewItem[] }> = [
+  const previewItem = usePreviewStore((state) => state.item);
+  const previewStartedAtMs = usePreviewStore((state) => state.startedAtMs);
+  const { value: activeValue, remaining } = usePreviewCountdown(previewItem, previewStartedAtMs);
+
+  const groups: Array<{ title: string; items: PreviewItem[]; grid?: string }> = [
     { title: UI_TEXT.actionGroupEmotion, items: EMOTIONS.map(emotionItem) },
-    { title: UI_TEXT.actionGroupAccent, items: ACCENTS.map(accentItem) },
-    { title: UI_TEXT.actionGroupAction, items: EXISTING_ACTIONS.map((value) => actionItem(value)) },
-    { title: UI_TEXT.actionGroupLocal, items: LOCAL_ACTIONS.map((value) => actionItem(value)) },
+    { title: UI_TEXT.actionGroupAccent, items: ACCENTS.map(accentItem), grid: "5" },
+    { title: UI_TEXT.actionGroupAction, items: EXISTING_ACTIONS.map((value) => actionItem(value)), grid: "4" },
+    { title: UI_TEXT.actionGroupLocal, items: LOCAL_ACTIONS.map((value) => actionItem(value)), grid: "4" },
   ];
 
   return (
@@ -59,27 +77,30 @@ export function ActionButtons({ phase, onPick }: { phase: StagePhase; onPick: (i
         </p>
       )}
       {groups.map((group) => (
-        <div className="action-group" key={group.title}>
+        <div className="action-group" key={group.title} data-grid={group.grid}>
           <span className="action-group-title">{group.title}</span>
           <div className="action-buttons">
             {group.items.map((item) => {
               const id: string = item.value;
+              const previewing = activeValue !== null && activeValue === id;
               return (
                 <button
                   key={`${item.kind}-${id}`}
                   type="button"
                   className="action-button"
                   data-testid={`action-${id}`}
+                  data-preview={previewing ? "1" : "0"}
                   disabled={disabled}
                   onClick={() => onPick(item)}
                 >
-                  {ACTION_LABELS[id as keyof typeof ACTION_LABELS] ?? id}
+                  {previewing ? `${ACTION_LABELS[id as keyof typeof ACTION_LABELS] ?? id} · ${remaining}s` : (ACTION_LABELS[id as keyof typeof ACTION_LABELS] ?? id)}
                 </button>
               );
             })}
           </div>
         </div>
       ))}
+      <p className="action-panel-note">{UI_TEXT.actionPanelNote}</p>
     </div>
   );
 }
