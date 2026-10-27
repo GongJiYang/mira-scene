@@ -1,17 +1,25 @@
 # PROGRESS（更新于 2026-10-28 01:40，最新提交见 git log -1）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6c · 关卡 8/9 · 验收】S6c 在 worktree `/Users/gjy/mira-wt-s6c` 用 Command Code `deepseek/deepseek-v4-flash` 续跑（日志 `docs/tasks/.s6c-cmd.log`，报告 `docs/tasks/s6c-report.md`）。先查 `ps -A -o pid,etime,command | grep "[c]md -p"`；进程没了且没报告 → worktree 里开新会话续跑（不 `--continue`）。核心细审：`detectSceneRequest`、`composeScenePrompt`（构图锁必含）、`sceneJobReducer`（单任务/冷却 45s/每会话 5 次/90s 超时）、切频道取消。合并后派 S6g-1。
+【S6c · 关卡 8/9 · 验收】S6c 在 worktree `/Users/gjy/mira-wt-s6c` 用 Command Code `deepseek/deepseek-v4-flash` 续跑（日志 `docs/tasks/.s6c-cmd.log`，报告 `docs/tasks/s6c-report.md`）。先查 `ps -A -o pid,etime,command | grep "[c]md -p"`；进程没了且没报告 → worktree 里开新会话续跑（不 `--continue`）。核心细审：`detectSceneRequest`、`composeScenePrompt`（构图锁必含）、`sceneJobReducer`（单任务/冷却 45s/每会话 5 次/90s 超时）、切频道取消。合并后派 S6g-A。
 
 ## 当前位置
 main 已含 S6f（隐藏夏凛 + 忧奈四态）、S6h（观测页 `?obs=1` + `?hud=1`）。744 单测全绿。真实模式 dev server：http://localhost:5181（服务端 8791，`PROVIDER_MODE=real PORT=8791 MIRA_CLIENT_PORT=5181 MIRA_SERVER_PORT=8791 pnpm dev`）；5180/8790 是旧 Mock 服务器（自动模式不让 Claude 停，用户可 `kill 49797 77336`）。真实模式实测：DeepSeek 首句 0.8–1.1s，首包 2.2–2.7s，会接话。
 
-## 排队（按顺序，一次只跑一批）
+## 排队（2026-10-28 重排；一次只跑一批）
+**P0 必做**
 1. **S6c**（进行中）弹幕换背景。
-2. **S6g-1**：删夏凛（D43，含 S6f 的 `hidden` 字段）；D46 表演与物理修正（眉毛写 `ParamBrowL/R`、主身体 X/Z 驱动、物理后覆盖：举罐/挥手/摇尾巴/耳朵）；S6f 遗留（倾听加大、瞟眼走 clampView、禁止参数清零挪到最后）；**抱熊太突兀（用户反馈）**：`ParamPet` 是 0/1 开关、现在瞬间出现 → 从待机随机小动作里拿掉，只在 `@动作 抱熊` / 剧情 show_item 时出现，并做 0→1 约 0.6s 渐变（先截图看中间值的样子，难看就改成配合低头/身体前倾遮掩切换）；**直播间加「文档」「观测」入口按钮**（用户要求，桌面顶栏、手机菜单）；观测页瀑布条改统一时间刻度。
-3. **S6g-2**：剧情节点视觉搬进角色包；Live2D 舞台补镜头（reveal 推近、ending 拉远）、特效（stream_dim、hearts=ParamHeart/ParamLove、chat_burst）、截图弹窗；D44 透明关推流视频（WebM alpha + HEVC alpha，CSS 降级）；生成内容缓存。
-4. **S6i**：D45 弹幕 @ 指令（@换地方 / @动作 / @送礼物）。
-5. 交付：README（复用 `docs/architecture/00-导读.md`）、AI_USAGE.md、录屏、部署、iPhone 真机。
+2. **S6g-A**：Live2D 舞台补渲染（reveal 推近 + stream_dim、ending 拉远 + 爱心 ParamHeart/ParamLove；截图弹窗含生成中/失败退回预置；ending 视频加载/结束/打断）；剧情节点视觉搬进角色包（去掉导演层写死的雨/photo_letters/clip_ending）；删夏凛（D43，含 `hidden`）；情绪眉毛改写 `ParamBrowL/R`（D46①）；抱熊移出待机随机、0→1 渐变（用户反馈突兀）；直播间「文档」「观测」入口按钮（桌面顶栏、手机菜单）；S6f 遗留（瞟眼走 clampView、禁止参数清零挪到最后）。
+3. 真实模式全流程走查（Claude 用浏览器 arrive→ending、打断、生图、视频、断线，截图）。
+4. README（8 项，复用 `00-导读.md`）+ AI_USAGE.md。
+5. 部署（演示地址；也解决手机 localhost 问题）。
+**P1 加分**
+6. **S6i** 弹幕 @ 指令（D45）。
+7. **S6g-B**：主身体 X/Z 驱动 + 音频驱动起伏（D46②）、倾听加大；D44 透明关推流视频；生成内容缓存；观测页瀑布条统一刻度。
+8. 录屏（用户，P1 完成后）；iPhone 真机（用户，部署后）。
+**P2 后续**（用户 2026-10-28 决定推后）
+9. 手臂/尾巴/耳朵物理后覆盖（D46③）+ 动作测试页（逐参数扫范围截图）；挥手/举罐/摇尾巴。
+10. 换配色接运行时、手机端人物占满屏幕、其余表情开关。
 
 ## 执行环境（重要）
 - cmd 现在登录用户的另一个 Command Code 账号（GongJiYang），用 `-m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all`，不加 `--local-only`。**Systalyze 会限流（Rate limit exceeded，退出码 5），停用**。
