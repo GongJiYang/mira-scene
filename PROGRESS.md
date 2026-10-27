@@ -10,7 +10,8 @@ main 已含 S6f（隐藏夏凛 + 忧奈四态）、S6h（观测页 `?obs=1` + `?
 **P0 必做**
 1. ~~S6c~~ 已合并（38a967b）：真实生图 44.6s，构图锁有效。
 2. **S6g-A**：Live2D 舞台补渲染（reveal 推近 + stream_dim、ending 拉远 + 爱心 ParamHeart/ParamLove；截图弹窗含生成中/失败退回预置；ending 视频加载/结束/打断）；剧情节点视觉搬进角色包（去掉导演层写死的雨/photo_letters/clip_ending）；删夏凛（D43，含 `hidden`）；情绪眉毛改写 `ParamBrowL/R`（D46①）；抱熊移出待机随机、0→1 渐变（用户反馈突兀）；直播间「文档」「观测」入口按钮（桌面顶栏、手机菜单）；S6f 遗留（瞟眼走 clampView、禁止参数清零挪到最后）。
-3. **S6k** 语境表情（D47）：LLM 可选 `accent` 字段 + 导演层冷却/冲突规则 + 渲染渐变；全部表情开关放开，只有 Param1–10 恒为 0；提示词新增段交用户审。
+3. **S6c-fix1**（`docs/tasks/s6c-fix1.md`，code-review 发现、Claude 已核实）：busy 兜底 seq 冲突吞掉真实回复、异步失败兜底被 turnId 过滤丢掉（改剧情层）、90s 超时未生效、sceneController 恢复不重建、MIME、`$` 替换、参考图用当前背景。Claude 另用 Fish 合成 scene_busy/failed/rejected 三条预录。
+3b. **S6k** 语境表情（D47）：LLM 可选 `accent` 字段 + 导演层冷却/冲突规则 + 渲染渐变；全部表情开关放开，只有 Param1–10 恒为 0；提示词新增段交用户审。
 4. 真实模式全流程走查（Claude 用浏览器 arrive→ending、打断、生图、视频、断线，截图）。
 5. README（8 项，复用 `00-导读.md`）+ AI_USAGE.md。
 6. 部署（演示地址；也解决手机 localhost 问题）。
