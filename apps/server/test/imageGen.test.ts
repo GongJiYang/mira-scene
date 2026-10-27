@@ -137,3 +137,57 @@ describe("imageGen 适配器（假 fetch）", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+describe("imageGen 适配器（S6c-fix1 §5）", () => {
+  const media = { type: "photo" as const, id: "photo_test" };
+  const base = { baseUrl: "http://fake.local/v1", apiKey: "sk-test", model: "gpt-image-2.5-sunburst" };
+  const onePx =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC";
+
+  it("generations 路径：调用方没传 size 时请求体不带 size", async () => {
+    let body: Record<string, unknown> = {};
+    const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ data: [{ b64_json: onePx }] }), { status: 200 });
+    }) as typeof fetch;
+    await generateImage({ ...base, prompt: "p", media, fetchImpl, outDir: "/tmp/mira-imagegen-test" });
+    expect("size" in body).toBe(false);
+  });
+
+  it("generations 路径：传了 size 时请求体带 size", async () => {
+    let body: Record<string, unknown> = {};
+    const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ data: [{ b64_json: onePx }] }), { status: 200 });
+    }) as typeof fetch;
+    await generateImage({ ...base, prompt: "p", media, fetchImpl, outDir: "/tmp/mira-imagegen-test", size: "1024x1536" });
+    expect(body.size).toBe("1024x1536");
+  });
+
+  it("edits 路径：参考图按扩展名设 MIME 与文件名（.jpg/.jpeg/.png/.webp）", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "img-ref-"));
+    const cases: Array<[string, string]> = [
+      ["bg.jpg", "image/jpeg"],
+      ["bg.jpeg", "image/jpeg"],
+      ["bg.png", "image/png"],
+      ["bg.webp", "image/webp"],
+    ];
+    for (const [file, mime] of cases) {
+      const path = join(dir, file);
+      writeFileSync(path, Buffer.from("ref"));
+      let uploaded: { type: string; name: string } = { type: "", name: "" };
+      const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+        const form = init?.body as FormData;
+        const image = form.get("image") as File;
+        uploaded = { type: image.type, name: image.name };
+        return new Response(JSON.stringify({ data: [{ b64_json: onePx }] }), { status: 200 });
+      }) as typeof fetch;
+      await generateImage({ ...base, prompt: "p", media, fetchImpl, outDir: "/tmp/mira-imagegen-test", reference: { path } });
+      expect(uploaded.type).toBe(mime);
+      expect(uploaded.name).toBe(file);
+    }
+  });
+});

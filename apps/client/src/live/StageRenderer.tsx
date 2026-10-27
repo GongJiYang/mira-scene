@@ -286,11 +286,14 @@ function StageStoryMedia({
 
   return (
     <>
-      <ScreenshotCard
-        status={storyMedia.status}
-        url={storyMedia.media?.url ?? null}
-        fallbackUrl={SCREENSHOT_FALLBACK_URL}
-      />
+      {/* S6c-fix1 §8b.1：进入 ending（视频播放中）时收起截图卡片，不能叠在视频上。 */}
+      {videoVisible ? null : (
+        <ScreenshotCard
+          status={storyMedia.status}
+          url={storyMedia.media?.url ?? null}
+          fallbackUrl={SCREENSHOT_FALLBACK_URL}
+        />
+      )}
       {videoMounted ? (
         <div
           className="live-story-video"

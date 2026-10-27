@@ -25,14 +25,24 @@ import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
 import type { LLMHistoryEntry, MediaPort, Ports, SceneWriterPort, TTSAudio, TTSPort, TtsOptions } from "./ports";
 import { detectSceneRequest } from "./scene/detect";
-import { admitScene, runSceneJob, type SceneRunnerDeps } from "./scene/runner";
-import { initialSceneJobState, sceneJobReducer, type SceneJobState } from "./scene/job";
+import { runSceneJob, type SceneRunnerDeps } from "./scene/runner";
+import { initialSceneJobState, admitSceneJob, sceneJobReducer, type SceneJobState } from "./scene/job";
 import { createInitialScene } from "./story";
 
 export type SendFn = (message: ServerMessage) => void;
 
 /** D32：主动开口轮固定的 user_text（客户端那一句没有说话）。 */
 export const NUDGE_USER_TEXT = "（客人安静地坐着，没有说话）";
+
+/**
+ * S6c-fix1 §1：准入被拒时写进 `scene_notes` 的原因（不是台词，只是给 LLM 的提示）。
+ * 与角色包的 `scene_busy` 兜底句配合使用，避免 LLM 回话与兜底句矛盾。
+ */
+const SCENE_REJECT_NOTE: Record<"cooldown" | "limit" | "busy", string> = {
+  cooldown: "刚换过要等一会",
+  limit: "今晚次数用完",
+  busy: "上一个还没换完",
+};
 
 type TurnPayloads = {
   session: SessionPayload;
@@ -349,15 +359,27 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         sceneNotes = `背景已经换成 ${session.sceneJob.lastReadyLabel}`;
         session.sceneJob.lastReadyLabel = undefined;
       }
+      // S6c-fix1 §2：上一轮失败 / 被拒 → 本轮 scene_notes 加一句「刚才背景没换成」。
+      if (session.sceneJob.lastFailed === true) {
+        sceneNotes = sceneNotes === undefined ? "刚才背景没换成" : `${sceneNotes}。刚才背景没换成`;
+        session.sceneJob.lastFailed = undefined;
+      }
+      // S6c-fix1 §1：busy 兜底句用本轮 seq 分配器（在下方 LLM 流开始前发出），不再硬编码 0。
+      let sceneBusyBeat: Beat | null = null;
       if (!isNudge && input.type === "text_input") {
         const detected = detectSceneRequest(input.text, session.pack.sceneTriggerPattern);
         if (detected.hit) {
-          // S6c §1：与「背景已经换成 …」可叠加（两句之间用句号分隔）。
-          sceneNotes = sceneNotes === undefined ? "对方想换个背景，你这边正在换" : `${sceneNotes}。对方想换个背景，你这边正在换`;
-          const admission = admitScene(session.sceneJob, clock());
-          if (!admission.ok) {
-            // 冷却中 / 超次数 / 已有任务：不发起，角色用 scene_busy 回应。
-            const busyBeat: Beat = {
+          // S6c-fix1 §6：缺扩写端口时准入直接拒绝（不用非空断言），并打日志。
+          const writer = session.sceneWriter;
+          const depsMissing = writer === undefined;
+          const admission = admitSceneJob(session.sceneJob, clock());
+          if (depsMissing) logTurn("scene_missing_writer");
+          if (!admission.ok || depsMissing) {
+            const reason = admission.ok ? "busy" : admission.reason;
+            // S6c-fix1 §1：准入被拒 → scene_notes 说「换不了（原因）」，与兜底句不矛盾。
+            const reasonText = SCENE_REJECT_NOTE[reason];
+            sceneNotes = sceneNotes === undefined ? `对方想换背景，但现在换不了（${reasonText}）` : `${sceneNotes}。对方想换背景，但现在换不了（${reasonText}）`;
+            sceneBusyBeat = {
               seq: 0,
               say: session.pack.fallback.scene_busy,
               emotion: "guarded",
@@ -368,26 +390,31 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
               media: null,
               story: null,
             };
-            // 场景任务是后台旁路，beat 用当前 lastTurnId（不绑定发起轮次）。
-            session.send?.(buildEnvelope(session, session.lastTurnId, "beat", { beat: busyBeat }));
-            session.send?.(buildEnvelope(session, session.lastTurnId, "scene_status", { jobId: "", status: "busy" }));
-            logTurn("scene_busy", { reason: admission.reason });
-            // 本轮照常回话（场景任务不启动）。
+            session.send?.(buildEnvelope(session, turnId, "scene_status", { jobId: "", status: "busy" }));
+            logTurn("scene_busy", { reason });
           } else {
+            // S6c-fix1 §1：只有准入通过后才写「正在换」。
+            sceneNotes = sceneNotes === undefined ? "对方想换个背景，你这边正在换" : `${sceneNotes}。对方想换个背景，你这边正在换`;
             // 发起场景任务（后台，不阻塞本轮）。
             const jobId = randomUUID();
             session.sceneJob = sceneJobReducer(session.sceneJob, { type: "request", jobId, at: clock() });
-            // S6c §4：参考图 = 当前背景（从 pack.stage.background 的公开 URL 映射到 apps/client/public/）。
+            // S6c-fix1 §7：参考图 = 当前正在显示的背景（上一次换成功的生成图，否则角色包默认背景）。
+            // 生成图 URL 是 `{ desktop, mobile }`，角色包默认背景是 `{ portrait, landscape }`。
+            const currentBg = session.sceneJob.lastReadyUrls
+              ? { desktop: session.sceneJob.lastReadyUrls.desktop, mobile: session.sceneJob.lastReadyUrls.mobile }
+              : { desktop: session.pack.stage.background.landscape, mobile: session.pack.stage.background.portrait };
             const referencePaths = session.sceneReferencePaths ?? {
-              desktop: resolveClientAssetPath(session.pack.stage.background.landscape),
-              mobile: resolveClientAssetPath(session.pack.stage.background.portrait),
+              desktop: resolveClientAssetPath(currentBg.desktop),
+              mobile: resolveClientAssetPath(currentBg.mobile),
             };
+            // S6c-fix1 §7：currentScene 传当前背景的描述（上次成功的 label，否则角色包默认场景描述），不是节点 id。
+            const currentScene = session.sceneJob.lastReadyLabel ?? session.pack.nodes[session.scene.node].label;
             const sceneDeps: SceneRunnerDeps = {
-              writer: session.sceneWriter!,
-              image: session.sceneImageGen!,
+              writer,
+              image: session.sceneImageGen as SceneRunnerDeps["image"],
               referencePaths,
               nodeLabel: session.pack.nodes[session.scene.node].label,
-              currentScene: session.scene.node,
+              currentScene,
               emit: (event, payload) => {
                 session.sceneJob = sceneJobReducer(session.sceneJob, event);
                 const statusPayload: SceneStatusPayload = {
@@ -395,32 +422,26 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
                   status: payload.status as SceneStatusPayload["status"],
                   label: payload.label,
                   urls: payload.urls,
+                  // S6c-fix1 §2：failed / rejected 带 category，兜底由剧情层承担。
+                  category:
+                    payload.status === "rejected"
+                      ? "scene_rejected"
+                      : payload.status === "failed"
+                        ? "scene_failed"
+                        : undefined,
                 };
                 session.send?.(buildEnvelope(session, turnId, "scene_status", statusPayload));
-                // S6c §5：failed / rejected 时角色立即说一句预录兜底（不经 LLM）。
-                if (payload.status === "failed" || payload.status === "rejected") {
-                  const category = payload.status === "rejected" ? "scene_rejected" : "scene_failed";
-                  const fallbackBeat: Beat = {
-                    seq: 0,
-                    say: session.pack.fallback[category],
-                    emotion: "guarded",
-                    hands: session.scene.hands,
-                    action: null,
-                    camera: null,
-                    fx: null,
-                    media: null,
-                    story: null,
-                  };
-                  session.send?.(buildEnvelope(session, turnId, "beat", { beat: fallbackBeat }));
-                }
               },
               log: (event, detail) => logFor(session, turnId, event, detail),
               now: clock,
             };
             void runSceneJob(session.pack, input.text, jobId, sceneDeps, session.sceneController.signal).then((outcome) => {
               if (outcome.kind === "ready") {
-                // ready 后下一轮 scene_notes 加「背景已经换成 {label}」。
-                session.sceneJob = { ...session.sceneJob, lastReadyLabel: outcome.label };
+                // ready 后：下一轮 scene_notes 加「背景已经换成 {label}」；并记录当前背景。
+                session.sceneJob = { ...session.sceneJob, lastReadyLabel: outcome.label, lastReadyUrls: outcome.urls };
+              } else {
+                // failed / rejected：下一轮 scene_notes 提一句「刚才背景没换成」。
+                session.sceneJob = { ...session.sceneJob, lastFailed: true };
               }
             }).catch(() => undefined);
           }
@@ -431,6 +452,16 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         llmTimedOut = true;
         llmAbort.abort();
       }, firstTokenTimeoutMs);
+
+      // S6c-fix1 §1：busy 兜底句占用本轮下一个 seq（LLM 的 beat 顺延），不再硬编码 0，
+      // 避免客户端按 seq 去重时把 LLM 的真实第一句丢掉。
+      if (sceneBusyBeat !== null) {
+        const seqBusyBeat = { ...sceneBusyBeat, seq: nextSeq };
+        nextSeq += 1;
+        if (!emit("beat", { beat: seqBusyBeat })) return;
+        logTurn("beat_sent", { seq: seqBusyBeat.seq, silent: seqBusyBeat.say === "" });
+        if (seqBusyBeat.say !== "") says.push(seqBusyBeat.say);
+      }
 
       try {
         for await (const raw of session.ports.llm.streamBeats(
@@ -657,6 +688,9 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     // 重连/重绑连接：旧连接上仍在跑的一轮没有意义，直接中止。
     session.controller?.abort();
     session.controller = null;
+    // S6c-fix1 §4：恢复（或重绑）会话时重建换背景任务的 controller——
+    // 解绑时会 abort 掉它，若不重建，之后每次换背景都会立即失败并扣次数。
+    if (session.sceneController.signal.aborted) session.sceneController = new AbortController();
     session.send = send;
     session.lastActiveAt = clock();
 
@@ -805,6 +839,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     for (const [id, session] of sessions) {
       if (session.lastActiveAt > cutoff) continue;
       session.controller?.abort();
+      // S6c-fix1 §4：会话过期清理也要中止进行中的换背景任务（不白白付费）。
+      session.sceneController.abort();
       sessions.delete(id);
       logFor(session, session.lastTurnId, "session_expired");
     }
@@ -818,6 +854,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       for (const session of sessions.values()) {
         session.controller?.abort();
         session.mediaController.abort();
+        // S6c-fix1 §4：dispose 也要中止进行中的换背景任务。
+        session.sceneController.abort();
       }
       sessions.clear();
     },

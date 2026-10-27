@@ -9,8 +9,8 @@
  * `IMAGE_API_KEY` 未配置时不应创建本适配器（由 index.ts 用 presetMedia；那是配置选择，非降级）。
  * 测试注入假 fetch，不发真实请求。
  */
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Media } from "@mira/protocol";
 import { createAbortError, isAbortError, throwIfAborted } from "../../abort";
@@ -66,6 +66,22 @@ function findRepoRoot(start: string): string {
 type ImagesResponse = { data?: Array<{ b64_json?: string }> };
 
 /**
+ * S6c-fix1 §5：参考图上传按扩展名推断 MIME（默认 `image/png`）。
+ * 文件名保留真实扩展名（`.jpg` / `.jpeg` / `.png` / `.webp`）。
+ */
+function referenceMime(path: string): string {
+  switch (extname(path).toLowerCase()) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    default:
+      return "image/png";
+  }
+}
+
+/**
  * 调一次生图接口并把结果落盘。成功返回 `{ url, status: "ready" }`；
  * HTTP 错误 / 超时 / 中止按契约抛出（调用方决定降级）。
  * S6c §4：有参考图时走 `/v1/images/edits`（multipart：`model`、`prompt`、`size`、`image`）。
@@ -91,13 +107,15 @@ export async function generateImage(options: ImageGenOptions): Promise<PresetMed
     let response: Response;
     if (options.reference !== undefined) {
       // S6c §4：参考图走 /v1/images/edits（multipart）。
-      const { readFileSync } = await import("node:fs");
-      const imageBuffer = readFileSync(options.reference.path);
+      // S6c-fix1 §5：按扩展名设 MIME 与文件名（真实扩展名）。
+      const referencePath = options.reference.path;
+      const imageBuffer = readFileSync(referencePath);
+      const fileName = referencePath.split(/[\\/]/).pop() ?? "reference.png";
       const form = new FormData();
       form.append("model", options.model);
       form.append("prompt", options.prompt);
       form.append("size", options.size ?? "1536x1024");
-      form.append("image", new Blob([imageBuffer]), "reference.png");
+      form.append("image", new Blob([imageBuffer], { type: referenceMime(referencePath) }), fileName);
       response = await fetchImpl(`${options.baseUrl}/images/edits`, {
         method: "POST",
         headers: { authorization: `Bearer ${options.apiKey}` },
@@ -105,10 +123,13 @@ export async function generateImage(options: ImageGenOptions): Promise<PresetMed
         signal: fetchSignal,
       });
     } else {
+      // S6c-fix1 §5：generations 路径调用方没传 size 时不要带 size（恢复 S6b 剧情照片原行为）。
+      const body: Record<string, unknown> = { model: options.model, prompt: options.prompt, n: 1 };
+      if (options.size !== undefined) body.size = options.size;
       response = await fetchImpl(`${options.baseUrl}/images/generations`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${options.apiKey}` },
-        body: JSON.stringify({ model: options.model, prompt: options.prompt, n: 1, size: options.size ?? "1536x1024" }),
+        body: JSON.stringify(body),
         signal: fetchSignal,
       });
     }

@@ -409,6 +409,25 @@ describe("S6f §2：silentAction 映射", () => {
   });
 });
 
+describe("S6c-fix1 §8b.2：四种情绪下猫耳朵都可见", () => {
+  it("任何情绪都显式写 ParamEarOFF=0（耳朵不关闭）", () => {
+    for (const emotion of EMOTIONS) {
+      const p = yunaParams({ ...base, emotion });
+      expect(p.ParamEarOFF).toBe(0);
+    }
+  });
+
+  it("任何情绪都不把耳朵相关参数写成隐藏值（不出现耳朵相关键被置为隐藏）", () => {
+    for (const emotion of EMOTIONS) {
+      const p = yunaParams({ ...base, emotion });
+      for (const key of Object.keys(p)) {
+        // 只有 ParamEarOFF 是耳朵开关；其余 ParamEars* 由物理驱动，不应在此出现。
+        if (/^ParamEars/i.test(key)) expect(p[key]).toBeUndefined();
+      }
+    }
+  });
+});
+
 describe("S6g-A §3.2：hearts 特效 ParamHeart", () => {
   it("heart=false 时 ParamHeart=0", () => {
     expect(yunaParams({ ...base }).ParamHeart).toBe(0);

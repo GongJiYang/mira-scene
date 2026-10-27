@@ -95,9 +95,12 @@ test.describe("S6g-A：Live2D 舞台剧情渲染", () => {
     await submitText(page, "然后呢");
     await expect(page.getByTestId("live-camera")).toHaveAttribute("data-camera", "wide", { timeout: 30_000 });
     await expect(page.getByTestId("fx-hearts")).toBeVisible({ timeout: 30_000 });
+    // S6c-fix1 §8b.3：在 ending 视频出现之前截「温暖」情绪——否则截图会被视频盖住。
+    await shot(page, "s6ga-emo-warm");
     // 视频加载后 playing（mock 预置片段 /characters/yuna/clip_offline.webm）。
     await expect(page.getByTestId("story-video")).toHaveAttribute("data-status", "playing", { timeout: 30_000 });
-    await shot(page, "s6ga-emo-warm");
+    // S6c-fix1 §8b.1：进入 ending 后截图卡片必须收起，不能叠在视频上。
+    await expect(page.getByTestId("screenshot-card")).toHaveCount(0);
     await shot(page, `s6ga-ending${layout === "mobile" ? "-mobile" : ""}`);
   });
 

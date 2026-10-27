@@ -14,6 +14,7 @@ import { initialNudgeLimitState, nudgeLimit, type NudgeLimitState } from "../sta
 import { characterOrDefault } from "../live/characters";
 import { setChannel, useChannelStore } from "../live/channel";
 import { resetSceneStatus } from "../live/scene/status";
+import { installSceneFallback, resetSceneFallback } from "../live/scene/sceneFallback";
 import { initialPerformanceState } from "../state/performance";
 
 export type Intents = {
@@ -158,6 +159,8 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       dispatchStoryMedia({ type: "PHASE", phase: "idle" });
       useFallbackStore.setState({ subtitle: null });
       resetSceneStatus();
+      // S6c-fix1 §2：切频道丢弃待播的换背景兜底。
+      resetSceneFallback();
       setChannel(characterId);
       connection.switchCharacter?.(characterId);
     },
@@ -201,6 +204,11 @@ export function bootstrapConnection(): void {
   // 表演时钟（B）与剧情媒体（C）的接线都在这里启动：UI 只经由视图模型读状态。
   installPerformanceClock({ onNudge: recordNudge });
   installStoryMediaLink();
+  // S6c-fix1 §2：换背景失败 / 拒绝的兜底走剧情层——空档播放本地预录 + 字幕。
+  installSceneFallback({
+    characterId: () => characterOrDefault(useChannelStore.getState().characterId).id,
+    showSubtitle: (text) => useFallbackStore.setState({ subtitle: text }),
+  });
   // S6b §2：断线时由客户端本地播 offline 兜底（服务端此时发不出消息）。
   installOfflineFallbackFor(
     () => characterOrDefault(useChannelStore.getState().characterId).id,

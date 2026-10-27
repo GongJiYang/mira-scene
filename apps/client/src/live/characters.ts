@@ -15,6 +15,11 @@ export type ClientCharacter = {
   avatar: string;
   /** offline 兜底台词（来自 content.json 的 fallback.offline，原样）。 */
   offlineLine: string;
+  /**
+   * S6c-fix1 §2：换背景失败 / 拒绝的兜底台词（来自 content.json 的 fallback.scene_failed /
+   * fallback.scene_rejected，原样）。用于客户端在空档播放本地预录兜底时显示字幕。
+   */
+  sceneFallbackLines: { scene_failed: string; scene_rejected: string };
 };
 
 /** D43：只剩忧奈一个角色（Live2D）。 */
@@ -24,6 +29,10 @@ export const CLIENT_CHARACTERS: readonly ClientCharacter[] = [
     displayName: "忧奈",
     avatar: "/characters/yuna/avatar.png",
     offlineLine: "诶？画面卡住了……还在吗？",
+    sceneFallbackLines: {
+      scene_failed: "诶，背景卡住了，没换成……先凑合一下吧。",
+      scene_rejected: "这个不行哦，换一个别的吧。",
+    },
   },
 ];
 
