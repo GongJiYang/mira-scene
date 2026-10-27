@@ -4,7 +4,7 @@ import { pickNextPlayable } from "../src/core/scheduler";
 import { initialState, type ClientState, type Phase } from "../src/state";
 
 function beat(seq: number, say = `第${seq}句`): Beat {
-  return { seq, say, emotion: "neutral", hands: "cup", action: null, camera: null, fx: null, media: null, story: null };
+  return { seq, say, emotion: "neutral", accent: null, hands: "cup", action: null, camera: null, fx: null, media: null, story: null };
 }
 
 function view(phase: Phase, queue: Beat[]): ClientState {

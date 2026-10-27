@@ -3,22 +3,23 @@ import { llmBeatSchema, parseLlmBeatLenient, type LlmBeatParseResult } from "../
 
 describe("parseLlmBeatLenient", () => {
   it("合法 LlmBeat 原样保留且不产生 warning", () => {
-    const input = { say: "雨停了。", emotion: "sad", suggest: "show_item", advance: "reveal" };
+    const input = { say: "雨停了。", emotion: "sad", suggest: "show_item", advance: "reveal", accent: "cry" };
     const result = parseLlmBeatLenient(input);
     expect(result.warnings).toEqual([]);
     expect(result.llmBeat).toEqual(input);
     expect(llmBeatSchema.safeParse(result.llmBeat).success).toBe(true);
   });
 
-  it("suggest / advance 缺省或为 null 时规范化为 null", () => {
+  it("suggest / advance / accent 缺省或为 null 时规范化为 null", () => {
     expect(parseLlmBeatLenient({ say: "嗯。", emotion: "calm" }).llmBeat).toEqual({
       say: "嗯。",
       emotion: "calm",
       suggest: null,
       advance: null,
+      accent: null,
     });
     expect(
-      parseLlmBeatLenient({ say: "嗯。", emotion: "calm", suggest: null, advance: null }).warnings,
+      parseLlmBeatLenient({ say: "嗯。", emotion: "calm", suggest: null, advance: null, accent: null }).warnings,
     ).toEqual([]);
   });
 
@@ -38,6 +39,38 @@ describe("parseLlmBeatLenient", () => {
     expect(result.warnings.join("\n")).toContain("advance");
   });
 
+  it("D47：非法 accent 降级为 null 并写一条 warning（永不抛错）", () => {
+    for (const accent of ["sparkle", "", 42, {}, [], true]) {
+      let result: LlmBeatParseResult | undefined;
+      expect(() => {
+        result = parseLlmBeatLenient({ say: "嗯。", emotion: "calm", accent });
+      }).not.toThrow();
+      expect(result?.llmBeat.accent).toBeNull();
+      expect(result?.warnings).toHaveLength(1);
+      expect(result?.warnings.join("\n")).toContain("accent");
+    }
+  });
+
+  it("D47：词表内的 accent 原样保留（含全部 10 个）", () => {
+    const accents = [
+      "love",
+      "heart",
+      "shy",
+      "amazed",
+      "cry",
+      "angry",
+      "black",
+      "dark",
+      "fly_head",
+      "fly_pet",
+    ] as const;
+    for (const accent of accents) {
+      const result = parseLlmBeatLenient({ say: "嗯。", emotion: "calm", accent });
+      expect(result.warnings).toEqual([]);
+      expect(result.llmBeat.accent).toBe(accent);
+    }
+  });
+
   it("say 缺失或非字符串时降级为空串", () => {
     for (const say of [undefined, null, 42, ["台词"]]) {
       const result = parseLlmBeatLenient({ say, emotion: "calm" });
@@ -53,7 +86,7 @@ describe("parseLlmBeatLenient", () => {
       expect(() => {
         result = parseLlmBeatLenient(input);
       }).not.toThrow();
-      expect(result?.llmBeat).toEqual({ say: "", emotion: "neutral", suggest: null, advance: null });
+      expect(result?.llmBeat).toEqual({ say: "", emotion: "neutral", suggest: null, advance: null, accent: null });
       expect(result?.warnings).toHaveLength(1);
     },
   );

@@ -1,4 +1,5 @@
 import {
+  type Accent,
   type Action,
   type Beat,
   type Camera,
@@ -12,10 +13,13 @@ import {
 } from "@mira/protocol";
 import { advanceScene, applyBeatToScene, evaluateStoryAdvance } from "../story";
 import type { NodeVisual } from "../characters/pack";
+import { pickAccent } from "./accent";
 import { ACTION_HANDS, buildTtsText } from "./vocab";
 
 /** 采纳过的动作在最近 3 个 beat 内不再采纳（D29）。 */
 const RECENT_ACTION_LIMIT = 3;
+/** D47：accent 冷却需要「最近 10 个 beat」的窗口（飞头 / 飞宠）。 */
+const RECENT_ACCENT_LIMIT = 10;
 /** 本轮第一句的上限（D19 / D29）。 */
 const FIRST_BEAT_MAX_CHARS = 20;
 const SPLIT_PUNCTUATION = "，。？！…";
@@ -23,6 +27,7 @@ const SPLIT_PUNCTUATION = "，。？！…";
 /**
  * 导演层上下文。
  * - `recentActions`：最近 3 个产出 beat 的 action（按时间顺序，含 null）。
+ * - `recentAccents`：最近 10 个产出 beat 的 accent（按时间顺序，含 null），供 accent 冷却判定。
  * - `advancedThisTurn` / `beatsThisTurn`：每轮开始由会话层重置。
  * - `nodeVisuals`：S6g-A §2：角色包的剧情节点视觉表（镜头 / 特效 / 媒体 / 强制动作）。
  *   导演层只能从这里取 fx / media，保证「任意 LLM 输出都不会产生包里没有的 fx / media id」。
@@ -30,6 +35,7 @@ const SPLIT_PUNCTUATION = "，。？！…";
 export type DirectorContext = {
   scene: SceneState;
   recentActions: readonly (Action | null)[];
+  recentAccents: readonly (Accent | null)[];
   advancedThisTurn: boolean;
   beatsThisTurn: number;
   nodeVisuals: Partial<Record<SceneState["node"], NodeVisual>>;
@@ -130,12 +136,22 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   const parts = splitFirstSentence(llmBeat.say, ctx.beatsThisTurn === 0);
   const beats: DirectedBeat[] = [];
 
+  // D47：accent 只放在切分后的第一个 beat（第二个 beat 为 null）。
+  // 规则触发（熬夜类 → dark）只在 LLM 没给 suggest 时生效。
+  const accent: Accent | null = pickAccent({
+    suggested: llmBeat.suggest === null ? llmBeat.accent : null,
+    emotion,
+    say: llmBeat.say,
+    recentAccents: ctx.recentAccents,
+  });
+
   for (const [index, part] of parts.entries()) {
     const isFirst = index === 0;
     const beat: Beat = {
       seq: 0,
       say: part,
       emotion,
+      accent: isFirst ? accent : null,
       hands: isFirst ? hands : scene.hands,
       action: isFirst ? action : null,
       camera: isFirst ? camera : null,
@@ -150,12 +166,14 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   }
 
   const nextRecentActions = [...recentActions, ...beats.map(({ beat }) => beat.action)].slice(-RECENT_ACTION_LIMIT);
+  const nextRecentAccents = [...ctx.recentAccents, ...beats.map(({ beat }) => beat.accent)].slice(-RECENT_ACCENT_LIMIT);
 
   return {
     beats,
     ctx: {
       scene,
       recentActions: nextRecentActions,
+      recentAccents: nextRecentAccents,
       advancedThisTurn,
       beatsThisTurn: ctx.beatsThisTurn + beats.length,
       nodeVisuals: ctx.nodeVisuals,

@@ -1,12 +1,14 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  accentSchema,
   actionSchema,
   beatSchema,
   emotionSchema,
   llmBeatSchema,
   parseLlmBeatLenient,
   storyNodeSchema,
+  type Accent,
   type Action,
   type Beat,
   type Emotion,
@@ -46,6 +48,7 @@ const anyLlmInput = fc.oneof(
 
 const emotionArb = fc.constantFrom<Emotion>(...emotionSchema.options);
 const actionArb = fc.constantFrom<Action>(...actionSchema.options);
+const accentArb = fc.constantFrom<Accent>(...accentSchema.options);
 const storyNodeArb = fc.constantFrom<StoryNode>(...storyNodeSchema.options);
 
 const sayArb = fc.oneof(
@@ -59,6 +62,7 @@ const llmBeatArb: fc.Arbitrary<NormalizedLlmBeat> = fc.record({
   emotion: emotionArb,
   suggest: fc.option(actionArb, { nil: null }),
   advance: fc.option(storyNodeArb, { nil: null }),
+  accent: fc.option(accentArb, { nil: null }),
 });
 
 /** 50–200 个 beat，并按 1–4 个 beat 一组切成多轮。 */
@@ -103,6 +107,7 @@ describe("属性：direct 的契约后置条件与不变量", () => {
         let ctx: DirectorContext = {
           scene: createServerScene(),
           recentActions: [],
+          recentAccents: [],
           advancedThisTurn: false,
           beatsThisTurn: 0,
           nodeVisuals: NODE_VISUALS,
@@ -194,6 +199,12 @@ describe("属性：direct 的契约后置条件与不变量", () => {
             expect(NODE_RANK[ctx.scene.node]).toBeGreaterThanOrEqual(maxNodeRank);
             maxNodeRank = NODE_RANK[ctx.scene.node];
             expect(ctx.recentActions).toEqual(emitted.slice(-3).map((beat) => beat.action));
+            // D47：recentAccents 保留最近 10 个 beat 的 accent（含 null）。
+            expect(ctx.recentAccents).toEqual(emitted.slice(-10).map((beat) => beat.accent));
+            // D47：accent 只在切分后的第一个 beat；被切分的第二个 beat 一律 null。
+            for (const { beat } of result.beats.slice(1)) {
+              expect(beat.accent).toBeNull();
+            }
           }
 
           // 每轮最多推进一步。
@@ -214,6 +225,7 @@ describe("属性：parse 之后 direct 仍满足契约", () => {
         const result = direct(llmBeat, {
           scene: createServerScene(),
           recentActions: [],
+          recentAccents: [],
           advancedThisTurn: false,
           beatsThisTurn: 0,
           nodeVisuals: NODE_VISUALS,

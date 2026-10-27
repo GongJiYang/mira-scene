@@ -15,11 +15,12 @@
  * 本组件只做渲染，不含决策：参数全部来自纯函数。
  */
 import { useEffect, useRef, useState } from "react";
-import type { Camera, Emotion, Fx } from "@mira/protocol";
+import type { Accent, Camera, Emotion, Fx } from "@mira/protocol";
 import type { StagePerformance, StagePhase } from "../view/useStageViewModel";
 import { createYunaRenderer, YunaLoadError, type YunaRendererHandle } from "../render/live2d/cubism/yunaRenderer";
 import { cameraFor, type StageOrientation } from "../render/live2d/cameraFor";
 import { yunaParams } from "../render/live2d/yunaParams";
+import { ACCENT_FADE_SEC } from "../render/live2d/accentParams";
 import { toYunaEmotion } from "./emotionMap";
 import { StoryVideo } from "../stage/StoryVideo";
 import {
@@ -143,6 +144,12 @@ function Live2dStage({
   const heartRef = useRef({ active: false, since: 0 });
   // S6g-A §4.3：silentAction 进入时刻（抱熊渐入渐出用）。
   const silentRef = useRef<{ action: string | null; sinceMs: number }>({ action: null, sinceMs: 0 });
+  // D47：accent 起止时刻（0.4s 渐入渐出用）。beat 被打断 → 按「结束」处理（endedAtMs 记下）。
+  const accentRef = useRef<{ accent: Accent | null; startedAtMs: number; endedAtMs: number | null }>({
+    accent: null,
+    startedAtMs: 0,
+    endedAtMs: null,
+  });
 
   // S6f §2：相位计时（phaseSinceSec / idleSinceSec / 首句惊讶 / 待机 seed）。
   const clockRef = useRef({
@@ -199,6 +206,28 @@ function Live2dStage({
         if (action !== silentRef.current.action) silentRef.current = { action, sinceMs: nowMs };
         const silentActionSinceSec = (nowMs - silentRef.current.sinceMs) / 1000;
 
+        // D47：accent 起止时刻（0.4s 渐入渐出）。
+        // - 新的非 null accent → 记起点，并给上一个 accent 记结束点；
+        // - accent 变 null（下一句 / 打断）→ 给当前 accent 记结束点，随后按「结束」渐出。
+        const incomingAccent = currentVisual.accent;
+        const accentState = accentRef.current;
+        if (incomingAccent !== null && incomingAccent !== accentState.accent) {
+          if (accentState.accent !== null) accentState.endedAtMs = nowMs;
+          accentState.accent = incomingAccent;
+          accentState.startedAtMs = nowMs;
+          accentState.endedAtMs = null;
+        } else if (incomingAccent === null && accentState.accent !== null && accentState.endedAtMs === null) {
+          accentState.endedAtMs = nowMs;
+        }
+        // 渐出结束后清掉，避免旧 accent 一直被当作「进行中」。
+        if (accentState.endedAtMs !== null && (nowMs - accentState.endedAtMs) / 1000 >= ACCENT_FADE_SEC) {
+          accentState.accent = null;
+          accentState.endedAtMs = null;
+        }
+        const accentSinceSec = (nowMs - accentState.startedAtMs) / 1000;
+        const accentEndedSinceSec =
+          accentState.endedAtMs === null ? undefined : (accentState.endedAtMs - accentState.startedAtMs) / 1000;
+
         return {
           params: yunaParams({
             phase: currentPhase,
@@ -213,6 +242,9 @@ function Live2dStage({
             silentActionSinceSec,
             heart,
             heartSinceSec: (nowMs - heartRef.current.since) / 1000,
+            accent: accentState.accent,
+            accentSinceSec,
+            accentEndedSinceSec,
             seed: clock.seed,
           }),
           emotion: yunaEmotion,

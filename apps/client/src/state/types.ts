@@ -1,4 +1,4 @@
-import type { Action, Beat, Camera, Emotion, Fx, Hands, Media, ServerMessage } from "@mira/protocol";
+import type { Accent, Action, Beat, Camera, Emotion, Fx, Hands, Media, ServerMessage } from "@mira/protocol";
 
 export type Phase =
   | { kind: "idle" }
@@ -13,6 +13,8 @@ export type Visual = {
   action: Action | null;
   camera: Camera | null;
   fx: Fx | null;
+  /** D47：当前 beat 的语境表情（null 表示无额外表情）。 */
+  accent: Accent | null;
 };
 
 export type ClientState = {

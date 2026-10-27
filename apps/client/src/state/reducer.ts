@@ -7,7 +7,7 @@ export const initialState: ClientState = {
   queue: [],
   turnEnded: false,
   subtitle: null,
-  visual: { emotion: "neutral", hands: "cup", action: null, camera: null, fx: null },
+  visual: { emotion: "neutral", hands: "cup", action: null, camera: null, fx: null, accent: null },
   media: null,
   audioStopToken: 0,
 };
@@ -144,6 +144,8 @@ function applyBeatStarted(state: ClientState, turnId: number, seq: number): Clie
       action: beat.action ?? state.visual.action,
       camera: beat.camera ?? state.visual.camera,
       fx: beat.fx ?? state.visual.fx,
+      // D47：accent 是逐句的（只在被切分的第一个 beat 上），下一句为 null 时立即清掉。
+      accent: beat.accent,
     },
     media: beat.media ?? state.media,
     phase: { kind: "speaking", seq },

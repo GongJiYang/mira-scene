@@ -4,6 +4,7 @@ import {
   approach,
   approachParams,
   applyEyeOpen,
+  ACCENT_KEYS,
   BREATH_BODY_AMPLITUDE,
   BREATH_HEAD_AMPLITUDE,
   BREATH_PERIOD_SEC,
@@ -41,11 +42,13 @@ import {
 } from "../src/render/live2d/yunaParams";
 import { VIEW_LIMITS } from "../src/render/live2d/params";
 import type { MouthShape, StagePhaseKind } from "../src/state/performance";
+import type { Accent } from "@mira/protocol";
 
 const PHASES: StagePhaseKind[] = ["idle", "listening", "thinking", "speaking", "error"];
 const EMOTIONS: YunaEmotion[] = ["calm", "guarded", "sad", "warm", "neutral"];
 const MOUTHS: MouthShape[] = ["closed", "small", "open"];
 const SILENT_ACTIONS: SilentAction[] = ["drink", "glance", "phone", "show_item"];
+const ACCENTS: Accent[] = ["love", "heart", "shy", "amazed", "cry", "angry", "black", "dark", "fly_head", "fly_pet"];
 
 const base: YunaParamInput = { phase: "idle", emotion: "calm", mouth: "closed", blinkOpen: 1, tSec: 0 };
 
@@ -474,6 +477,9 @@ describe("S6f §2：禁止参数与水印参数（fast-check 属性测试）", (
     silentActionSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
     heart: fc.boolean(),
     heartSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
+    accent: fc.option(fc.constantFrom(...ACCENTS), { nil: null }),
+    accentSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
+    accentEndedSinceSec: fc.option(fc.double({ min: -5, max: 100, noNaN: true }), { nil: undefined }),
     seed: fc.double({ min: -1, max: 2, noNaN: true }),
     look: fc.option(
       fc.record({
@@ -497,6 +503,8 @@ describe("S6f §2：禁止参数与水印参数（fast-check 属性测试）", (
         for (let i = 1; i <= 10; i += 1) {
           if (out[`Param${i}`] !== 0) return false;
         }
+        // D47：ParamFlyHead2 始终 0（不由任何 accent 写）。
+        if (out.ParamFlyHead2 !== 0) return false;
         return true;
       }),
       { numRuns: 1000 },
@@ -513,10 +521,77 @@ describe("S6f §2：禁止参数与水印参数（fast-check 属性测试）", (
         // 转头（度）：clampView 限到 VIEW_LIMITS.headDeg；倾听 / 思考的头歪与呼吸叠加后可能超过，但必须在模型舒适区 ±30 内。
         if (Math.abs(out.ParamAngleX as number) > 30) return false;
         if (Math.abs(out.ParamAngleY as number) > 30) return false;
-        if (Math.abs(out.ParamAngleZ as number) > 30) return false;
+        if (out.ParamAngleZ !== undefined && Math.abs(out.ParamAngleZ as number) > 30) return false;
         return true;
       }),
       { numRuns: 1000 },
     );
   });
 });
+
+describe("D47 §3：accent 与已有效果取最大值合并", () => {
+  it("accent=null 时 accent 键全部为 0（键仍存在）", () => {
+    const out = yunaParams({ ...base });
+    for (const key of ACCENT_KEYS) expect(out).toHaveProperty(key);
+    for (const key of ACCENT_KEYS) expect(out[key]).toBe(0);
+  });
+
+  it("accent 激活 + 渐入到稳态：主参数为 1", () => {
+    for (const accent of ACCENTS) {
+      const out = yunaParams({ ...base, accent, accentSinceSec: 0.4 });
+      expect(out[ACCENT_PARAM_OF(accent)]).toBeCloseTo(1);
+    }
+  });
+
+  it("accent 渐入中间按权重缩放", () => {
+    const out = yunaParams({ ...base, accent: "love", accentSinceSec: 0.2 });
+    expect(out.ParamLove).toBeCloseTo(0.5);
+  });
+
+  it("warm 自带 ParamShy 与 accent=shy 取最大值（不叠加、不变小）", () => {
+    const out = yunaParams({ ...base, emotion: "warm", accent: "shy", accentSinceSec: 0.1 });
+    // warm 的 ParamShy=1；accent 权重 0.25 → 取 max = 1。
+    expect(out.ParamShy).toBe(1);
+  });
+
+  it("sad 自带 ParamCry 与 accent=cry 取最大值", () => {
+    const out = yunaParams({ ...base, emotion: "sad", tSec: 1, accent: "cry", accentSinceSec: 1 });
+    expect(out.ParamCry).toBe(1);
+    // 泪参数：sad 与 accent cry 取 max，仍在下流（t=1 左泪已在下流）。
+    expect(out.ParamTearLY as number).toBeGreaterThan(0);
+  });
+
+  it("accentEndedSinceSec 有值 → 0.4s 渐出", () => {
+    const until = 2;
+    expect(yunaParams({ ...base, accent: "love", accentSinceSec: until, accentEndedSinceSec: until }).ParamLove).toBe(1);
+    expect(
+      yunaParams({ ...base, accent: "love", accentSinceSec: until + 0.2, accentEndedSinceSec: until }).ParamLove,
+    ).toBeCloseTo(0.5);
+    expect(
+      yunaParams({ ...base, accent: "love", accentSinceSec: until + 0.4, accentEndedSinceSec: until }).ParamLove,
+    ).toBe(0);
+  });
+
+  it("fly_head 写 ParamFlyHead，ParamFlyHead2 始终 0", () => {
+    const out = yunaParams({ ...base, accent: "fly_head", accentSinceSec: 0.4 });
+    expect(out.ParamFlyHead).toBe(1);
+    expect(out.ParamFlyHead2).toBe(0);
+  });
+});
+
+/** 测试辅助：accent → 主参数名（与 accentParams 的 ACCENT_PARAM 一致）。 */
+function ACCENT_PARAM_OF(accent: Accent): string {
+  const map: Record<Accent, string> = {
+    love: "ParamLove",
+    heart: "ParamHeart",
+    shy: "ParamShy",
+    amazed: "ParamAmazed",
+    cry: "ParamCry",
+    angry: "ParamAngry",
+    black: "ParamBlack",
+    dark: "ParamDark",
+    fly_head: "ParamFlyHead",
+    fly_pet: "ParamFlyPet",
+  };
+  return map[accent];
+}
