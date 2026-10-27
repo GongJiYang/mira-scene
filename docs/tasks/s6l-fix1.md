@@ -1,4 +1,4 @@
-# S6l-fix1 任务说明：第二次换背景必失败 + 刷新恢复 + 反应音音色
+# S6l-fix1 任务说明：第二次换背景必失败 + 刷新恢复 + 反应音音色 + 声音叠加
 
 > 来源：用户 2026-10-28 实测反馈「生成的背景和聊天记录一刷新就没了」。Claude 已核实原因。执行者：Command Code（deepseek-v4-flash）。在合并了 S6l 的 main 上做。
 > 关卡 1–5 结论见末尾（小修，Claude 决定）。
@@ -42,6 +42,12 @@
   - `make-sfx.ts` 加 `--character <id>`，音色用该角色的 `FISH_VOICE_ID_<ID>`（与会话层 `resolveVoiceId` 同一规则，复用而不是重写）；音色变量为空时**报错退出**，不得不传 `reference_id`。
   - 运行一次 `pnpm --filter @mira/server exec tsx scripts/make-sfx.ts --character yuna` 重新合成（真实 Fish 调用，只在这里）；文本保持原来三条不变。Fish 报错就停下写报告。
 - 测试：单测——反应音 URL 随角色变化、无反应音的角色 `arm()` 不播放；脚本在音色变量为空时退出码非 0（用注入 env 测，不发网络）。
+
+## §6 预录声音叠加（用户实测：Mock 预录声音有时叠在一起）
+- 根因（Claude 已核实）：客户端有两条互不相干的播放通道。主通道 `core/audio.ts` 播 beat 音频，受打断控制；旁路 `core/fallback.ts` 的 `playLocalAudio()` 每次**新建一个 AudioContext** 直接播放，断线兜底（`installOfflineFallback`）和 S6c-fix1 新加的换背景兜底（`live/scene/sceneFallback.ts`）都走它——打断停不掉、下一句开始也不让位，于是叠加。
+- 修法：所有本地音频（兜底语音、反应音）都经主通道播放，复用 `audio.ts` 已有的 AudioContext 和播放/停止逻辑；**同一时刻只有一段声音**：新的 beat 音频开始时停掉正在播的兜底/反应音，兜底语音在 beat 播放期间排队（沿用 sceneFallback 的排队规则）；打断执行器（`core/interrupt.ts`）的「停音频」一步同时停掉它们。删除 `playLocalAudio` 里的 `new AudioContext()`。
+- 可观测：两段音频同时处于播放状态时 `pushEvent("audio_overlap")`（调试缓冲），便于以后复查。
+- 测试：单测——兜底语音播放中 beat 开始 → 兜底被停；打断 → 所有音频停；属性测试（沿用打断矩阵的 fast-check 写法）：任意时刻处于播放状态的音源 ≤ 1。
 
 ## §4 报告 `docs/tasks/s6l-fix1-report.md`
 
