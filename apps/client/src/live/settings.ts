@@ -35,41 +35,10 @@ export const DEFAULT_SETTINGS: Settings = {
 /** localStorage 键。 */
 export const SETTINGS_STORAGE_KEY = "mira.settings";
 
-/** D49 / S6n §5：设置面板顶部说明（铁律 6：文案集中）。 */
-export const SETTINGS_TEXT = {
-  /** 入口按钮 / 面板标题。 */
-  title: "设置",
-  modeGroup: "模式",
-  modeAuto: "自动",
-  modeMock: "Mock",
-  modeReal: "真实",
-  /** 顶栏模式小标签。 */
-  badgeMock: "Mock",
-  badgeReal: "真实",
-  llmGroup: "聊天",
-  voiceGroup: "语音",
-  imageGroup: "生图",
-  deepseekKey: "DeepSeek API Key",
-  fishKey: "Fish API Key",
-  fishVoiceId: "音色 ID（可选）",
-  imageKey: "生图 API Key",
-  imageBaseUrl: "Base URL",
-  imageModel: "模型（可选）",
-  show: "显示",
-  hide: "隐藏",
-  save: "保存并重新连接",
-  clear: "清除我的 Key",
-  /** 来源标签（来自 session.capabilities）。 */
-  sourceServer: "服务器已配置",
-  sourceUser: "使用你填的",
-  sourceNone: "未配置",
-  /** §5：一行说明。 */
-  privacyNote: "Key 只保存在这台设备的浏览器里，每次连接时发给服务器使用，服务器不保存。",
-  /** §2：real 缺 Key 时客户端提示（自动回落 mock）。 */
-  realUnavailable: "真实模式缺少聊天 / 语音的 Key，已切回 Mock",
-  /** §3：Fish Key 用不了当前音色时的客户端提示（引导填自己的音色 ID）。 */
-  voiceUnavailable: "这个 Fish Key 用不了忧奈的音色，可以在设置里填自己的音色 ID",
-} as const;
+/** D49 / S6n §5：设置面板顶部说明（铁律 6：文案集中）。
+ * S6u §4：文案已迁到 `uiText.ts`，这里再导出保持既有引用（`connection.ts` / `SettingsPanel.tsx` 等）。 */
+import { SETTINGS_TEXT } from "./uiText";
+export { SETTINGS_TEXT };
 
 /** 只保留三选一里的合法值；非法 / 缺省 → `auto`。 */
 export function normalizeMode(value: unknown): RequestedMode {

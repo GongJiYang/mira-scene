@@ -1,9 +1,10 @@
-/* S6h §2：观测页样式。手机宽度可用：表格在卡片内横向滚动，页面不横向滚动。 */
+/* S6h §2：观测页样式。手机宽度可用：表格在卡片内横向滚动，页面不横向滚动。
+ * S6u §5：配色统一到设计 token（--ink/--panel/--line/--accent/--live/--listen/--think/--ok/--dim）。 */
 
 .obs-root {
   min-height: 100vh;
-  background: #14121a;
-  color: #e8e4f3;
+  background: var(--ink);
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   padding: 12px;
@@ -22,33 +23,33 @@
 .obs-title {
   margin: 0;
   font-size: 18px;
-  color: #ff9ad5;
+  color: var(--live);
 }
 
 .obs-refresh {
-  color: #8f86a8;
-  font-size: 11px;
+  color: var(--dim);
+  font-size: 12px;
 }
 
 .obs-error {
-  background: #3a1d2a;
-  border: 1px solid #a3456b;
-  border-radius: 6px;
+  background: rgba(255, 95, 162, 0.12);
+  border: 1px solid var(--live);
+  border-radius: var(--radius-panel);
   padding: 8px 10px;
   margin-bottom: 12px;
-  color: #ffb3cd;
+  color: var(--live);
 }
 
 .obs-empty {
   padding: 32px 12px;
   text-align: center;
-  color: #8f86a8;
+  color: var(--dim);
 }
 
 .obs-section {
-  background: #1c1926;
-  border: 1px solid #322a44;
-  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
   padding: 10px;
   margin-bottom: 12px;
   overflow-x: auto;
@@ -58,7 +59,7 @@
 .obs-section h2 {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #b9a7ff;
+  color: var(--accent);
 }
 
 .obs-table {
@@ -71,7 +72,7 @@
 .obs-table td {
   text-align: right;
   padding: 4px 8px;
-  border-bottom: 1px solid #2a2340;
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
@@ -81,7 +82,7 @@
 }
 
 .obs-table th {
-  color: #8f86a8;
+  color: var(--dim);
   font-weight: normal;
 }
 
@@ -102,7 +103,7 @@
 .obs-turn-id {
   width: 52px;
   text-align: right;
-  color: #8f86a8;
+  color: var(--dim);
   flex-shrink: 0;
 }
 
@@ -110,7 +111,7 @@
   position: relative;
   flex: 1;
   height: 14px;
-  background: #221e30;
+  background: var(--panel-2);
   border-radius: 3px;
   overflow: hidden;
   min-width: 200px;
@@ -122,20 +123,20 @@
   height: 100%;
 }
 
-.obs-seg-stt { background: #6fb7ff; }
-.obs-seg-llm { background: #b9a7ff; }
-.obs-seg-tts { background: #ffd166; }
-.obs-seg-play { background: #7ee0a3; }
-.obs-seg-end { background: #8f86a8; }
+.obs-seg-stt { background: var(--listen); }
+.obs-seg-llm { background: var(--accent); }
+.obs-seg-tts { background: var(--think); }
+.obs-seg-play { background: var(--ok); }
+.obs-seg-end { background: var(--dim); }
 
 .obs-turn[data-aborted="1"] .obs-turn-bar,
 .obs-turn[data-failed="1"] .obs-turn-bar {
-  outline: 1px solid #ff5b7f;
+  outline: 1px solid var(--live);
 }
 
 .obs-turn-flag {
-  color: #ff5b7f;
-  font-size: 11px;
+  color: var(--live);
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -144,8 +145,8 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 8px;
-  color: #8f86a8;
-  font-size: 11px;
+  color: var(--dim);
+  font-size: 12px;
 }
 
 .obs-legend span::before {
@@ -158,20 +159,20 @@
   vertical-align: -1px;
 }
 
-.obs-legend-stt::before { background: #6fb7ff; }
-.obs-legend-llm::before { background: #b9a7ff; }
-.obs-legend-tts::before { background: #ffd166; }
-.obs-legend-play::before { background: #7ee0a3; }
-.obs-legend-end::before { background: #8f86a8; }
+.obs-legend-stt::before { background: var(--listen); }
+.obs-legend-llm::before { background: var(--accent); }
+.obs-legend-tts::before { background: var(--think); }
+.obs-legend-play::before { background: var(--ok); }
+.obs-legend-end::before { background: var(--dim); }
 
 /* 直播间角标 */
 .live-hud-first-audio {
-  background: rgba(20, 18, 26, 0.75);
-  color: #ffd166;
-  border: 1px solid #322a44;
+  background: rgba(18, 14, 28, 0.75);
+  color: var(--think);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 2px 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   pointer-events: none;
 }
