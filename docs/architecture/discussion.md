@@ -172,3 +172,7 @@ P1 LLM 逐行 JSON 合规率与首句延迟 · P2 Fish STT 能否识别 webm/mp4
 **验收**：`ParamEyeLOpen=0` 单侧闭合（睫毛压成一线）；`ParamEyeBallX=1,ParamEyeBallY=0.8` 眼白在内角露出、虹膜不再跑出眼眶（旧 768 模型同姿势直接露空）；Idle 12s 眨眼帧正常。纹理图集 7.4 MB（旧 1.5 MB），moc3 375 KB，cmo3 14.8 MB。
 
 **产物**：`~/tools/pipeline-out/seethrough_native.psd`（20 层，1534×2302）；`~/tools/psd2live/build/native-out/`（moc3/cmo3/model3/physics/4 motion/4 exp）；`build/native-mp4/`、`build/native-web/`（`http://127.0.0.1:8199/index.html`）。
+
+## D34 集中讨论 · 可打断的多模态演出时间线 · 2026-10-27
+发现两个缺口：口型是随机轮换的，和音频无关；打断时的处理分散在多个订阅里，执行顺序不确定。方案见 decisions.md 中的「D34 落地方案」。
+用户回答：1）打断时镜头保持不动；2）口型用音量驱动；3）短按也算打断，不恢复；4）打断矩阵暂不补充，等成品出来再讨论。用户要求直接派发。
