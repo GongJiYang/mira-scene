@@ -139,3 +139,87 @@ describe("runSceneJob：真实生图路径（S6c §4 / §6）", () => {
     expect(events).toContain("failed");
   });
 });
+
+describe("runSceneJob：总超时（S6c-fix1 §3）", () => {
+  it("扩写挂住 → 到 totalTimeoutMs 立即 abort → failed（不再永停 writing）", async () => {
+    const events: string[] = [];
+    const started = Date.now();
+    const hangWriter = {
+      write: (_ctx: unknown, signal: AbortSignal) =>
+        new Promise<unknown>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+        }),
+    };
+    const outcome = await runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-hang",
+      deps(undefined as unknown as SceneRunnerDeps["image"], events, {
+        writer: hangWriter,
+        totalTimeoutMs: 40,
+      }),
+      new AbortController().signal,
+    );
+    expect(outcome.kind).toBe("failed");
+    expect(events).toContain("failed");
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it("生图挂住 → 到 totalTimeoutMs abort 两张 → failed", async () => {
+    const events: string[] = [];
+    const outcome = await runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-hang2",
+      deps(
+        {
+          baseUrl: "https://example.test/v1",
+          apiKey: "test",
+          model: "gpt-image-test",
+          outDir: tempOutDir(),
+          fetchImpl: ((_url: string, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            })) as typeof fetch,
+        },
+        events,
+        { totalTimeoutMs: 40 },
+      ),
+      new AbortController().signal,
+    );
+    expect(outcome.kind).toBe("failed");
+    expect(events).toContain("failed");
+  });
+
+  it("一张图失败 → 立即 abort 另一张（不再白白付费）", async () => {
+    let abortedOther = false;
+    let calls = 0;
+    const outcome = await runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-abort-other",
+      deps(
+        {
+          baseUrl: "https://example.test/v1",
+          apiKey: "test",
+          model: "gpt-image-test",
+          outDir: tempOutDir(),
+          fetchImpl: ((_url: string, init?: RequestInit) => {
+            const call = calls++;
+            if (call === 0) return Promise.resolve(new Response("boom", { status: 500 }));
+            return new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => {
+                abortedOther = true;
+                reject(new DOMException("aborted", "AbortError"));
+              });
+            });
+          }) as typeof fetch,
+        },
+        [],
+      ),
+      new AbortController().signal,
+    );
+    expect(outcome.kind).toBe("failed");
+    expect(abortedOther).toBe(true);
+  });
+});

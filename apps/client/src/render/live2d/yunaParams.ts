@@ -510,6 +510,10 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
   // 保证键集合恒定（抱熊 / 爱心未激活时也出现）。
   out.ParamPet = out.ParamPet ?? 0;
 
+  // S6c-fix1 §8b.2：猫耳朵必须可见。`ParamEarOFF` 是「耳朵关闭」开关，任何情绪下都显式写 0
+  //（S6g-A 删掉耳朵轻动后不再有参数覆盖它，这里保证不会残留隐藏值把耳朵关掉）。
+  out.ParamEarOFF = 0;
+
   // 后置条件：最后统一截断到舒适区间。
   for (const name of Object.keys(out)) {
     out[name] = clampParam(name, out[name] as number);

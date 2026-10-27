@@ -6,6 +6,9 @@
  */
 import { create } from "zustand";
 import type { SceneStatusPayload } from "@mira/protocol";
+import { characterOrDefault } from "../characters";
+import { useChannelStore } from "../channel";
+import { enqueueSceneFallback } from "./sceneFallback";
 
 /** 状态条显示状态。 */
 export type SceneStatusDisplay =
@@ -47,9 +50,16 @@ export function handleSceneStatus(payload: SceneStatusPayload): void {
       break;
     case "failed":
       useSceneStatusStore.setState({ display: { kind: "failed" } });
+      // S6c-fix1 §2：失败 / 拒绝的兜底属于剧情层——在角色不说话的空档播放本地预录兜底 + 字幕。
+      if (payload.category === "scene_failed") {
+        enqueueSceneFallback("scene_failed", characterOrDefault(useChannelStore.getState().characterId).sceneFallbackLines.scene_failed);
+      }
       break;
     case "rejected":
       useSceneStatusStore.setState({ display: { kind: "rejected" } });
+      if (payload.category === "scene_rejected") {
+        enqueueSceneFallback("scene_rejected", characterOrDefault(useChannelStore.getState().characterId).sceneFallbackLines.scene_rejected);
+      }
       break;
     case "busy":
       useSceneStatusStore.setState({ display: { kind: "busy" } });

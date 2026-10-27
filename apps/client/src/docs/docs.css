@@ -41,6 +41,10 @@
   background-clip: text;
   color: transparent;
   white-space: nowrap;
+  /* S6c-fix1 §8b.4：窄屏下品牌名可被压缩并省略，不撑破顶栏。 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .docs-drawer-toggle {
@@ -59,6 +63,8 @@
   gap: 8px;
   margin-left: auto;
   flex: 1;
+  /* S6c-fix1 §8b.4：允许在窄屏（手机）被压缩，避免顶栏总宽超过视口造成横向溢出。 */
+  min-width: 0;
   max-width: 520px;
 }
 
@@ -229,6 +235,8 @@
   border: 1px solid var(--docs-border);
   border-radius: 10px;
   padding: 14px 16px;
+  /* S6c-fix1 §8b.4：宽代码块在卡片内横向滚动，页面本身不横向溢出。 */
+  max-width: 100%;
   overflow-x: auto;
 }
 

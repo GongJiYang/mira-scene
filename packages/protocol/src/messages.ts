@@ -108,12 +108,16 @@ export const pongPayloadSchema = z.object({});
 /**
  * S6c §5：弹幕换背景的任务状态。
  * 由服务端在场景任务状态变化时下发；不绑定轮次（与 media_ready 同属剧情层旁路）。
+ *
+ * S6c-fix1 §2：失败的兜底不再发轮次 beat，改由剧情层承担——`failed / rejected` 载荷带
+ * `category`（`scene_failed` / `scene_rejected`），客户端据此在空档播放本地预录兜底音频与字幕。
  */
 export const sceneStatusPayloadSchema = z.object({
   jobId: z.string(),
   status: z.enum(["writing", "generating", "ready", "failed", "rejected", "busy"]),
   label: z.string().optional(),
   urls: z.object({ desktop: z.string(), mobile: z.string() }).optional(),
+  category: z.enum(["scene_failed", "scene_rejected"]).optional(),
 });
 
 export const clientMessageSchema = z.discriminatedUnion("type", [

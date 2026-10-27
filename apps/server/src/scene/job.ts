@@ -37,6 +37,10 @@ export type SceneJobState = {
   lastFinishedAt: number | null;
   /** S6c §5：上一次成功换成的场景 label（用于下一轮 scene_notes）。 */
   lastReadyLabel?: string;
+  /** S6c-fix1 §7：当前正在显示的背景公开 URL（上一次成功的生成图；缺省用角色包默认背景）。 */
+  lastReadyUrls?: { desktop: string; mobile: string };
+  /** S6c-fix1 §2：上一次任务失败 / 被拒（用于下一轮 scene_notes 提一句「刚才背景没换成」）。 */
+  lastFailed?: boolean;
 };
 
 /** S6c §4：初始状态。 */
