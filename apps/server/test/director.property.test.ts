@@ -92,7 +92,8 @@ describe("属性：parseLlmBeatLenient 是总函数", () => {
 });
 
 describe("属性：direct 的契约后置条件与不变量", () => {
-  it(`${RUNS} 次 × 50–200 beat：不抛错且逐条满足 §2.2`, () => {
+  // 单独跑约 3.7–4.2s；全量并行时负载更高，经常超过 vitest 默认 5s 超时，故显式放宽到 20s（强度不变）。
+  it(`${RUNS} 次 × 50–200 beat：不抛错且逐条满足 §2.2`, { timeout: 20_000 }, () => {
     fc.assert(
       fc.property(scriptArb, (turns) => {
         let ctx: DirectorContext = {
