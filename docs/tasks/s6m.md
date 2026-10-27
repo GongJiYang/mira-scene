@@ -1,6 +1,6 @@
 # S6m 任务说明：动作表面板 + 新动作（含物理后覆盖）
 
-> 来源：D48 第 3 项（用户 2026-10-28 要求：主界面可收起的「动作表」，点一下她就做；新动作只做参数法一版，不需要 A/B 对比）。关卡 1–5 由 Claude 决定（用户授权）。执行者：Command Code（deepseek-v4-flash）。在合并了 S6l-fix2 的 main 上做。
+> 来源：D48 第 3 项（用户 2026-10-28 要求：主界面可收起的「动作表」，点一下她就做；新动作只做参数法一版，不需要 A/B 对比）。关卡 1–5 由 Claude 决定（用户授权）。执行者：Command Code（deepseek-v4-flash）。在合并了 S6l-fix2 的 main 上做。§0 是 Claude 审 S6l-fix2 时发现的一个小问题，顺带修。
 
 ## 铁律
 冲突停下写进报告；Key 规则见 CLAUDE.md（D49）；不准 commit；不碰 `tools/live2d-pipeline/**`、`skills/**`；不要用读文件工具打开任何图片；长命令显式传大 timeout，同一命令超时两次就停下写进报告；测试里不发真实网络请求；**不要运行 e2e**（可以写，不运行，报告注明）。不改台词。样式只求清楚可用（S6u 统一重做）。先写会失败的测试再改代码。
@@ -8,6 +8,11 @@
 ## 已核实的事实（Claude）
 - `apps/client/public/models/yuna/yuna.physics3.json`：物理**输入**只有 `ParamAngleX/Y/Z`、`ParamBodyAngleX/Y/Z`（及 X2/Y2/Z5）、`ParamBrowL/R`、`ParamEyeL/ROpen`；**手（`ParamHandL/R`、`ParamHandHoldL/R`、`ParamHandTurnL/R`）、尾巴（`ParamTailX1–3`、`ParamTailY1`、`ParamParamTailY2`）、耳朵（`ParamEars*`）全部是物理输出**——在物理之前写会被覆盖（S6g-A 删耳朵动作就是这个原因，D46③「物理后覆盖」当时推迟）。
 - 现有动作 `drink/glance/phone/show_item` 在 `apps/client/src/render/live2d/yunaParams.ts` 的 `SILENT_ACTION_TABLE`，经 `StageRenderer.tsx` 的 silentAction 驱动。
+
+## §0 被限流的 poke / gift 让客户端卡在「思考」（先修）
+- 现状（Claude 审 S6l-fix2 时发现）：`apps/server/src/session.ts` 对 poke / gift 限流时只记 `input_throttled` 后 `return`，不发任何下行；而客户端发出 poke / gift 时已经 `beginTurn` 进入 thinking，等不到 `turn_end` 就一直卡着。两端冷却相同，但网络延迟会让服务端看到的间隔略短，这种情况真实会发生。
+- 修法：被限流时仍回 `turn_end`，`reason: "throttled"`（协议 zod 同步加枚举值），不发 beat、不扣轮数；客户端收到无 beat 的 turn_end 按现有规则回 idle。
+- 测试：集成——3 秒内连发两次 poke → 第二次收到 `turn_end{reason:"throttled"}`、轮数不增加；客户端 reducer：thinking + 无 beat 的 throttled turn_end → idle。
 
 ## §1 物理后覆盖（D46③）
 - 在 Live2D 渲染外壳里，**物理更新之后、模型 update 之前**加一个覆盖阶段：`postPhysicsParams(input) → Record<string, number>`（纯函数）给出的参数按权重混合写入：`value = physicsValue * (1 - w) + target * w`，`w` 由动作的渐入 / 渐出曲线决定（0.25s 渐入、0.35s 渐出）。
