@@ -30,6 +30,7 @@ export type ClientAction =
   | { type: "PTT_DOWN" }
   | { type: "PTT_UP" }
   | { type: "SUBMIT_TEXT" }
+  | { type: "NUDGE" }
   | { type: "SERVER_MESSAGE"; message: ServerMessage }
   | { type: "BEAT_AUDIO_STARTED"; turnId: number; seq: number }
   | { type: "BEAT_AUDIO_ENDED"; turnId: number; seq: number }

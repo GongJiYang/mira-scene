@@ -154,6 +154,9 @@ export function reducer(state: ClientState, action: ClientAction): ClientState {
       return state.phase.kind === "listening" ? { ...state, phase: { kind: "thinking" } } : state;
     case "SUBMIT_TEXT":
       return beginTurn(state, { kind: "thinking" });
+    case "NUDGE":
+      // D32：主动开口按一次新输入处理（turnId 递增、整轮作废重来）。
+      return beginTurn(state, { kind: "thinking" });
     case "SERVER_MESSAGE":
       return applyServerMessage(state, action.message);
     case "BEAT_AUDIO_STARTED":

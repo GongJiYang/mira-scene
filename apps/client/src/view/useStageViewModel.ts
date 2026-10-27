@@ -6,7 +6,7 @@
  */
 import type { FaceLayers, Hands, Media } from "@mira/protocol";
 import { useStore } from "zustand";
-import { intents, useNudgeStore, type Intents } from "../core/controller";
+import { intents, reports, useNudgeStore, type Intents, type StageReports } from "../core/controller";
 import { usePerformanceStore } from "../core/performanceClock";
 import {
   useConnectionStore,
@@ -68,7 +68,7 @@ export type StageView = {
   pendingNudge: boolean;
 };
 
-export type StageViewModel = StageView & { intents: Intents };
+export type StageViewModel = StageView & { intents: Intents; reports: StageReports };
 
 export type StageViewInput = {
   stage: ClientState;
@@ -129,5 +129,6 @@ export function useStageViewModel(): StageViewModel {
   return {
     ...toStageView({ stage, connection, sessionId, micError, events, performance, storyMedia, pendingNudge }),
     intents,
+    reports,
   };
 }

@@ -31,6 +31,8 @@ export type ServerConfig = {
   sessionTurnLimit: number;
   /** 全站每天最多轮数（Q12，默认 300）。 */
   dailyTurnLimit: number;
+  /** D27：预置照片媒体就绪的模拟时长（毫秒，默认 2500）。 */
+  mediaPresetDelayMs: number;
   /** real 模式下的凭据；mock 模式下全为空串，绝不读取 Key。 */
   providers: ProviderCredentials;
 };
@@ -39,6 +41,7 @@ const SUPPORTED_MODES: readonly ProviderMode[] = ["mock", "real"];
 
 export const DEFAULT_SESSION_TURN_LIMIT = 30;
 export const DEFAULT_DAILY_TURN_LIMIT = 300;
+export const DEFAULT_MEDIA_PRESET_DELAY_MS = 2_500;
 export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 export const DEFAULT_FISH_BASE_URL = "https://api.fish.audio";
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
@@ -105,6 +108,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     port,
     sessionTurnLimit: readPositiveInt(env, "SESSION_TURN_LIMIT", DEFAULT_SESSION_TURN_LIMIT),
     dailyTurnLimit: readPositiveInt(env, "DAILY_TURN_LIMIT", DEFAULT_DAILY_TURN_LIMIT),
+    mediaPresetDelayMs: readPositiveInt(env, "MEDIA_PRESET_DELAY_MS", DEFAULT_MEDIA_PRESET_DELAY_MS),
     providers: rawMode === "real" ? readCredentials(env) : EMPTY_PROVIDERS,
   };
 }

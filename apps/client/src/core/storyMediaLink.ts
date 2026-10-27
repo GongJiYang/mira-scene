@@ -25,6 +25,14 @@ export function handleMediaReady(message: Extract<ServerMessage, { type: "media_
   );
 }
 
+/**
+ * D27：带 media 的 beat 一到就向 C 登记显影请求。
+ * 服务端的异步生成在 beat 产出时就已开始，客户端尽早登记可避免「ready 先于 REQUEST」的乱序。
+ */
+export function handleMediaRequest(storyEventId: string): void {
+  dispatchStoryMedia({ type: "REQUEST", storyEventId });
+}
+
 /** 订阅 A 的 phase；返回取消订阅函数。 */
 export function installStoryMediaLink(): () => void {
   dispatchStoryMedia({ type: "PHASE", phase: getStageState().phase.kind });

@@ -5,6 +5,8 @@ import {
   type Action,
   type Beat,
   type ClientMessage,
+  type Media,
+  type MediaReadyPayload,
   type SceneState,
   type ServerMessage,
   type SessionPayload,
@@ -19,10 +21,13 @@ import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, FALLBACK_LINES, WS_DROP_AFTER_BEAT, par
 import { isAbortError, throwIfAborted } from "./abort";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
-import type { LLMHistoryEntry, Ports, TTSAudio, TTSPort, TtsOptions } from "./ports";
+import type { LLMHistoryEntry, MediaPort, Ports, TTSAudio, TTSPort, TtsOptions } from "./ports";
 import { createInitialScene } from "./story";
 
 export type SendFn = (message: ServerMessage) => void;
+
+/** D32：主动开口轮固定的 user_text（客户端那一句没有说话）。 */
+export const NUDGE_USER_TEXT = "（客人安静地坐着，没有说话）";
 
 type TurnPayloads = {
   session: SessionPayload;
@@ -31,6 +36,7 @@ type TurnPayloads = {
   tts_audio: TtsAudioPayload;
   turn_end: TurnEndPayload;
   state_snapshot: StateSnapshotPayload;
+  media_ready: MediaReadyPayload;
   error: ErrorPayload;
 };
 
@@ -52,9 +58,17 @@ type Session = {
   faults: readonly Fault[];
   /** 最近一轮的起点（服务端时钟），用于 playback_started 计算 first_audio_ms。 */
   turnStartedAt: { turnId: number; at: number } | null;
+  /** D27：已投递 / 已排期的剧情媒体事件，按 storyEventId 去重。 */
+  mediaSent: Set<string>;
+  /** D27：剧情媒体任务独立于轮次取消；dispose 时统一中止。 */
+  mediaController: AbortController;
 };
 
-type InputMessage = Extract<ClientMessage, { type: "text_input" | "audio_input" }>;
+/** 一轮输入的规范化形式：文字 / 语音 / 主动开口（D32）。 */
+type TurnInput =
+  | { type: "text_input"; turnId: number; text: string }
+  | { type: "audio_input"; turnId: number; mime: string; dataBase64: string }
+  | { type: "nudge"; turnId: number };
 
 export type SessionDeps = Ports & {
   log: Logger;
@@ -73,6 +87,8 @@ export type SessionDeps = Ports & {
   firstTokenTimeoutMs?: number;
   /** `ws_drop`：由传输层关闭该会话的连接。 */
   dropConnection?: (sessionId: string) => void;
+  /** D27：媒体端口；缺省时用一个立即就绪的兜底实现（真实运行由 index.ts 注入预置照片适配器）。 */
+  media?: MediaPort;
 };
 
 export type SessionManager = {
@@ -134,6 +150,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
   const sessionTurnLimit = deps.sessionTurnLimit ?? DEFAULT_SESSION_TURN_LIMIT;
   const dailyTurnLimit = deps.dailyTurnLimit ?? DEFAULT_DAILY_TURN_LIMIT;
   const sessions = new Map<string, Session>();
+  // 兜底媒体端口：立即就绪（未注入时用）；真实运行由 index.ts 注入预置照片适配器。
+  const media: MediaPort =
+    deps.media ??
+    { preset: (item) => Promise.resolve({ url: `/stage/photos/${item.id}.png`, status: "ready" as const }) };
   // 全站每日计数：内存保存，跨自然日重置。
   const daily = { day: localDayKey(clock()), count: 0 };
 
@@ -162,12 +182,41 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
   }
 
   /**
+   * D27：投递剧情层媒体。后台异步任务，**不绑定轮次、不随打断中止**（有意为之的例外）：
+   * 打断后仍然送达，只按 storyEventId 去重。
+   */
+  function scheduleMediaDelivery(session: Session, turnId: number, media_: Media, storyEventId: string): void {
+    if (session.mediaSent.has(storyEventId)) return;
+    session.mediaSent.add(storyEventId);
+    logFor(session, turnId, "media_scheduled", { storyEventId });
+    void (async () => {
+      try {
+        const result = await media.preset(media_, session.mediaController.signal);
+        if (session.mediaController.signal.aborted) return;
+        session.send?.(
+          buildEnvelope(session, turnId, "media_ready", {
+            storyEventId,
+            media: { ...media_, url: result.url },
+            status: result.status,
+          }),
+        );
+        logFor(session, turnId, "media_ready_sent", { storyEventId, status: result.status });
+      } catch (error) {
+        if (isAbortError(error) || session.mediaController.signal.aborted) return;
+        logFor(session, turnId, "media_failed", { storyEventId, message: error instanceof Error ? error.message : String(error) });
+      }
+    })();
+  }
+
+  /**
    * 单轮执行：LLM 流 → beat → 并发 TTS（发送按 seq 串行）→ snapshot → turn_end。
    * 每一次发送都经过「signal 未中止且 turnId === lastTurnId」守卫。
    */
-  async function runTurn(session: Session, message: InputMessage, signal: AbortSignal): Promise<void> {
+  async function runTurn(session: Session, input: TurnInput, signal: AbortSignal): Promise<void> {
     const startedAt = clock();
-    const turnId = message.turnId;
+    const turnId = input.turnId;
+    // D32：主动开口轮。提示词追加沉默提示；禁止本轮推进剧情（因此不计入 trust）。
+    const isNudge = input.type === "nudge";
     const logTurn = (event: string, detail?: unknown) => {
       deps.log({ ts: clock(), sessionId: session.id, turnId, event, ms: clock() - startedAt, detail });
     };
@@ -196,7 +245,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       return true;
     };
 
-    logTurn("turn_start", { input: message.type });
+    logTurn("turn_start", { input: input.type });
 
     // 每个 beat 一出现就并发开始 TTS；通过 promise 链保证 tts_audio 按 seq 发送。
     let ttsChain: Promise<void> = Promise.resolve();
@@ -204,9 +253,9 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
     try {
       let userText: string;
-      if (message.type === "audio_input") {
-        const data = Buffer.from(message.payload.dataBase64, "base64");
-        userText = await session.ports.stt.transcribe({ mime: message.payload.mime, data }, signal);
+      if (input.type === "audio_input") {
+        const data = Buffer.from(input.dataBase64, "base64");
+        userText = await session.ports.stt.transcribe({ mime: input.mime, data }, signal);
         throwIfAborted(signal);
         logTurn("stt_done", { chars: [...userText].length });
         if (userText.trim() === "") {
@@ -219,8 +268,12 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
           return;
         }
         if (!emit("transcript", { text: userText })) return;
+      } else if (isNudge) {
+        // D32：主动开口。user_text 固定，动态后缀（在提示词里）追加一句沉默提示。
+        userText = NUDGE_USER_TEXT;
+        logTurn("nudge_turn");
       } else {
-        userText = message.payload.text;
+        userText = input.text;
       }
 
       let nextSeq = 0;
@@ -229,7 +282,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       let directorCtx: DirectorContext = {
         scene: session.scene,
         recentActions: session.recentActions,
-        advancedThisTurn: false,
+        // 主动开口轮禁止推进剧情：不计入 trust（D32）。
+        advancedThisTurn: isNudge,
         beatsThisTurn: 0,
       };
 
@@ -240,7 +294,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
       try {
         for await (const raw of session.ports.llm.streamBeats(
-          { history: session.history, scene: session.scene, userText },
+          { history: session.history, scene: session.scene, userText, nudge: isNudge },
           llmSignal,
         )) {
           // 收到第一个 token 即撤销超时；后续不确定性交给现有取消语义。
@@ -272,13 +326,22 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             const seqBeat = { ...beat, seq: nextSeq };
             nextSeq += 1;
 
+            // D27：剧情层媒体事件 id = <sessionId>:<turn>:<seq>，随 beat 一起下发。
+            const beatMedia = seqBeat.media;
+            const storyEventId = beatMedia !== null ? `${session.id}:${turnId}:${seqBeat.seq}` : null;
+            const outBeat: Beat =
+              storyEventId !== null && beatMedia !== null ? { ...seqBeat, media: { ...beatMedia, storyEventId } } : seqBeat;
+
             if (!firstBeatSeen) {
               firstBeatSeen = true;
-              logTurn("llm_first_beat", { seq: seqBeat.seq });
+              logTurn("llm_first_beat", { seq: outBeat.seq });
             }
-            if (!emit("beat", { beat: seqBeat })) return;
+            if (!emit("beat", { beat: outBeat })) return;
+            if (beatMedia !== null && storyEventId !== null) {
+              scheduleMediaDelivery(session, turnId, beatMedia, storyEventId);
+            }
             beatsSent += 1;
-            logTurn("beat_sent", { seq: seqBeat.seq, silent: seqBeat.say === "" });
+            logTurn("beat_sent", { seq: outBeat.seq, silent: outBeat.say === "" });
 
             // ws_drop：第 2 个 beat 发出后由传输层关闭连接，本轮不再产出。
             if (beatsSent === WS_DROP_AFTER_BEAT && session.faults.includes("ws_drop")) {
@@ -288,10 +351,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
               return;
             }
 
-            if (seqBeat.say !== "") {
-              says.push(seqBeat.say);
-              const beatSeq = seqBeat.seq;
-              const audio = synthesizeWithRetry(session.ports.tts, ttsText, { emotion: seqBeat.emotion, beatSeq: seqBeat.seq }, signal);
+            if (outBeat.say !== "") {
+              says.push(outBeat.say);
+              const beatSeq = outBeat.seq;
+              const audio = synthesizeWithRetry(session.ports.tts, ttsText, { emotion: outBeat.emotion, beatSeq: outBeat.seq }, signal);
               ttsChain = ttsChain.then(async () => {
                 const result = await audio;
                 if (!result.ok) {
@@ -390,6 +453,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         ports,
         faults,
         turnStartedAt: null,
+        mediaSent: new Set(),
+        mediaController: new AbortController(),
       };
       sessions.set(session.id, session);
       logFor(session, 0, "session_created", { faults });
@@ -431,15 +496,15 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     });
   }
 
-  async function handleInput(session: Session, message: InputMessage): Promise<void> {
+  async function handleTurnInput(session: Session, input: TurnInput): Promise<void> {
     session.lastActiveAt = clock();
 
-    if (!isTurnIdAcceptable(session.lastTurnId, message.turnId)) {
-      logFor(session, message.turnId, "stale_turn", { incoming: message.turnId, last: session.lastTurnId });
+    if (!isTurnIdAcceptable(session.lastTurnId, input.turnId)) {
+      logFor(session, input.turnId, "stale_turn", { incoming: input.turnId, last: session.lastTurnId });
       session.send?.(
-        buildEnvelope(session, message.turnId, "error", {
+        buildEnvelope(session, input.turnId, "error", {
           code: "stale_turn",
-          message: `turnId ${message.turnId} 必须大于 ${session.lastTurnId}`,
+          message: `turnId ${input.turnId} 必须大于 ${session.lastTurnId}`,
           retryable: false,
         }),
       );
@@ -447,28 +512,31 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     }
 
     // Q12 限额：超出时只回 error，不创建 controller、不调用任何 Provider。
-    const at = clock();
-    const day = localDayKey(at);
-    if (daily.day !== day) {
-      daily.day = day;
-      daily.count = 0;
+    // D32：主动开口轮不计入会话限额与会话轮数。
+    if (input.type !== "nudge") {
+      const at = clock();
+      const day = localDayKey(at);
+      if (daily.day !== day) {
+        daily.day = day;
+        daily.count = 0;
+      }
+      const scope = session.turnsUsed >= sessionTurnLimit ? "session" : daily.count >= dailyTurnLimit ? "daily" : null;
+      if (scope !== null) {
+        const limit = scope === "session" ? sessionTurnLimit : dailyTurnLimit;
+        const used = scope === "session" ? session.turnsUsed : daily.count;
+        logFor(session, input.turnId, "quota_exceeded", { scope, used, limit });
+        session.send?.(
+          buildEnvelope(session, input.turnId, "error", {
+            code: "quota_exceeded",
+            message: scope === "session" ? `本次会话最多 ${limit} 轮` : `今天的体验额度已用完（${limit} 轮）`,
+            retryable: false,
+          }),
+        );
+        return;
+      }
+      session.turnsUsed += 1;
+      daily.count += 1;
     }
-    const scope = session.turnsUsed >= sessionTurnLimit ? "session" : daily.count >= dailyTurnLimit ? "daily" : null;
-    if (scope !== null) {
-      const limit = scope === "session" ? sessionTurnLimit : dailyTurnLimit;
-      const used = scope === "session" ? session.turnsUsed : daily.count;
-      logFor(session, message.turnId, "quota_exceeded", { scope, used, limit });
-      session.send?.(
-        buildEnvelope(session, message.turnId, "error", {
-          code: "quota_exceeded",
-          message: scope === "session" ? `本次会话最多 ${limit} 轮` : `今天的体验额度已用完（${limit} 轮）`,
-          retryable: false,
-        }),
-      );
-      return;
-    }
-    session.turnsUsed += 1;
-    daily.count += 1;
 
     if (session.controller) {
       const supersededTurnId = session.lastTurnId;
@@ -476,11 +544,11 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       logFor(session, supersededTurnId, "turn_aborted", { reason: "superseded" });
     }
 
-    session.lastTurnId = message.turnId;
+    session.lastTurnId = input.turnId;
     const controller = new AbortController();
     session.controller = controller;
     try {
-      await runTurn(session, message, controller.signal);
+      await runTurn(session, input, controller.signal);
     } finally {
       if (session.controller === controller) session.controller = null;
     }
@@ -519,7 +587,21 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       handleInterrupt(session, message);
       return;
     }
-    await handleInput(session, message);
+    // D32：主动开口按一次新输入处理（不计入限额，见 handleTurnInput）。
+    if (message.type === "nudge") {
+      await handleTurnInput(session, { type: "nudge", turnId: message.turnId });
+      return;
+    }
+    if (message.type === "audio_input") {
+      await handleTurnInput(session, {
+        type: "audio_input",
+        turnId: message.turnId,
+        mime: message.payload.mime,
+        dataBase64: message.payload.dataBase64,
+      });
+      return;
+    }
+    await handleTurnInput(session, { type: "text_input", turnId: message.turnId, text: message.payload.text });
   }
 
   const sweepTimer = setInterval(() => {
@@ -537,7 +619,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     handleMessage,
     dispose() {
       clearInterval(sweepTimer);
-      for (const session of sessions.values()) session.controller?.abort();
+      for (const session of sessions.values()) {
+        session.controller?.abort();
+        session.mediaController.abort();
+      }
       sessions.clear();
     },
   };

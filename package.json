@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "test": "vitest run",
+    "e2e": "playwright test",
     "typecheck": "pnpm -r run typecheck",
     "smoke": "pnpm --filter @mira/server run smoke",
     "smoke:real": "pnpm --filter @mira/server run smoke:real",
@@ -15,6 +16,7 @@
     "probe:all": "pnpm --filter @mira/probes exec tsx run-all.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

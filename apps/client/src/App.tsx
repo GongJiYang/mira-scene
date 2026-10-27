@@ -1,5 +1,5 @@
-import { PlaceholderStage } from "./view/PlaceholderStage";
+import { Stage } from "./view/Stage";
 
 export function App() {
-  return <PlaceholderStage />;
+  return <Stage />;
 }

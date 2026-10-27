@@ -17,7 +17,12 @@ export type PromptContext = {
   scene: SceneState;
   history: readonly LLMHistoryEntry[];
   userText: string;
+  /** D32：主动开口轮。动态后缀据此刻追加一句「对方沉默了一会儿」的提示。 */
+  nudge?: boolean;
 };
+
+/** D32：主动开口轮追加到动态后缀的场景提示。 */
+export const NUDGE_SCENE_NOTE = "对方沉默了一会儿，你可以自然地做点什么，或者轻声说一句。";
 
 /** `user_text` 的上限（§2）：最长 500 字。 */
 export const MAX_USER_TEXT_CHARS = 500;
@@ -87,7 +92,7 @@ export function renderPrompt(
     advance_rule: rule,
     turn_count: String(ctx.scene.turnCount),
     trust: String(care),
-    scene_notes: "",
+    scene_notes: ctx.nudge ? NUDGE_SCENE_NOTE : "",
     history: renderHistory(ctx.history),
     user_text: userText,
   });

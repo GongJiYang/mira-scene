@@ -83,6 +83,12 @@ export const mediaReadyPayloadSchema = z.object({
   status: z.enum(["ready", "fallback"]),
 });
 
+/**
+ * D32：客户端主动开口（nudge）。turnId 由信封携带并递增，服务端按一次新输入处理；
+ * 这一轮不计入 trust，也不计入会话限额。
+ */
+export const nudgePayloadSchema = z.object({});
+
 /** 心跳：本批只定义 schema，收发逻辑在 G1-c。 */
 export const pingPayloadSchema = z.object({});
 export const pongPayloadSchema = z.object({});
@@ -92,6 +98,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("text_input"), payload: textInputPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("audio_input"), payload: audioInputPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("interrupt"), payload: interruptPayloadSchema }),
+  z.object({ ...envelopeFields, type: z.literal("nudge"), payload: nudgePayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("playback_started"), payload: playbackStartedPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("ping"), payload: pingPayloadSchema }),
 ]);
@@ -120,6 +127,7 @@ export type TtsAudioPayload = z.infer<typeof ttsAudioPayloadSchema>;
 export type TurnEndPayload = z.infer<typeof turnEndPayloadSchema>;
 export type StateSnapshotPayload = z.infer<typeof stateSnapshotPayloadSchema>;
 export type MediaReadyPayload = z.infer<typeof mediaReadyPayloadSchema>;
+export type NudgePayload = z.infer<typeof nudgePayloadSchema>;
 export type PingPayload = z.infer<typeof pingPayloadSchema>;
 export type PongPayload = z.infer<typeof pongPayloadSchema>;
 export type ErrorPayload = z.infer<typeof errorPayloadSchema>;

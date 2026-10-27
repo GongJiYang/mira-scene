@@ -24,6 +24,7 @@ export type StoryMediaAction =
   | { type: "REQUEST"; storyEventId: string }
   | { type: "READY"; storyEventId: string; media: Media }
   | { type: "FALLBACK"; storyEventId: string; media: Media }
+  | { type: "IMAGE_FAILED"; storyEventId: string; media: Media }
   | { type: "PHASE"; phase: StagePhaseKind };
 
 export const initialStoryMediaState: StoryMediaState = {
@@ -75,6 +76,16 @@ export function storyMediaReducer(state: StoryMediaState, action: StoryMediaActi
         storyEventId: action.storyEventId,
         media: action.media,
         processed: mark(state, action.storyEventId, status === "shown" ? "shown" : arrived),
+      };
+    }
+    case "IMAGE_FAILED": {
+      // Q8：正在展示的那张图片加载失败 → 换另一张预置照片继续显影（状态保持 shown）。
+      // 只处理当前这张；其它 storyEventId 的失败回调忽略。
+      if (state.status !== "shown" || state.storyEventId !== action.storyEventId) return state;
+      return {
+        ...state,
+        media: action.media,
+        processed: mark(state, action.storyEventId, "fallback"),
       };
     }
     case "PHASE": {

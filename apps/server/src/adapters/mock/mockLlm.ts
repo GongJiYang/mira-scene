@@ -84,11 +84,22 @@ function proposeStory(node: StoryNode, intent: Intent, priorUserTurns: number): 
 }
 
 /**
+ * D32：主动开口轮（用户沉默）。低头抿一口咖啡，再看一眼窗外，轻声说一句。
+ * 这一轮不推进剧情，所以 advance 一律为 null。
+ */
+const NUDGE_BEATS: readonly LlmBeat[] = [
+  { say: "", emotion: "calm", suggest: "sip_coffee", advance: null },
+  { say: "……你还在听吗？", emotion: "calm", suggest: null, advance: null },
+];
+
+/**
  * 契约 ①：只产出 LlmBeat（say / emotion / suggest / advance）。
  * 按「剧情节点 + 关键词意图」产出 2–3 个 beat：
  * 两句台词 + 一个无声动作 beat（say 为空串），剧情提议挂在最后一个 beat 上。
  */
 export function composeBeats(ctx: LLMContext): LlmBeat[] {
+  if (ctx.nudge) return [...NUDGE_BEATS];
+
   const node = ctx.scene.node;
   const intent = classifyIntent(ctx.userText);
   const script = SCRIPTS[node];

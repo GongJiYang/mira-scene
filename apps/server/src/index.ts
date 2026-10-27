@@ -11,6 +11,7 @@ import { parseFaults, readFirstTokenTimeoutMs, withFaults } from "./adapters/fau
 import { createMockLlm } from "./adapters/mock/mockLlm";
 import { createMockStt } from "./adapters/mock/mockStt";
 import { createMockTts } from "./adapters/mock/mockTts";
+import { createPresetMedia } from "./adapters/media/presetMedia";
 import { applyRepoEnv, loadConfig } from "./config";
 import { consoleLogger, type Logger } from "./log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "./ports";
@@ -123,6 +124,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
           },
     defaultFaults: parseFaults(process.env.FAULTS),
     firstTokenTimeoutMs: readFirstTokenTimeoutMs(),
+    // D27：预置照片媒体；等待 config.mediaPresetDelayMs 后发送 media_ready。
+    media: createPresetMedia({ delayMs: config.mediaPresetDelayMs }),
     dropConnection: (sessionId) => {
       const socket = sessionSockets.get(sessionId);
       if (!socket) return;

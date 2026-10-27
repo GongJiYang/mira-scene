@@ -1,0 +1,14 @@
+Done. S4 is implemented against the gate conclusions in `docs/tasks/s4.md`, with all four commands green.
+
+**Results**
+- `pnpm typecheck` ✅ · `pnpm test` ✅ **392 passed** (was 336; +56) · `pnpm smoke` ✅ · `pnpm e2e` ✅ **5 passed / 3 skipped** (ran twice, stable). Report: `docs/tasks/s4-report.md`, screenshots in `e2e/out/` (12 files).
+
+**What I built**
+- **Protocol** (additive): `media.storyEventId`; client message `nudge`.
+- **Server**: `MediaPort` + `presetMedia` adapter; `media_ready` sent from a background task that survives interrupts (deduped by `storyEventId`); `nudge` handled as a new input with fixed `user_text`, no story advance/trust, no quota; mock proactive line; prompt silence suffix.
+- **Client**: 4 pure functions (`composeStage`, `rainParams`, `cameraTransform`, `developProgress`) + unit tests; `StageRenderer`-style DOM shell (bg crossfade, rain canvas, layered character, foreground table, camera push, polaroid developing→shown, subtitle/input placeholder); nudge rate-limit + sending; media REQUEST wiring; image-failure fallback via controller.
+- **Assets**: two symlinks under `apps/client/public/stage/` — verified `pnpm dev` serves them and `vite build` copies them, no duplicated large files.
+
+**Deviations/ambiguities I reported** (details in §4): the mock puts `advance:"reveal"` on the turn's *last* (silent) beat, so a playback-time `REQUEST` always lands after `media_ready` — I register the C request on beat *receipt* to keep `developing → shown`; `storyEventId` is generated in `session.ts` (director is pure); C gained an additive `IMAGE_FAILED` action because its existing dedup ignores `FALLBACK` after `shown`; plus `warm_glow`→closing, `fx:null`→rain, and stage 2:3 vs `_v/_h` selection.
+
+**Hygiene**: no Key printed or written, no commit, `tools/` untouched, `tools/live2d-pipeline` step6.py/config.refpack.json/overrides.py left as you had them, no build output left, dev server shut down and ports 5273/8887 confirmed free. Note `pnpm e2e` uses ports 5273/8887 because your machine already had 5173/8787 occupied — I didn't touch those processes.

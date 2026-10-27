@@ -1,0 +1,226 @@
+/* S4 舞台（占位结构与少量样式；正式 UI 由用户另行设计，D14）。 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #05070a;
+}
+
+.stage-root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 16px;
+  overflow-x: hidden;
+  color: #e8eef5;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.stage-viewport {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* 2:3 舞台：手机宽度占满，桌面上居中且不超过视口高度（不产生横向滚动）。 */
+.stage-frame {
+  position: relative;
+  width: 100%;
+  max-width: calc(66.6667dvh - 16px);
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #1b2233; /* 素材加载失败时的纯色兜底（深蓝） */
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.stage-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.stage-layer > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 呼吸：±0.6% 竖向缩放，周期 4s（§5）。 */
+.stage-breathe {
+  animation: stage-breathe 4s ease-in-out infinite;
+}
+
+@keyframes stage-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.006);
+  }
+}
+
+.stage-rain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.stage-glow {
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 32%, rgba(255, 191, 122, 0.95), rgba(255, 160, 90, 0) 68%);
+  mix-blend-mode: screen;
+}
+
+/* 背景两态交叉淡入淡出（1.2s）。 */
+.stage-bg img {
+  object-fit: cover;
+}
+
+/* 空白相纸：从桌沿滑入（§6）。 */
+.photo-card {
+  position: absolute;
+  right: 8%;
+  bottom: 6%;
+  width: 32%;
+  aspect-ratio: 1 / 1.18;
+  background: #f7f4ee;
+  border-radius: 3px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+  animation: photo-slide 520ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+@keyframes photo-slide {
+  from {
+    transform: translate(140%, 40%) rotate(6deg);
+    opacity: 0;
+  }
+  to {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 显影后的照片：放大浮在中央，点击或 6s 后回到桌角（§6）。 */
+.stage-photo {
+  position: absolute;
+  z-index: 60;
+  transition:
+    transform 700ms cubic-bezier(0.22, 0.9, 0.3, 1),
+    width 700ms cubic-bezier(0.22, 0.9, 0.3, 1),
+    inset 700ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.stage-photo > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 4px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.stage-photo[data-mode="center"] {
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1 / 1.18;
+  transform: translate(-50%, -50%);
+}
+
+.stage-photo[data-mode="corner"] {
+  right: 7%;
+  bottom: 5%;
+  left: auto;
+  top: auto;
+  width: 30%;
+  aspect-ratio: 1 / 1.18;
+  transform: none;
+}
+
+.stage-subtitle {
+  min-height: 1.6em;
+  max-width: 640px;
+  text-align: center;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  padding: 0 12px;
+}
+
+.stage-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.stage-controls form {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.stage-controls input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 1rem;
+}
+
+.stage-controls button {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.stage-controls .stage-hint {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-breathe {
+    animation: none;
+  }
+  .photo-card {
+    animation: none;
+  }
+  .stage-photo {
+    transition: none;
+  }
+}
