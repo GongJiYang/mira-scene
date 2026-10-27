@@ -384,3 +384,64 @@ describe("角色包：内容原样搬运（铁律 6）", () => {
     ]);
   });
 });
+
+describe("S6l §2/§3/§4/§5：pack schema 新字段", () => {
+  it("每个节点都有 streamTitle（§2）", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
+    expect(pack.nodes.arrive.streamTitle).toBe("下播后 · 推流未关");
+    expect(pack.nodes.probe.streamTitle).toBe("还有一位观众没走");
+    expect(pack.nodes.reveal.streamTitle).toBe("翻到一张老截图");
+    expect(pack.nodes.ending.streamTitle).toBe("准备关推流");
+  });
+
+  it("非 ending 节点都有 guides 与 hook；ending 为空（§3/§4）", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
+    expect(pack.nodes.arrive.guides).toEqual(["主播还没下播？", "今天是不是不太开心", "这么晚还不睡吗"]);
+    expect(pack.nodes.probe.guides).toEqual(["之前那张老截图还在吗", "第一次开播是啥时候来着", "后台数据很惨吗"]);
+    expect(pack.nodes.reveal.guides).toEqual(["那你还想继续播吗", "三个观众里有我吗", "要不休息一阵？"]);
+    expect(pack.nodes.ending.guides).toEqual([]);
+    expect(pack.nodes.arrive.hook).toBe("……其实我在想一件事。");
+    expect(pack.nodes.probe.hook).toBe("我手机里倒是存着一张老截图。");
+    expect(pack.nodes.reveal.hook).toBe("你说，我还要继续播吗。");
+    expect(pack.nodes.ending.hook).toBe("");
+  });
+
+  it("events（§5）：poke / gift 各两句", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
+    expect(pack.events.poke).toEqual(["干嘛戳我。", "再戳要收费了哦。"]);
+    expect(pack.events.gift).toEqual(["诶，谢谢你的礼物！", "下播了还送，你人也太好了吧。"]);
+  });
+
+  it("节点缺少 guides / hook（非 ending）→ 拒绝", () => {
+    const raw = rawPack("yuna");
+    const content = structuredClone(raw.contentJson) as { nodes: Record<string, { guides: string[]; hook: string }> };
+    if (content.nodes.arrive) {
+      content.nodes.arrive.guides = [];
+      content.nodes.arrive.hook = "";
+    }
+    const parsed = parsePack({
+      dir: raw.dir,
+      packJson: raw.packJson,
+      contentJson: content,
+      promptVersion: "x",
+      staticText: "s",
+      dynamicTemplate: "d",
+    });
+    expect(parsed.ok).toBe(false);
+  });
+
+  it("缺少 events → 拒绝", () => {
+    const raw = rawPack("yuna");
+    const content = structuredClone(raw.contentJson) as Record<string, unknown>;
+    delete content.events;
+    const parsed = parsePack({
+      dir: raw.dir,
+      packJson: raw.packJson,
+      contentJson: content,
+      promptVersion: "x",
+      staticText: "s",
+      dynamicTemplate: "d",
+    });
+    expect(parsed.ok).toBe(false);
+  });
+});

@@ -26,8 +26,8 @@ describe("danmakuReducer：追加、最多条数、淡出顺序", () => {
     state = danmakuReducer(state, { type: "APPEND", kind: "transcript", text: "语音转写" });
 
     expect(state.items).toEqual([
-      { id: 1, kind: "user", text: "你好" },
-      { id: 2, kind: "transcript", text: "语音转写" },
+      { id: 1, kind: "user", text: "你好", nickname: null },
+      { id: 2, kind: "transcript", text: "语音转写", nickname: null },
     ]);
     expect(state.nextId).toBe(3);
   });

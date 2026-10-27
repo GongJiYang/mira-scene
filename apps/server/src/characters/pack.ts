@@ -123,7 +123,13 @@ const nodeLinesSchema = z.record(intentSlotSchema, z.tuple([z.string(), z.string
 
 const nodeSchema = z.object({
   label: z.string().min(1),
+  /** S6l §2：直播间顶部显示的剧情阶段标题。 */
+  streamTitle: z.string().min(1),
   guidance: z.string().min(1),
+  /** S6l §4：沉默时按阶段抛的钩子（ending 为空串表示无 hook）。 */
+  hook: z.string(),
+  /** S6l §3：观众弹幕引导（ending 为空数组）。 */
+  guides: z.array(z.string().min(1)),
   look: z.object({ emotion: emotionSchema, silentAction: actionSchema, accent: accentSchema.nullish() }),
   lines: nodeLinesSchema,
 });
@@ -135,6 +141,12 @@ const nudgeBeatSchema = z.object({
   accent: accentSchema.optional(),
 });
 
+/** S6l §5：戳一下 / 送礼物时 Mock 的情景回应。 */
+const eventsSchema = z.object({
+  poke: z.array(z.string().min(1)).min(1),
+  gift: z.array(z.string().min(1)).min(1),
+});
+
 export const contentFileSchema = z.object({
   displayName: z.string().min(1),
   /**
@@ -144,6 +156,8 @@ export const contentFileSchema = z.object({
   intents: z.record(intentSlotSchema, z.string()),
   nodes: z.record(storyNodeSchema, nodeSchema),
   nudge: z.array(nudgeBeatSchema).min(1),
+  /** S6l §5：戳一下 / 送礼物时 Mock 的情景回应。 */
+  events: eventsSchema,
   /** 五类兜底台词（键为 FALLBACK_CATEGORIES；完整性由 crossCheck 保证）。 */
   fallback: z.record(z.string(), z.string().min(1)),
   /** 生图提示词模板（含 `{{conversation}}`，S6b §5.5）。 */
@@ -160,8 +174,21 @@ export const contentFileSchema = z.object({
  * ---------------------------------------------------------------------------------------------- */
 
 export type NodeLook = { emotion: Emotion; silentAction: Action; accent: Accent | null };
-export type NodeScript = { label: string; guidance: string; look: NodeLook; lines: Record<IntentSlot, readonly [string, string]> };
+export type NodeScript = {
+  label: string;
+  /** S6l §2：直播间顶部显示的剧情阶段标题。 */
+  streamTitle: string;
+  guidance: string;
+  /** S6l §4：沉默时按阶段抛的钩子（空串表示无 hook）。 */
+  hook: string;
+  /** S6l §3：观众弹幕引导（可空数组）。 */
+  guides: readonly string[];
+  look: NodeLook;
+  lines: Record<IntentSlot, readonly [string, string]>;
+};
 export type NudgeBeat = { say: string; emotion: Emotion; suggest?: Action; accent?: Accent };
+/** S6l §5：戳一下 / 送礼物时 Mock 的情景回应台词。 */
+export type EventLines = { poke: readonly string[]; gift: readonly string[] };
 
 export type Pack = {
   id: string;
@@ -182,6 +209,8 @@ export type Pack = {
   /** 剧情节点脚本（label / guidance / look / lines）。 */
   nodes: Record<StoryNode, NodeScript>;
   nudge: readonly NudgeBeat[];
+  /** S6l §5：戳一下 / 送礼物时 Mock 的情景回应台词。 */
+  events: EventLines;
   fallback: Record<FallbackCategory, string>;
   /** 意图槽位 → 正则片段（编译后的 RegExp）。 */
   intentPatterns: ReadonlyArray<readonly [IntentSlot, RegExp]>;
@@ -205,6 +234,9 @@ function crossCheck(content: z.infer<typeof contentFileSchema>, revealIntents: r
       const pair = lines[slot];
       if (!pair || pair.length !== 2) return `节点 ${node} 的意图 ${slot} 不是两句台词`;
     }
+    // S6l §3/§4：非 ending 节点必须有引导弹幕与钩子。
+    if (node !== "ending" && content.nodes[node].guides.length === 0) return `节点 ${node} 缺少 guides`;
+    if (node !== "ending" && content.nodes[node].hook === "") return `节点 ${node} 缺少 hook`;
   }
   for (const category of FALLBACK_CATEGORIES) {
     if (content.fallback[category] === undefined) return `fallback 缺少类别 ${category}`;
@@ -305,6 +337,7 @@ export function parsePack(input: {
       dynamicTemplate: input.dynamicTemplate,
       nodes,
       nudge: contentParsed.data.nudge,
+      events: contentParsed.data.events,
       fallback: contentParsed.data.fallback as Record<FallbackCategory, string>,
       intentPatterns,
       imagePrompt: contentParsed.data.imagePrompt,

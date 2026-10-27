@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { SceneState } from "@mira/protocol";
 import type { LLMHistoryEntry } from "../src/ports";
-import { ADVANCE_ALLOW_ENDING, ADVANCE_ALLOW_REVEAL, ADVANCE_HOLD, advanceRule } from "../src/prompts/advanceRule";
+import { ADVANCE_ALLOW_ENDING, ADVANCE_ALLOW_PROBE, ADVANCE_ALLOW_REVEAL, ADVANCE_HOLD, advanceRule } from "../src/prompts/advanceRule";
 import { loadPromptTemplate, parsePromptFile, PROMPT_FILE } from "../src/prompts/loader";
 import { renderPrompt, sanitizeUserText, type PromptPack } from "../src/prompts/renderPrompt";
-import { createInitialScene } from "../src/story";
+import { createInitialScene, NEXT_NODE } from "../src/story";
 import { testPack } from "./helpers/pack";
 
 const STATIC = "静态前缀·逐字不变";
@@ -30,34 +31,64 @@ function ctx(overrides: Partial<{ scene: ReturnType<typeof createInitialScene>; 
   };
 }
 
-describe("advanceRule（§2 的三种条件）", () => {
+describe("advanceRule（S6l §1：按节点生成，且与 NEXT_NODE 一致）", () => {
   const arrive = createInitialScene();
 
-  it("trust（关心次数）≥2 → 允许进入 reveal", () => {
-    expect(advanceRule({ ...arrive, trust: 2 }, "other", 0)).toBe(ADVANCE_ALLOW_REVEAL);
-    expect(advanceRule({ ...arrive, trust: 1 }, "other", 0)).toBe(ADVANCE_HOLD);
+  it("arrive：用户说过至少 1 轮 → 允许进入 probe；否则不推进", () => {
+    expect(advanceRule(arrive, "greeting", 0, 1)).toBe(ADVANCE_ALLOW_PROBE);
+    expect(advanceRule(arrive, "greeting", 0, 0)).toBe(ADVANCE_HOLD);
   });
 
-  it("用户温和地直接问起 → 允许进入 reveal", () => {
-    expect(advanceRule(arrive, "ask_core", 0)).toBe(ADVANCE_ALLOW_REVEAL);
+  it("probe：trust（关心次数）≥2 → 允许进入 reveal；否则不推进", () => {
+    const probe = { ...arrive, node: "probe" as const };
+    expect(advanceRule({ ...probe, trust: 2 }, "other", 0, 3)).toBe(ADVANCE_ALLOW_REVEAL);
+    expect(advanceRule({ ...probe, trust: 1 }, "other", 0, 3)).toBe(ADVANCE_HOLD);
   });
 
-  it("turn_count≥8 → 允许进入 reveal；其余情况不要推进", () => {
-    expect(advanceRule(arrive, "greeting", 8)).toBe(ADVANCE_ALLOW_REVEAL);
-    expect(advanceRule(arrive, "greeting", 7)).toBe(ADVANCE_HOLD);
+  it("probe：用户温和地直接问起 → 允许进入 reveal", () => {
+    const probe = { ...arrive, node: "probe" as const };
+    expect(advanceRule(probe, "ask_core", 0, 3)).toBe(ADVANCE_ALLOW_REVEAL);
+    expect(advanceRule(probe, "greeting", 0, 3)).toBe(ADVANCE_HOLD);
+  });
+
+  it("probe：turn_count≥8 → 允许进入 reveal；其余情况不要推进", () => {
+    const probe = { ...arrive, node: "probe" as const };
+    expect(advanceRule(probe, "greeting", 8, 3)).toBe(ADVANCE_ALLOW_REVEAL);
+    expect(advanceRule(probe, "greeting", 7, 3)).toBe(ADVANCE_HOLD);
   });
 
   it("进入 reveal 两轮之后才允许 ending；没有 revealTurn → 不允许推进", () => {
-    expect(advanceRule({ ...arrive, node: "reveal", revealTurn: 2 }, "other", 4)).toBe(ADVANCE_ALLOW_ENDING);
-    expect(advanceRule({ ...arrive, node: "reveal", revealTurn: 2 }, "other", 3)).toBe(ADVANCE_HOLD);
-    expect(advanceRule({ ...arrive, node: "reveal" }, "other", 99)).toBe(ADVANCE_HOLD);
-    expect(advanceRule({ ...arrive, node: "ending" }, "ask_core", 12)).toBe(ADVANCE_HOLD);
+    expect(advanceRule({ ...arrive, node: "reveal", revealTurn: 2 }, "other", 4, 9)).toBe(ADVANCE_ALLOW_ENDING);
+    expect(advanceRule({ ...arrive, node: "reveal", revealTurn: 2 }, "other", 3, 9)).toBe(ADVANCE_HOLD);
+    expect(advanceRule({ ...arrive, node: "reveal" }, "other", 99, 9)).toBe(ADVANCE_HOLD);
+    expect(advanceRule({ ...arrive, node: "ending" }, "ask_core", 12, 9)).toBe(ADVANCE_HOLD);
   });
 
   it("s3-fix §2：第 8 轮进入 reveal → 第 9 轮不允许、第 10 轮允许", () => {
     const scene = { ...arrive, node: "reveal" as const, revealTurn: 8 };
-    expect(advanceRule(scene, "other", 9)).toBe(ADVANCE_HOLD);
-    expect(advanceRule(scene, "other", 10)).toBe(ADVANCE_ALLOW_ENDING);
+    expect(advanceRule(scene, "other", 9, 9)).toBe(ADVANCE_HOLD);
+    expect(advanceRule(scene, "other", 10, 9)).toBe(ADVANCE_ALLOW_ENDING);
+  });
+
+  it("属性：任意节点下「允许进入 X」的目标恒等于 NEXT_NODE[node]", () => {
+    const nodes: SceneState["node"][] = ["arrive", "probe", "reveal", "ending"];
+    const intents: Parameters<typeof advanceRule>[1][] = ["ask_core", "ask_item", "ask_job", "comfort", "greeting", "other"];
+    for (const node of nodes) {
+      for (const intent of intents) {
+        for (const turns of [0, 1, 2, 4, 8, 9]) {
+          for (const trust of [0, 1, 2, 3]) {
+            const scene = { ...createInitialScene(), node, trust, revealTurn: node === "reveal" ? 0 : undefined };
+            const text = advanceRule(scene, intent, turns, turns);
+            const match = /^允许进入 (\w+)$/.exec(text);
+            if (match) {
+              expect(match[1]).toBe(NEXT_NODE[node]);
+            } else {
+              expect(text).toBe(ADVANCE_HOLD);
+            }
+          }
+        }
+      }
+    }
   });
 });
 
@@ -108,14 +139,14 @@ describe("renderPrompt", () => {
       { role: "assistant", text: "谢谢" },
       { role: "user", text: "别担心" },
     ];
-    const messages = renderPrompt(pack, ctx({ history }));
+    const messages = renderPrompt(pack, ctx({ scene: { ...createInitialScene(), node: "probe" }, history }));
     const user = messages[1]?.content ?? "";
     expect(user).toContain("关心=2");
     expect(user).toContain(ADVANCE_ALLOW_REVEAL);
   });
 
-  it("问那杯咖啡也算温和地直接问起", () => {
-    const messages = renderPrompt(pack, ctx({ userText: "那杯咖啡，是给他点的吧？" }));
+  it("问那杯咖啡也算温和地直接问起（probe 下 → 允许进入 reveal）", () => {
+    const messages = renderPrompt(pack, ctx({ scene: { ...createInitialScene(), node: "probe" }, userText: "那杯咖啡，是给他点的吧？" }));
     expect(messages[1]?.content).toContain(ADVANCE_ALLOW_REVEAL);
   });
 });

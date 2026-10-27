@@ -86,8 +86,17 @@ export function renderPrompt(pack: PromptPack, ctx: PromptContext): ChatMessage[
   const intent: Intent = COFFEE_PATTERN.test(ctx.userText)
     ? "ask_core"
     : classifyIntent(ctx.userText, pack.intentPatterns);
-  const rule = advanceRule({ ...ctx.scene, trust: care }, intent, ctx.scene.turnCount);
+  // S6l §1：arrive → probe 需要「用户说过至少 1 轮」，与 Mock 的 `priorUserTurns >= 1` 一致
+  // （只看历史里的用户轮数，不含本轮）。
+  const userTurns = ctx.history.filter((entry) => entry.role === "user").length;
+  const rule = advanceRule({ ...ctx.scene, trust: care }, intent, ctx.scene.turnCount, userTurns);
   const node = pack.nodes[ctx.scene.node];
+  // S6l §4：沉默时按阶段抛钩子——nudge 轮把当前节点的 hook 提示给 LLM（无 hook 时用原提示）。
+  const nudgeNote = ctx.nudge
+    ? node.hook !== ""
+      ? `${NUDGE_SCENE_NOTE}（可以顺着这个念头开口：「${node.hook}」）`
+      : NUDGE_SCENE_NOTE
+    : "";
 
   const dynamic = fillTemplate(pack.dynamicTemplate, {
     node_label: node.label,
@@ -96,7 +105,7 @@ export function renderPrompt(pack: PromptPack, ctx: PromptContext): ChatMessage[
     turn_count: String(ctx.scene.turnCount),
     trust: String(care),
     // S6c §1：nudge 与 sceneNotes 可叠加（弹幕命中换背景时，角色照常回话并知道正在换背景）。
-    scene_notes: [ctx.nudge ? NUDGE_SCENE_NOTE : "", ctx.sceneNotes ?? ""].filter(Boolean).join(""),
+    scene_notes: [nudgeNote, ctx.sceneNotes ?? ""].filter(Boolean).join(""),
     history: renderHistory(pack, ctx.history),
     user_text: userText,
   });

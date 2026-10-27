@@ -39,6 +39,12 @@ export type DirectorContext = {
   advancedThisTurn: boolean;
   beatsThisTurn: number;
   nodeVisuals: Partial<Record<SceneState["node"], NodeVisual>>;
+  /**
+   * S6l §5：本轮输入类型（text / poke / gift）。poke / gift 时的 accent 规则与 gift 的 fx hearts。
+   */
+  inputKind?: "text" | "poke" | "gift";
+  /** S6l §5：戳一下的序号（从 0 开始），用于 poke 的 shy / angry 轮流。 */
+  pokeIndex?: number;
 };
 
 /** `seq` 由会话层统一分配；导演层只填 0。 */
@@ -143,7 +149,15 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
     emotion,
     say: llmBeat.say,
     recentAccents: ctx.recentAccents,
+    // S6l §5：poke / gift 的规则触发（gift → love，poke → 轮流 shy / angry）。
+    kind: ctx.inputKind,
+    pokeIndex: ctx.pokeIndex,
   });
+
+  // S6l §5：送礼物 → fx hearts（只放在本轮第一个 beat，与剧情推进的视觉不冲突时）。
+  if (ctx.inputKind === "gift" && ctx.beatsThisTurn === 0 && fx === null) {
+    fx = "hearts";
+  }
 
   for (const [index, part] of parts.entries()) {
     const isFirst = index === 0;
@@ -177,6 +191,8 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
       advancedThisTurn,
       beatsThisTurn: ctx.beatsThisTurn + beats.length,
       nodeVisuals: ctx.nodeVisuals,
+      inputKind: ctx.inputKind,
+      pokeIndex: ctx.pokeIndex,
     },
   };
 }

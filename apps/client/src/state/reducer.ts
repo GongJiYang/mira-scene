@@ -10,6 +10,7 @@ export const initialState: ClientState = {
   visual: { emotion: "neutral", hands: "cup", action: null, camera: null, fx: null, accent: null },
   media: null,
   audioStopToken: 0,
+  node: "arrive",
 };
 
 /**
@@ -61,6 +62,8 @@ function markTurnEnded(state: ClientState): ClientState {
 function applySnapshot(state: ClientState, snapshot: SceneState): ClientState {
   return {
     ...state,
+    // S6l §2：剧情阶段只认服务端下发的当前节点。
+    node: snapshot.node,
     visual: {
       ...state.visual,
       emotion: snapshot.emotion,
@@ -138,6 +141,8 @@ function applyBeatStarted(state: ClientState, turnId: number, seq: number): Clie
     ...state,
     queue: state.queue.filter((queued) => queued.seq !== seq),
     subtitle: beat.say,
+    // S6l §2：带剧情推进的 beat 一到就更新当前节点（只认服务端）。
+    node: beat.story?.advance ?? state.node,
     visual: {
       emotion: beat.emotion,
       hands: beat.hands,

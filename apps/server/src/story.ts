@@ -1,12 +1,17 @@
 import type { Beat, SceneState, StoryNode } from "@mira/protocol";
 
 /** allowlist 转移：每轮最多前进一步由 session.ts 保证。 */
-const NEXT_NODE: Record<StoryNode, StoryNode | null> = {
+export const NEXT_NODE: Record<StoryNode, StoryNode | null> = {
   arrive: "probe",
   probe: "reveal",
   reveal: "ending",
   ending: null,
 };
+
+/** 当前节点允许推进到的下一个节点；终点的下一节点为 null。 */
+export function nextStoryNode(node: StoryNode): StoryNode | null {
+  return NEXT_NODE[node];
+}
 
 export function createInitialScene(): SceneState {
   return {
