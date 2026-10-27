@@ -21,6 +21,8 @@ import { createPresetMedia } from "./adapters/media/presetMedia";
 import { loadPacks } from "./characters/pack";
 import { applyRepoEnv, loadConfig } from "./config";
 import { consoleLogger, type Logger } from "./log";
+import { createObsBuffer } from "./obs/buffer";
+import { summarize } from "./obs/summarize";
 import type { LLMPort, Ports, STTPort, TTSPort } from "./ports";
 import { withPaceCheck } from "./quality/paceGuard";
 import { createSessionManager, type SendFn } from "./session";
@@ -58,7 +60,13 @@ function rejectUpgrade(socket: Duplex, status: string): void {
  */
 export async function startServer(options: StartServerOptions = {}): Promise<ServerHandle> {
   const config = loadConfig(options.env ?? process.env);
-  const logger = options.logger ?? consoleLogger;
+  const baseLogger = options.logger ?? consoleLogger;
+  // S6h §1：logger 旁路写入观测环形缓冲；`OBS_ENABLED=0` 时 /obs/summary 返回 404，缓冲照常收集（查询不可用）。
+  const obsBuffer = createObsBuffer();
+  const logger: Logger = (record) => {
+    obsBuffer.push(record);
+    baseLogger(record);
+  };
   const tokens = createTokenStore();
   const { providers } = config;
 
@@ -209,6 +217,18 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     if (request.method === "GET" && request.url === "/session-token") {
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       response.end(JSON.stringify(tokens.issue()));
+      return;
+    }
+    // S6h §1：GET /obs/summary。OBS_ENABLED 缺省开启；显式设 0 时 404。
+    if (request.method === "GET" && request.url !== undefined && new URL(request.url, "http://localhost").pathname === "/obs/summary") {
+      const enabled = (options.env?.OBS_ENABLED ?? process.env.OBS_ENABLED ?? "1") !== "0";
+      if (!enabled) {
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "not_found" }));
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      response.end(JSON.stringify(summarize(obsBuffer.snapshot(), Date.now())));
       return;
     }
     // S6b-fix1 §5：GET /generated/<file>。文件名只允许 ^[a-z0-9_-]+\.png$，其它一律 404（防路径穿越）。
