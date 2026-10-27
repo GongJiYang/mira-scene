@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>忧奈直播间 · 设计规范</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=VT323&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#120E1C}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 820px; box-sizing: border-box; padding: 48px 56px; background: #120E1C; font-family: 'Noto Sans SC', system-ui, sans-serif; color: #F3EEFF; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 48px; align-content: start">
+
+  <div style="grid-column: 1 / span 3; display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid #3A2F55; padding-bottom: 16px">
+    <h1 style="margin: 0; font-size: 32px; font-weight: 700">深夜推流</h1>
+    <span style="font-family: VT323, monospace; font-size: 22px; color: #A99CC4">LATE-NIGHT STREAM · UI KIT v1</span>
+    <span style="flex: 1"></span>
+    <span style="font-size: 13px; color: #A99CC4">暗紫夜色作底，淡紫作主色，粉色只给 LIVE 与礼物；像素等宽字只用于系统信息</span>
+  </div>
+
+  <!-- 颜色 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 15px; color: #A99CC4; font-weight: 500">颜色</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #120E1C; border: 1px solid #3A2F55"></span><span style="font-size: 12px">夜色 底</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#120E1C</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #1E1830; border: 1px solid #3A2F55"></span><span style="font-size: 12px">面板</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#1E1830</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #3A2F55"></span><span style="font-size: 12px">描边</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#3A2F55</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #F3EEFF"></span><span style="font-size: 12px">正文</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#F3EEFF</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #C9A7FF"></span><span style="font-size: 12px">主色 淡紫</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#C9A7FF</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #FF5FA2"></span><span style="font-size: 12px">LIVE / 礼物</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#FF5FA2</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #8FD3FF"></span><span style="font-size: 12px">倾听</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#8FD3FF</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 8px; background: #FFC27A"></span><span style="font-size: 12px">思考 / 兜底</span><span style="font-family: VT323, monospace; font-size: 15px; color: #A99CC4">#FFC27A</span></div>
+    </div>
+  </section>
+
+  <!-- 字体 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 15px; color: #A99CC4; font-weight: 500">字体</h2>
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 10px; background: #1E1830; border: 1px solid #3A2F55">
+      <div style="font-size: 22px; line-height: 1.55">字幕 22 / 手机 18</div>
+      <div style="font-size: 15px; font-weight: 700">主播名 · 按钮 15 粗</div>
+      <div style="font-size: 14px; color: #C8BEDF">弹幕正文 14</div>
+      <div style="font-size: 12px; color: #A99CC4">辅助说明 12</div>
+      <div style="font-family: VT323, monospace; font-size: 20px; color: #C9A7FF">LIVE · 1 VIEWER · 02:14:37</div>
+      <div style="font-size: 12px; color: #A99CC4">Noto Sans SC 正文；VT323 只用于系统数字和英文标签</div>
+    </div>
+  </section>
+
+  <!-- 四态 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 15px; color: #A99CC4; font-weight: 500">角色四态（右上角状态牌）</h2>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #1E1830; border: 1px solid #3A2F55"><span style="width: 8px; height: 8px; border-radius: 50%; background: #A99CC4"></span><span style="font-size: 13px">发呆中</span></span>
+        <span style="font-size: 12px; color: #A99CC4">待机 · 灰点缓慢呼吸</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #1E1830; border: 1px solid #8FD3FF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8FD3FF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 14a6 6 0 1 1 12 0c0 3-3 3-3 6a3 3 0 0 1-6 0"/></svg><span style="font-size: 13px">在听你说</span></span>
+        <span style="font-size: 12px; color: #A99CC4">倾听 · 蓝色描边 + 耳朵图标</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #1E1830; border: 1px solid #FFC27A"><span style="font-family: VT323, monospace; font-size: 18px; line-height: 14px; color: #FFC27A">···</span><span style="font-size: 13px">想一想</span></span>
+        <span style="font-size: 12px; color: #A99CC4">思考 · 琥珀三点跳动</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #1E1830; border: 1px solid #C9A7FF"><span style="display: flex; align-items: flex-end; gap: 2px; height: 14px"><span style="width: 3px; height: 8px; background: #C9A7FF"></span><span style="width: 3px; height: 14px; background: #C9A7FF"></span><span style="width: 3px; height: 5px; background: #C9A7FF"></span><span style="width: 3px; height: 11px; background: #C9A7FF"></span></span><span style="font-size: 13px">说话中</span></span>
+        <span style="font-size: 12px; color: #A99CC4">说话 · 声波柱随音量</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 弹幕 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 15px; color: #A99CC4; font-weight: 500">弹幕的四种样式</h2>
+    <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 10px; background: #1E1830; border: 1px solid #3A2F55">
+      <p style="margin: 0; font-size: 14px; color: #C8BEDF"><span style="color: #8FD3FF; font-weight: 500">夜猫子07</span>　普通观众</p>
+      <p style="margin: 0; font-size: 14px; color: #F3EEFF"><span style="color: #C9A7FF; font-weight: 700">你</span>　自己发的</p>
+      <p style="margin: 0; font-size: 14px; color: #8F82AD">— 系统消息 —</p>
+      <button type="button" style="text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px dashed #C9A7FF; background: rgba(201,167,255,0.08); color: #F3EEFF; font-size: 14px; cursor: pointer">
+        <span style="color: #9EF0C2; font-weight: 500">不睡觉的鱼</span>　引导弹幕（可点）
+        <span style="display: block; margin-top: 4px; font-size: 12px; color: #C9A7FF">↳ 点一下替你说</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- 字幕 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 15px; color: #A99CC4; font-weight: 500">字幕对话框</h2>
+    <div>
+      <div style="display: inline-block; margin-left: 14px; padding: 2px 10px; border-radius: 6px 6px 0 0; background: #C9A7FF; color: #1A1030; font-size: 12px; font-weight: 700">忧奈</div>
+      <div style="padding: 12px 16px; border-radius: 10px; background: #1E1830; border: 1px solid #4A3F68; font-size: 17px; line-height: 1.55">已播的字<span style="color: #8F82AD">还没播到的字</span></div>
+    </div>
+    <div>
+      <div style="display: inline-block; margin-left: 14px; padding: 2px 10px; border-radius: 6px 6px 0 0; background: #FFC27A; color: #2A1A06; font-size: 12px; font-weight: 700">忧奈 · 网络卡了</div>
+      <div style="padding: 12px 16px; border-radius: 10px; background: #1E1830; border: 1px solid #6B5530; font-size: 17px; line-height: 1.55">……欸，刚刚卡住了，你再说一遍？</div>
+    </div>
+    <p style="margin: 0; font-size: 12px; color: #A99CC4">兜底台词用琥珀名牌，让「出错」也像直播事故而不是报错弹窗</p>
+  </section>
+
+  <!-- 按钮 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 15px; color: #A99CC4; font-weight: 500">按钮</h2>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+      <button type="button" aria-label="按住说话" style="height: 52px; padding: 0 20px 0 14px; border-radius: 999px; border: none; background: #C9A7FF; color: #1A1030; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>按住说话</button>
+      <button type="button" style="height: 52px; padding: 0 20px; border-radius: 12px; border: 1px solid #3A2F55; background: #241D3A; color: #F3EEFF; font-size: 15px">发送</button>
+      <button type="button" aria-label="送礼物" style="width: 52px; height: 52px; border-radius: 12px; border: 1px solid #3A2F55; background: #1E1830; color: #FF5FA2; display: flex; align-items: center; justify-content: center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-1.5-3-5-3.5-5-1.2C7 8 9.5 8 12 8zM12 8c1.5-3 5-3.5 5-1.2C17 8 14.5 8 12 8z"/></svg>
+      </button>
+      <button type="button" disabled style="height: 52px; padding: 0 16px; border-radius: 12px; border: 1px solid #3A2F55; background: #1E1830; color: #8F82AD; font-size: 13px">礼物冷却 8s</button>
+    </div>
+    <p style="margin: 0; font-size: 12px; color: #A99CC4">触控目标 ≥ 44px；圆角：面板 10，按钮 12，胶囊 999</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>忧奈直播间 · 手机按住说话</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=VT323&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#120E1C}
+a{color:#C9A7FF}a:hover{color:#E4D3FF}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #120E1C; font-family: 'Noto Sans SC', system-ui, sans-serif; color: #F3EEFF">
+  <img src="/_blob/556a7c2e2806cd1b4232b4eb204251e9" alt="忧奈侧耳倾听" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top">
+  <div style="position: absolute; inset: 0; background: rgba(18,14,28,0.28)"></div>
+
+  <!-- 顶栏 -->
+  <header style="position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; background: rgba(18,14,28,0.78); border: 1px solid #3A2F55">
+        <img src="/_blob/e3102f2d64264277b35ca7a10e6d2a86" alt="" style="width: 32px; height: 32px; border-radius: 50%">
+        <div style="display: flex; flex-direction: column; line-height: 1.2">
+          <span style="font-size: 14px; font-weight: 700">忧奈</span>
+          <span style="font-family: VT323, monospace; font-size: 14px; color: #A99CC4">1 viewer</span>
+        </div>
+        <span style="margin-left: 4px; padding: 1px 7px; border-radius: 4px; background: #FF5FA2; color: #1A0B14; font-family: VT323, monospace; font-size: 16px">LIVE</span>
+      </div>
+      <span style="flex: 1"></span>
+      <button type="button" aria-label="菜单" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid #3A2F55; background: rgba(18,14,28,0.78); color: #F3EEFF; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+    <div style="align-self: flex-start; display: flex; align-items: center; gap: 10px; padding: 5px 12px; border-radius: 999px; background: rgba(18,14,28,0.7)">
+      <span style="font-size: 12px; color: #E4DCF5">还有一位观众没走</span>
+      <span aria-label="剧情进度 2/4" style="display: flex; gap: 4px; align-items: center">
+        <span style="width: 5px; height: 5px; border-radius: 3px; background: #8A78B8"></span>
+        <span style="width: 14px; height: 5px; border-radius: 3px; background: {{accent}}"></span>
+        <span style="width: 5px; height: 5px; border-radius: 3px; background: #6A5C8E"></span>
+        <span style="width: 5px; height: 5px; border-radius: 3px; background: #6A5C8E"></span>
+      </span>
+    </div>
+  </header>
+
+  <!-- 状态牌：倾听 -->
+  <div style="position: absolute; top: 120px; right: 12px; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: rgba(18,14,28,0.78); border: 1px solid {{listen}}">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{listen}}" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 14a6 6 0 1 1 12 0c0 3-3 3-3 6a3 3 0 0 1-6 0"/></svg>
+    <span style="font-size: 12px; font-weight: 500">在听你说</span>
+  </div>
+
+  <!-- 实时识别 -->
+  <div style="position: absolute; left: 12px; right: 12px; bottom: 214px; display: flex; justify-content: flex-end">
+    <div style="max-width: 82%; padding: 10px 14px; border-radius: 12px 12px 4px 12px; background: rgba(18,14,28,0.86); border: 1px solid {{listen}}; font-size: 16px; line-height: 1.5">
+      你是不是不想播了<span style="color: {{listen}}">▍</span>
+    </div>
+  </div>
+
+  <!-- 录音面板 -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 196px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 14px; padding-bottom: 28px; box-sizing: border-box; background: rgba(18,14,28,0.92); border-top: 1px solid #3A2F55">
+    <div aria-hidden="true" style="display: flex; align-items: center; gap: 4px; height: 36px">
+      <span style="width: 4px; height: 10px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 22px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 34px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 18px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 28px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 12px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 30px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 16px; border-radius: 2px; background: {{listen}}"></span>
+      <span style="width: 4px; height: 8px; border-radius: 2px; background: {{listen}}"></span>
+    </div>
+    <button type="button" aria-label="松开发送" style="width: 84px; height: 84px; border-radius: 50%; border: 6px solid rgba(143,211,255,0.28); background: {{listen}}; color: #0E1A24; display: flex; align-items: center; justify-content: center; box-sizing: border-box">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <div style="display: flex; gap: 16px; font-size: 13px; color: #C8BEDF">
+      <span>松开发送</span>
+      <span style="font-family: VT323, monospace; font-size: 17px; color: {{listen}}">00:03</span>
+      <span>上滑取消</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#C9A7FF","options":["#C9A7FF","#FF8FC7","#8FD3FF"]},"listen":{"editor":"color","default":"#8FD3FF","options":["#8FD3FF","#9EF0C2","#C9A7FF"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#C9A7FF', listen: this.props.listen ?? '#8FD3FF' };
+  }
+}
+</script>
+</body>
+</html>
