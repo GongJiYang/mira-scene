@@ -6,6 +6,10 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * 首次运行前需要：`npx playwright install chromium`。
  */
+// S6d §3：端口可用环境变量覆盖（并行 worktree 时避免冲突）；默认值保持 8887 / 5273 不变。
+const SERVER_PORT = Number(process.env.E2E_SERVER_PORT ?? 8887);
+const CLIENT_PORT = Number(process.env.E2E_CLIENT_PORT ?? 5273);
+
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/.artifacts",
@@ -15,7 +19,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:5273",
+    baseURL: `http://localhost:${CLIENT_PORT}`,
     permissions: ["microphone"],
     launchOptions: {
       args: [
@@ -32,8 +36,8 @@ export default defineConfig({
   webServer: {
     // 强制 Mock：不读取任何 Key，也不发起真实网络请求（Q10）。
     // 用独立端口，避免与开发者本机已在运行的 5173 / 8787 冲突。
-    command: "PROVIDER_MODE=mock PORT=8887 MIRA_CLIENT_PORT=5273 MIRA_SERVER_PORT=8887 pnpm dev",
-    url: "http://localhost:5273",
+    command: `PROVIDER_MODE=mock PORT=${SERVER_PORT} MIRA_CLIENT_PORT=${CLIENT_PORT} MIRA_SERVER_PORT=${SERVER_PORT} pnpm dev`,
+    url: `http://localhost:${CLIENT_PORT}`,
     timeout: 120_000,
     reuseExistingServer: false,
     stdout: "pipe",

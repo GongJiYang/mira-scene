@@ -1,0 +1,14 @@
+Done. I picked up from where the interruption left off — the docs module, tests, e2e spec, and config changes were already in place, so I verified them rather than redoing anything, then finished the remaining work.
+
+**What I completed this session:**
+- Ran the **full** e2e suite (only `docs.spec.ts` had been run before) — this was the critical gap, since the Vite `root` change affects the whole app. Result: **18 passed / 16 skipped / 0 failed**, so stage, mobile, and yuna-preview are all unaffected.
+- Moved the directory-tree group labels into `docsText.ts` (铁律 4 — they were user-facing text living in `core.ts`).
+- Tightened the character whitelist to `v1` exactly, matching §1 literally.
+- Added a third e2e test for the §0 contract: raw HTML in docs stays text (no `<script>`/`<iframe>` elements), and the tree contains no `.log`, hidden paths, or task descriptions.
+- Wrote `docs/tasks/s6d-docs-report.md`.
+
+**Final verification:** `pnpm test` 562 passed, `pnpm typecheck` clean, `pnpm e2e` 18 passed. Screenshots at `e2e/out/docs-{desktop,mobile}.png`, both visually confirmed (three-column desktop with working GFM tables; mobile drawer collapsed with full-width article).
+
+**One thing needs your call** (written up in §5.1 of the report): `import.meta.glob` cannot reach files above the Vite root — I verified this empirically, it returns an empty object. Since §1 requires globbing `docs/` at the repo root, I raised the Vite `root` to the repo root and pointed `publicDir`/`outDir`/`rollupOptions.input`/`cacheDir` back at `apps/client`, plus a dev middleware so `/` still serves the app. It's the only change beyond adding files, and the full e2e run confirms nothing regressed — but it's a structural change worth your sign-off.
+
+No commit made, no `.env` read, `/Users/gjy/mira-scene` untouched, and `skills/live2d-auto/*` + `tools/live2d-pipeline/*` unchanged.
