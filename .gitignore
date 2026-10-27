@@ -6,3 +6,7 @@ __pycache__/
 .DS_Store
 assets/review/
 *.log.tmp
+e2e/out/
+e2e/.artifacts/
+test-results/
+playwright-report/
