@@ -1,7 +1,7 @@
 # PROGRESS（更新于 2026-10-28 04:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6l · 关卡 8/9】S6l 已在 `/Users/gjy/mira-wt-s6l` 派发（command-code，`docs/tasks/s6l.md`，日志 `.s6l-cmd.log`）。跑完：简单检测 → 提交分支 → 合并 → main 跑 test+typecheck → 推送。然后走 S6m（动作对比页）关卡。
+【S6l-fix1 · 关卡 8/9】S6l 已合并（820 测试）。S6l-fix1 已在 `/Users/gjy/mira-wt-s6lfix1` 派发（6 条修复，不跑 e2e）。跑完：简单检测 → 合并 → 推送；然后走 S6m 动作表面板关卡。旧 worktree mira-wt-s6cfix1 / s6k / s6l 可删。
 
 ## 当前位置
 main 已经包含 S6c-fix1（换背景旁路修复 + 4 个界面问题）和 S6k（语境表情 accent，D47），共 787 个单测全绿，已推送。**路线已冻结（D48）**，依据是题目原文 `/Users/gjy/Downloads/0912-candidate(1) (1).pdf`。
