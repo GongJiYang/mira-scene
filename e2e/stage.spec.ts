@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 /**
  * S4 端到端（Mock 模式，自动启动 `pnpm dev`）。
@@ -141,4 +142,44 @@ test("4. speaking 时打断：字幕立即消失（Q1）", async ({ page }, test
   await shot(page, "4-interrupted");
 
   await releasePtt(page);
+});
+
+test("5. Q1：打断从按下到静音 ≤150ms（performance.mark 实测）", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "iphone-13", "只在移动端跑");
+  await openStage(page);
+  const stage = page.getByTestId("stage");
+
+  await submitText(page, "你好");
+  await expect(stage).toHaveAttribute("data-phase", "speaking", { timeout: 20_000 });
+
+  // 按住 PTT：打断的有序执行器会在同一帧内打点 interrupt:start / audioStopped / mouthClosed。
+  await pressPtt(page);
+  await expect(stage).toHaveAttribute("data-phase", "listening");
+
+  const timings = await page.evaluate(() => {
+    const marks = performance.getEntriesByType("mark");
+    const last = (name: string): number | null => {
+      for (let index = marks.length - 1; index >= 0; index -= 1) {
+        if (marks[index]?.name === name) return marks[index]?.startTime ?? null;
+      }
+      return null;
+    };
+    return {
+      start: last("interrupt:start"),
+      audioStopped: last("interrupt:audioStopped"),
+      mouthClosed: last("interrupt:mouthClosed"),
+    };
+  });
+  await releasePtt(page);
+
+  expect(timings.start, "未找到 interrupt:start 打点").not.toBeNull();
+  const toAudioMs = (timings.audioStopped ?? 0) - (timings.start ?? 0);
+  const toMouthMs = (timings.mouthClosed ?? 0) - (timings.start ?? 0);
+  expect(toAudioMs).toBeGreaterThanOrEqual(0);
+  expect(toAudioMs).toBeLessThanOrEqual(150);
+  expect(toMouthMs).toBeGreaterThanOrEqual(0);
+  expect(toMouthMs).toBeLessThanOrEqual(150);
+
+  mkdirSync("e2e/out", { recursive: true });
+  writeFileSync("e2e/out/q1-timings.json", `${JSON.stringify({ toAudioStoppedMs: toAudioMs, toMouthClosedMs: toMouthMs }, null, 2)}\n`);
 });

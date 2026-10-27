@@ -1,0 +1,20 @@
+D34 implemented and fully green.
+
+**验收**（全部通过）：
+- `pnpm test` → 44 files / **432 passed**（基线 392 + 新增 40）
+- `pnpm typecheck` → 4 workspace Done
+- `pnpm smoke` → `SMOKE OK`
+- `pnpm e2e` → **6 passed / 4 skipped**（连跑 2 次稳定）
+
+**做了什么**（严格按架构关卡，YAGNI）：
+- 4 个纯函数：`state/mouth.ts`（`levelToMouth` 起音30ms/释放80ms + 滞回、`mouthFor`、`fallbackMouth`）、`core/timeline.ts`（`timelineAdd/cancelTurn/due` + 单定时器外壳）、`core/interrupt.ts`（`interruptPlan` 有序步骤 + `interruptViolations` 契约后置条件）。
+- 端口/适配器：`core/audioLevel.ts` 定义 `AudioLevelSource`，生产用 AnalyserNode（`fftSize=512`，`source→analyser→destination`，rAF 读 RMS），测试用假实现；渲染层仍只读口型形状。
+- 有序打断执行器：`pttDown/submitText` 在会打断时调用；同步逐步执行 + `performance.mark` + debug 环形缓冲 `{t,step,turnId}` + 后置条件断言（违反 `console.error`）。store 订阅保留为幂等兜底。
+- 时间线调度器：无声 beat 1200ms、反应音淡出/arm、表演节拍、nudge 计时全部迁入单个 `timeline`；`cancelTurn` 按轮取消，带 `storyEventId` 的剧情层命令不受影响。
+- B 唯一授权规则改动：删除计时器口型轮换，改由 `mouthFor` 推导（详见报告 §2，逐条列出改前/改后）。
+- **属性测试 `numRuns=1000`，无反例**；7 个确定性用例覆盖矩阵 7 种情况（我另做了「注入 bug → 测试必失败」的验证，确认测试有效）。
+- **Q1 实测：`interrupt:start→audioStopped` 0.10ms、`→mouthClosed` 0.10ms（均 ≤150ms）**，写入 `e2e/out/q1-timings.json`。
+
+报告见 `docs/tasks/d34-report.md`（含改动文件、B 测试改写、运行次数/反例、Q1 数值、歧义与矛盾）。
+
+未 commit；未碰 `tools/`（其改动是你原有工作）；未打印/写入任何 Key；测试不发真实网络请求；无残留进程（5273/8887 已释放）。

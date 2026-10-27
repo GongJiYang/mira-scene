@@ -30,7 +30,8 @@ export type ReactionPlayback = {
 export type ReactionDeps = {
   urls: readonly string[];
   random: () => number;
-  setTimer: (callback: () => void, ms: number) => number;
+  /** 定时器由外壳注入（D34：接到统一的时间线，带 turnId 以便整轮取消）。 */
+  setTimer: (callback: () => void, ms: number, turnId: number) => number;
   clearTimer: (id: number) => void;
   play: (url: string) => ReactionPlayback | null;
 };
@@ -66,14 +67,18 @@ export function createReactionSfx(deps: ReactionDeps): ReactionSfx {
       clearTimer();
       stopActive();
       armedTurnId = turnId;
-      timer = deps.setTimer(() => {
-        timer = null;
-        if (armedTurnId !== turnId) return;
-        const index = Math.min(Math.floor(deps.random() * deps.urls.length), deps.urls.length - 1);
-        const url = deps.urls[index] ?? deps.urls[0];
-        if (url === undefined) return;
-        active = deps.play(url);
-      }, REACTION_ARM_DELAY_MS);
+      timer = deps.setTimer(
+        () => {
+          timer = null;
+          if (armedTurnId !== turnId) return;
+          const index = Math.min(Math.floor(deps.random() * deps.urls.length), deps.urls.length - 1);
+          const url = deps.urls[index] ?? deps.urls[0];
+          if (url === undefined) return;
+          active = deps.play(url);
+        },
+        REACTION_ARM_DELAY_MS,
+        turnId,
+      );
     },
 
     stop() {

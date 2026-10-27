@@ -1,7 +1,11 @@
 import type { ServerMessage } from "@mira/protocol";
 import { createReactionSfx, installReactionSfx, reactionSfx, REACTION_SFX_URLS, type ReactionPlayback } from "./reactionSfx";
+import { createAnalyserLevelSource, type AudioLevelSource } from "./audioLevel";
+import { dispatchPerformance } from "./performanceClock";
 import { pickNextPlayable } from "./scheduler";
 import { dispatch, getStageState, pushEvent, useStageStore } from "./store";
+import { timeline } from "./timeline";
+import { fallbackMouth, levelToMouth, MOUTH_LEVEL_CONFIG } from "../state/mouth";
 
 const SILENT_BEAT_MS = 1_200;
 
@@ -11,15 +15,35 @@ let context: AudioContext | null = null;
 let unlocked = false;
 let source: AudioBufferSourceNode | null = null;
 let playing: { turnId: number; seq: number } | null = null;
-let silentTimer: number | null = null;
+/** 无声 beat 的停留命令 id（D34：改由时间线驱动）。 */
+let silentCommandId: number | null = null;
+let analyser: AnalyserNode | null = null;
+let levelSource: AudioLevelSource | null = null;
+let levelRaf: number | null = null;
+let mouthSmoothed = 0;
+let lastLevelAt = 0;
 const readyBuffers = new Map<number, AudioBuffer>();
 const decoding = new Set<number>();
 let observedToken = getStageState().audioStopToken;
 let observedTurnId = getStageState().currentTurnId;
 /** §6：本轮开始的本地时钟，用于计算上报的 clientMs（D17 在客户端测量）。 */
-let turnStartedAt = performance.now();
+let turnStartedAt = nowMs();
 let playbackReported = false;
 let reportPlaybackStarted: ((turnId: number, seq: number, clientMs: number) => void) | null = null;
+
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function raf(callback: () => void): number {
+  if (typeof requestAnimationFrame === "function") return requestAnimationFrame(callback);
+  return globalThis.setTimeout(callback, 16) as unknown as number;
+}
+
+function cancelRaf(id: number): void {
+  if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(id);
+  else globalThis.clearTimeout(id);
+}
 
 /** §6：由 connection 注入，把「第一个 beat 开始播放」上报给服务端。 */
 export function setPlaybackStartedReporter(
@@ -52,6 +76,67 @@ export function installAudioUnlock(): void {
   window.addEventListener("keydown", unlock);
 }
 
+/** §1：接线 `source → analyser → destination`；只会创建一次 AnalyserNode。 */
+function ensureAnalyser(): AnalyserNode | null {
+  const audioContext = ensureContext();
+  if (!audioContext || typeof AnalyserNode === "undefined") return null;
+  if (!analyser) {
+    const created = createAnalyserLevelSource(audioContext);
+    created.node.connect(audioContext.destination);
+    analyser = created.node;
+    levelSource = created.source;
+  }
+  return analyser;
+}
+
+function dispatchMouth(shape: ReturnType<typeof fallbackMouth>, audioPlaying: boolean): void {
+  dispatchPerformance({ type: "MOUTH", shape, audioPlaying });
+}
+
+function stopLevelLoop(): void {
+  if (levelRaf !== null) {
+    cancelRaf(levelRaf);
+    levelRaf = null;
+  }
+}
+
+function isCurrent(turnId: number, seq: number): boolean {
+  return playing !== null && playing.turnId === turnId && playing.seq === seq;
+}
+
+/** §1：每一帧（rAF）读时域数据算 RMS → 平滑 → 口型；拿不到 AnalyserNode 时走 120ms 交替退路。 */
+function startLevelLoop(turnId: number, seq: number): void {
+  stopLevelLoop();
+  const node = analyser;
+  const level = levelSource;
+  if (!node || !level || !level.available) {
+    pushEvent("audio · 无 AnalyserNode，口型退回到 120ms small/open 交替");
+    const startedAt = nowMs();
+    const fallbackStep = (): void => {
+      if (!isCurrent(turnId, seq)) return;
+      dispatchMouth(fallbackMouth(nowMs() - startedAt), true);
+      levelRaf = raf(fallbackStep);
+    };
+    levelRaf = raf(fallbackStep);
+    return;
+  }
+
+  mouthSmoothed = 0;
+  lastLevelAt = nowMs();
+  const step = (): void => {
+    if (!isCurrent(turnId, seq)) return;
+    const now = nowMs();
+    const dt = now - lastLevelAt;
+    lastLevelAt = now;
+    const { shape, smoothed } = levelToMouth(level.read(), mouthSmoothed, dt, MOUTH_LEVEL_CONFIG);
+    mouthSmoothed = smoothed;
+    dispatchMouth(shape, true);
+    levelRaf = raf(step);
+  };
+  levelRaf = raf(step);
+}
+
+/** 停止音频源、清空就绪缓冲、取消无声命令、闭嘴。幂等（重复调用安全）。 */
 function stopPlayback(): void {
   if (source) {
     source.onended = null;
@@ -63,18 +148,44 @@ function stopPlayback(): void {
     source.disconnect();
     source = null;
   }
-  if (silentTimer) {
-    window.clearTimeout(silentTimer);
-    silentTimer = null;
+  if (silentCommandId !== null) {
+    timeline.cancelId(silentCommandId);
+    silentCommandId = null;
   }
   playing = null;
   readyBuffers.clear();
   decoding.clear();
+  stopLevelLoop();
+  mouthSmoothed = 0;
+  dispatchMouth("closed", false);
+}
+
+/** 打断执行器入口 ①：停止音频源（幂等）。 */
+export function stopPlaybackNow(): void {
+  stopPlayback();
+}
+
+/** 打断执行器入口 ②：强制口型 closed（不动时间线）。 */
+export function forceMouthClosed(): void {
+  stopLevelLoop();
+  mouthSmoothed = 0;
+  dispatchMouth("closed", false);
+}
+
+/** 打断执行器用：当前是否有音频在播放。 */
+export function isAudioPlaying(): boolean {
+  return playing !== null;
 }
 
 /** §5：反应音的播放句柄。 */
 export type ActiveReaction = { source: AudioBufferSourceNode; gain: GainNode; stopped: boolean };
 let activeReaction: ActiveReaction | null = null;
+let reactionFadeSeq = 0;
+
+/** 打断执行器用：反应音是否还在响。 */
+export function isReactionActive(): boolean {
+  return activeReaction !== null;
+}
 
 function teardownReaction(reaction: ActiveReaction | null): void {
   if (!reaction || reaction.stopped) return;
@@ -110,7 +221,14 @@ function playReaction(url: string): ReactionPlayback | null {
       const now = audioContext.currentTime;
       gain.gain.setValueAtTime(gain.gain.value, now);
       gain.gain.linearRampToValueAtTime(0, now + ms / 1000);
-      window.setTimeout(() => teardownReaction(reaction), ms + 30);
+      // D34：淡出后的拆除也走时间线，不再用裸 setTimeout。
+      reactionFadeSeq += 1;
+      timeline.schedule({
+        key: `reaction:fade:${reactionFadeSeq}`,
+        turnId: getStageState().currentTurnId,
+        atMs: timeline.now() + ms + 30,
+        run: () => teardownReaction(reaction),
+      });
     },
     stop() {
       state.cancelled = true;
@@ -151,29 +269,39 @@ installReactionSfx(
   createReactionSfx({
     urls: REACTION_SFX_URLS,
     random: Math.random,
-    setTimer: (callback, ms) => globalThis.setTimeout(callback, ms) as unknown as number,
-    clearTimer: (id) => globalThis.clearTimeout(id),
+    // D34：反应音的定时器接到统一的时间线，并带上 turnId 以便整轮取消。
+    setTimer: (callback, ms, turnId) =>
+      timeline.schedule({ key: `reaction:${turnId}`, turnId, atMs: timeline.now() + ms, run: callback }),
+    clearTimer: (id) => timeline.cancelId(id),
     play: playReaction,
   }),
 );
 
 function schedule(): void {
   const state = getStageState();
-  const next = pickNextPlayable(state, new Set(readyBuffers.keys()), playing !== null || silentTimer !== null);
+  const next = pickNextPlayable(state, new Set(readyBuffers.keys()), playing !== null || silentCommandId !== null);
   if (!next) return;
 
   const turnId = state.currentTurnId;
 
   if (next.silent) {
-    // 无声 beat 不等音频，停留 1200ms 后结束。
+    // 无声 beat 不等音频，停留 1200ms 后结束（D34：交给时间线，带 turnId）。
     dispatch({ type: "BEAT_AUDIO_STARTED", turnId, seq: next.seq });
     // §5：本轮开始出真实 beat 了，反应音淡出。
     reactionSfx()?.fadeOut();
-    silentTimer = window.setTimeout(() => {
-      silentTimer = null;
-      dispatch({ type: "BEAT_AUDIO_ENDED", turnId, seq: next.seq });
-      schedule();
-    }, SILENT_BEAT_MS);
+    // §1：无声 beat 没有音频，口型保持闭合。
+    dispatchMouth("closed", false);
+    const seq = next.seq;
+    silentCommandId = timeline.schedule({
+      key: `silent:${turnId}:${seq}`,
+      turnId,
+      atMs: timeline.now() + SILENT_BEAT_MS,
+      run: () => {
+        silentCommandId = null;
+        dispatch({ type: "BEAT_AUDIO_ENDED", turnId, seq });
+        schedule();
+      },
+    });
     return;
   }
 
@@ -184,13 +312,18 @@ function schedule(): void {
 
   const nextSource = audioContext.createBufferSource();
   nextSource.buffer = buffer;
-  nextSource.connect(audioContext.destination);
+  const analyserNode = ensureAnalyser();
+  if (analyserNode) nextSource.connect(analyserNode);
+  else nextSource.connect(audioContext.destination);
+
   playing = { turnId, seq: next.seq };
   nextSource.onended = () => {
     // 已经被打断/切轮的 source 不再驱动 reducer。
     if (!playing || playing.turnId !== turnId || playing.seq !== next.seq) return;
     playing = null;
     source = null;
+    stopLevelLoop();
+    dispatchMouth("closed", false);
     dispatch({ type: "BEAT_AUDIO_ENDED", turnId, seq: next.seq });
     schedule();
   };
@@ -203,9 +336,11 @@ function schedule(): void {
   // §6：第一个 beat 的音频开始播放 → 上报 playback_started。
   if (!playbackReported) {
     playbackReported = true;
-    reportPlaybackStarted?.(turnId, next.seq, Math.max(0, Math.round(performance.now() - turnStartedAt)));
+    reportPlaybackStarted?.(turnId, next.seq, Math.max(0, Math.round(nowMs() - turnStartedAt)));
   }
   nextSource.start();
+  // §1：音量驱动的口型从这里开始。
+  startLevelLoop(turnId, next.seq);
 }
 
 export function handleTtsAudio(message: TtsAudioMessage): void {
@@ -251,6 +386,7 @@ export function handleTtsAudio(message: TtsAudioMessage): void {
 }
 
 // audioStopToken 或 currentTurnId 变化 → 立即停止并清空就绪缓冲；其余变化也重新调度。
+// 打断执行器已经做过同样的事，这里是幂等的兜底（重复 stop 不报错）。
 useStageStore.subscribe((state) => {
   if (state.audioStopToken !== observedToken || state.currentTurnId !== observedTurnId) {
     observedToken = state.audioStopToken;
@@ -258,7 +394,7 @@ useStageStore.subscribe((state) => {
     stopPlayback();
     // §5：任何一次打断都让反应音立即停止。
     reactionSfx()?.stop();
-    turnStartedAt = performance.now();
+    turnStartedAt = nowMs();
     playbackReported = false;
     pushEvent(`audio stop t${observedTurnId}`);
   }

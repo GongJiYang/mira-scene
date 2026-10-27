@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getStageState, useStageStore } from "./store";
+import { timeline } from "./timeline";
 import {
   BLINK_MAX_MS,
   BLINK_MIN_MS,
@@ -92,7 +93,8 @@ export function createPerformanceClock(deps: PerformanceClockDeps): PerformanceC
 let installedCleanup: (() => void) | null = null;
 
 /**
- * 浏览器接线：把 A 的 phase / beat 起点喂给 B，把 B 的时钟接上 setInterval。
+ * 浏览器接线：把 A 的 phase / beat 起点喂给 B，节拍（60ms）与 nudge 计时都交给
+ * 统一的时间线（`core/timeline.ts`）驱动。
  * 幂等：重复调用返回同一个清理函数。
  */
 export function installPerformanceClock(options: { onNudge?: (at: number) => void } = {}): () => void {
@@ -104,26 +106,35 @@ export function installPerformanceClock(options: { onNudge?: (at: number) => voi
     getPhase: () => getStageState().phase.kind,
     getPerformance: () => usePerformanceStore.getState(),
     emit: dispatchPerformance,
-    onNudge: (at) => options.onNudge?.(at),
+    // D34：nudge 计时改由统一的时间线负责，这里不再自行触发。
+    onNudge: () => {},
   });
 
   // 初始 A 就是 idle：补一次 PHASE，让 B 的 idleSince 从启动时刻算起。
   dispatchPerformance({ type: "PHASE", phase: getStageState().phase.kind, at: Date.now() });
 
-  let mouthTimer: number | null = null;
+  // 唯一节拍：60ms 一次的表演时钟由时间线驱动（不再是 setInterval）。
+  function scheduleTick(): void {
+    timeline.schedule({
+      key: "performance:tick",
+      atMs: timeline.now() + PERFORMANCE_TICK_MS,
+      run: () => {
+        clock.tick();
+        scheduleTick();
+      },
+    });
+  }
+  scheduleTick();
 
-  function scheduleMouthTick(): void {
-    if (mouthTimer !== null) {
-      window.clearTimeout(mouthTimer);
-      mouthTimer = null;
-    }
-    if (getStageState().phase.kind !== "speaking") return;
-    mouthTimer = window.setTimeout(() => {
-      mouthTimer = null;
-      if (getStageState().phase.kind !== "speaking") return;
-      dispatchPerformance({ type: "MOUTH_TICK" });
-      scheduleMouthTick();
-    }, mouthDelayMs(Math.random()));
+  // D34：idle 满 12s → 主动开口；离开 idle 立即取消（计时交给时间线）。
+  function scheduleNudge(): void {
+    timeline.cancelKey("nudge");
+    if (getStageState().phase.kind !== "idle") return;
+    timeline.schedule({
+      key: "nudge",
+      atMs: timeline.now() + NUDGE_AFTER_MS,
+      run: () => options.onNudge?.(timeline.now()),
+    });
   }
 
   let lastPhaseKind = getStageState().phase.kind;
@@ -134,7 +145,7 @@ export function installPerformanceClock(options: { onNudge?: (at: number) => voi
     if (kind !== lastPhaseKind) {
       lastPhaseKind = kind;
       dispatchPerformance({ type: "PHASE", phase: kind, at });
-      scheduleMouthTick();
+      scheduleNudge();
     }
     if (kind === "speaking" && state.phase.kind === "speaking") {
       const seq = state.phase.seq;
@@ -155,14 +166,11 @@ export function installPerformanceClock(options: { onNudge?: (at: number) => voi
     }
   });
 
-  const timer = window.setInterval(() => clock.tick(), PERFORMANCE_TICK_MS);
+  scheduleNudge();
 
   installedCleanup = () => {
-    window.clearInterval(timer);
-    if (mouthTimer !== null) {
-      window.clearTimeout(mouthTimer);
-      mouthTimer = null;
-    }
+    timeline.cancelKey("performance:tick");
+    timeline.cancelKey("nudge");
     unsubscribe();
     installedCleanup = null;
   };

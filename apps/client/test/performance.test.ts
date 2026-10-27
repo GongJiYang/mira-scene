@@ -180,19 +180,22 @@ describe("B：speaking", () => {
     expect(state.handsTransition?.to).toBe("polaroid");
   });
 
-  it("嘴在 closed / small / open 之间循环", () => {
+  it("speaking 时口型跟随音量；音频停止的那一帧变为 closed", () => {
     let state = speaking(0);
-    state = performanceReducer(state, { type: "MOUTH_TICK" });
-    expect(state.mouth).toBe("small");
-    state = performanceReducer(state, { type: "MOUTH_TICK" });
+    state = performanceReducer(state, { type: "MOUTH", shape: "open", audioPlaying: true });
     expect(state.mouth).toBe("open");
-    state = performanceReducer(state, { type: "MOUTH_TICK" });
+
+    state = performanceReducer(state, { type: "MOUTH", shape: "small", audioPlaying: true });
+    expect(state.mouth).toBe("small");
+
+    // 音频停止：同一帧回到 closed（mouthFor 的门槛）。
+    state = performanceReducer(state, { type: "MOUTH", shape: "open", audioPlaying: false });
     expect(state.mouth).toBe("closed");
   });
 
-  it("非 speaking 时口型 tick 被忽略", () => {
+  it("非 speaking 时口型一律 closed（忽略传入的音量形状）", () => {
     const idle = run(initialPerformanceState, { type: "PHASE", phase: "idle", at: 0 });
-    expect(performanceReducer(idle, { type: "MOUTH_TICK" })).toBe(idle);
+    expect(performanceReducer(idle, { type: "MOUTH", shape: "open", audioPlaying: true })).toBe(idle);
   });
 
   it("beat 只在 speaking 时生效", () => {

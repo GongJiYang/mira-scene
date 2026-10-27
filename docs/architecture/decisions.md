@@ -444,3 +444,15 @@
 - **可取消的时间线调度器**：所有延时事件都注册到调度器，带 turnId；打断时一次性取消该轮全部事件。剧情层事件挂在 storyEventId 下，打断时不取消。
 - **打断矩阵**（思考中 / 反应音 / 一句话中途 / 两句之间 / 解码中 / 显影中 / 主动开口时）：镜头**保持不动**；雨和背景不变；照片继续显影；短按（<300ms）也算打断，**不恢复**。
 - 验收：属性测试 1000 次随机交错；用 Playwright 实测从按下到静音的耗时（Q1 ≤150ms）。
+
+## D36 Live2D 收口：产品侧限制参数幅度 + 眼睛补两层阴影，R4c/d/e 暂不接 🟡（2026-10-27）
+
+背景：run5/run6 的验收导出测的是 `EyeBall=±1`、`AngleX=±30` 这类极限姿态；这些姿态下才出现的破绽（虹膜被裁、轮廓描边），在实际演出里不会出现。按「把力气花在会露面的地方」处理：
+
+1. **① 产品侧限制参数幅度（不改素材、不改流水线）**。落点 `apps/client/src/render/live2d/params.ts`：`VIEW_LIMITS = { gazeX: 0.35, gazeY: 0.25, headDeg: 15 }`，由纯函数 `live2dParams({phase, blink, mouth, look?})` 产出参数，上限在最后统一施加。B 的目标视线：倾听看镜头（偏移 0）、思考视线偏开（≈0.3）、speaking 跟随 beat。**Live2D 运行时必须经由这个函数产出 `ParamEyeBall*` / `ParamAngle*`**，不要在别处直接写。有单测（`apps/client/test/live2dParams.test.ts`）。
+2. **② 眼睛补两层阴影（流水线自动生成，不用重画）**。
+   - 眼白从纯白改成浅灰蓝、顶部更暗：`step5_eyes.sclera_tint=[222,228,238]`、`sclera_tint_mix=0.55`、`sclera_top_shadow=0.25`。
+   - 虹膜上方新增「上眼皮阴影」层 `eyeshadow-l/r`：贴着眼皮开口、上深下浅的渐变（`eyelid_shadow`），**正片叠底**（`layer_blend={"eyeshadow":"multiply"}`）。为此让 `util.Part.composite` 支持混合模式，step6 把 `blend_mode=MULTIPLY` 写进 PSD；psd2live 的 PSD 读取器认 `mul ` 键（`PsdLayerRecords.blendKeyToBlend`），已用导出姿态核对生效。
+   - 图层顺序：`eyewhite < irides < eyeshadow < eyelash`。
+3. **③ R4c/R4d/R4e（上/下睫毛、卧蚕、眼睑褶线）先不接**：静态画面已经看不出差别，要接还得让 step6 往栈里插新层，收益低。
+4. **④ 停损点**：做完 ① 和 ② 若仍不满意，就把 Live2D 定位收窄为「眨眼 + 口型 + 小幅转头和视线」，不再追大角度。原先的标准（闭眼、口型三档、视线四向、转头 ±20° 无明显破绽）加上 ① 之后即视为达到。

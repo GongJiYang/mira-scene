@@ -1,5 +1,6 @@
 import type { Action, Emotion, FaceLayers, Hands } from "@mira/protocol";
 import { characterManifest } from "../render/manifest";
+import { mouthFor } from "./mouth";
 
 /**
  * 状态机 B：表演（D28）。纯 reducer，无定时器、无随机数、无 DOM。
@@ -46,7 +47,8 @@ export type PerformanceAction =
   | { type: "BEAT_STARTED"; look: BeatLook; at: number }
   | { type: "TICK"; at: number }
   | { type: "BLINK"; at: number }
-  | { type: "MOUTH_TICK" }
+  /** D34：音量驱动的口型。形状由 `mouthFor(phase, audioPlaying, shape)` 推导。 */
+  | { type: "MOUTH"; shape: MouthShape; audioPlaying: boolean }
   | { type: "IDLE_ACTION"; action: Action; at: number };
 
 export const BLINK_FRAME_MS = 60;
@@ -61,7 +63,6 @@ export const BLINK_MIN_MS = 2_000;
 export const BLINK_MAX_MS = 6_000;
 
 const BLINK_SEQUENCE: readonly Blink[] = ["half", "closed", "half", "open"];
-const MOUTH_CYCLE: readonly MouthShape[] = ["closed", "small", "open"];
 
 /** 动作 → 手部图层；glance_window 不改手部。 */
 const ACTION_HANDS: Record<Action, Hands | null> = {
@@ -259,11 +260,10 @@ export function performanceReducer(state: PerformanceState, action: PerformanceA
       // 只有待机时按随机间隔眨眼；其它 phase 忽略。
       if (state.phase !== "idle") return state;
       return { ...state, blink: "half", blinkFrame: 0, blinkFrameAt: action.at };
-    case "MOUTH_TICK": {
-      if (state.phase !== "speaking") return state;
-      const index = MOUTH_CYCLE.indexOf(state.mouth);
-      const mouth = MOUTH_CYCLE[(index + 1) % MOUTH_CYCLE.length] ?? "closed";
-      return { ...state, mouth };
+    case "MOUTH": {
+      // D34：口型由 mouthFor 推导；非 speaking 或音频没播放时一律 closed。
+      const mouth = mouthFor(state.phase, action.audioPlaying, action.shape);
+      return mouth === state.mouth ? state : { ...state, mouth };
     }
     case "IDLE_ACTION": {
       if (state.phase !== "idle" || state.idleActionDone) return state;

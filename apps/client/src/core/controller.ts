@@ -1,11 +1,14 @@
 import type { Media } from "@mira/protocol";
 import { create } from "zustand";
+import { forceMouthClosed, isAudioPlaying, isReactionActive, stopPlaybackNow } from "./audio";
 import { createConnection, type Connection } from "./connection";
-import { installPerformanceClock } from "./performanceClock";
+import { createInterruptExecutor, type InterruptReason } from "./interrupt";
+import { installPerformanceClock, usePerformanceStore } from "./performanceClock";
 import { blobToBase64, createRecorder, type Recorder } from "./recorder";
 import { reactionSfx } from "./reactionSfx";
 import { dispatch, getStageState, pushEvent, useConnectionStore } from "./store";
 import { dispatchStoryMedia, installStoryMediaLink } from "./storyMediaLink";
+import { timeline, pushTimelineLog, timelineCountForTurn, timelineStoryCount } from "./timeline";
 import { initialNudgeLimitState, nudgeLimit, type NudgeLimitState } from "../state/nudge";
 
 export type Intents = {
@@ -42,14 +45,47 @@ function userSpoke(): void {
 }
 
 export function createController({ connection, recorder }: ControllerDeps): Intents {
+  // D34：打断有序执行器（同一帧内同步、按 interruptPlan 逐步执行 + 打点 + 写环形缓冲 + 校验后置条件）。
+  const performInterrupt = createInterruptExecutor({
+    now: () => timeline.now(),
+    stopAudio: () => {
+      stopPlaybackNow();
+      reactionSfx()?.stop();
+    },
+    forceMouthClosed,
+    cancelTurn: (turnId) => timeline.cancelTurn(turnId),
+    clearState: (reason: InterruptReason) => dispatch({ type: reason === "ptt" ? "PTT_DOWN" : "SUBMIT_TEXT" }),
+    confirmListening: () => pushEvent("interrupt · 倾听态由 B 从 phase 推导"),
+    sendInterrupt: (turnId) => connection.sendInterrupt(turnId),
+    mark: (name) => {
+      if (typeof performance !== "undefined" && typeof performance.mark === "function") performance.mark(name);
+    },
+    log: (entry) => pushTimelineLog({ t: entry.t, kind: "interrupt", key: entry.step, turnId: entry.turnId }),
+    audioPlaying: () => isAudioPlaying(),
+    reactionActive: () => isReactionActive(),
+    mouth: () => usePerformanceStore.getState().mouth,
+    subtitle: () => getStageState().subtitle,
+    oldTurnCommandCount: (turnId) => timelineCountForTurn(timeline.state(), turnId),
+    storyCommandCount: () => timelineStoryCount(timeline.state()),
+    reportViolations: (violations, turnId) => {
+      const message = `[interrupt] 后置条件未满足 t${turnId}：${violations.join("；")}`;
+      console.error(message);
+      pushEvent(message);
+    },
+  });
+
   return {
     pttDown() {
       const { currentTurnId, phase } = getStageState();
       const wasActive = phase.kind !== "idle";
       pushEvent(`ptt down t${currentTurnId}`);
       userSpoke();
-      dispatch({ type: "PTT_DOWN" });
-      if (wasActive) connection.sendInterrupt(currentTurnId);
+      if (wasActive) {
+        // 会打断：走有序执行器（清音频 / 闭嘴 / 清空时间线与字幕 / 发 interrupt）。
+        performInterrupt("ptt", currentTurnId);
+      } else {
+        dispatch({ type: "PTT_DOWN" });
+      }
       const turnId = getStageState().currentTurnId;
       void recorder.start().then((started) => {
         if (started) return;
@@ -84,10 +120,14 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       const wasActive = phase.kind !== "idle";
       pushEvent(`submit t${currentTurnId}`);
       userSpoke();
-      dispatch({ type: "SUBMIT_TEXT" });
+      if (wasActive) {
+        // 会打断：走有序执行器（清音频 / 闭嘴 / 清空时间线与字幕 / 发 interrupt）。
+        performInterrupt("text", currentTurnId);
+      } else {
+        dispatch({ type: "SUBMIT_TEXT" });
+      }
       // §5：进入 thinking 后 150ms 内随机播一条反应音。
       reactionSfx()?.arm(getStageState().currentTurnId);
-      if (wasActive) connection.sendInterrupt(currentTurnId);
       connection.sendText(trimmed);
     },
 
