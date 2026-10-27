@@ -40,7 +40,20 @@ export type PickAccentInput = {
   say: string;
   /** 最近 beat 的 accent 序列（含 null），按时间顺序。 */
   recentAccents: readonly (Accent | null)[];
+  /**
+   * S6l §5：本轮输入类型。`gift` → love；`poke` → 轮流 shy / angry。
+   * 规则触发会覆盖 `suggested`，但仍受冲突表与冷却约束。
+   */
+  kind?: "text" | "poke" | "gift";
+  /** S6l §5：戳一下的序号（从 0 开始），用于 poke 的 shy / angry 轮流。 */
+  pokeIndex?: number;
 };
+
+/** gift / poke 的规则触发候选（覆盖 LLM 给的 accent）。 */
+export function eventAccent(kind: "poke" | "gift", pokeIndex: number): Accent {
+  if (kind === "gift") return "love";
+  return pokeIndex % 2 === 0 ? "shy" : "angry";
+}
 
 /** 冷却判定：该 accent 是否在最近窗口内出现过同名。 */
 function onCooldown(accent: Accent, recentAccents: readonly (Accent | null)[]): boolean {
@@ -55,6 +68,18 @@ function conflictsWith(emotion: Emotion, accent: Accent): boolean {
 }
 
 export function pickAccent(input: PickAccentInput): Accent | null {
+  // S6l §5：poke / gift 的规则触发覆盖 LLM 给的 accent。
+  // gift 冲突（如 sad 不配 love）时改用 heart（同样受冲突表约束）。
+  if (input.kind === "poke" || input.kind === "gift") {
+    let candidate = eventAccent(input.kind, input.pokeIndex ?? 0);
+    if (conflictsWith(input.emotion, candidate)) {
+      candidate = input.kind === "gift" ? "heart" : candidate;
+    }
+    if (conflictsWith(input.emotion, candidate)) return null;
+    if (onCooldown(candidate, input.recentAccents)) return null;
+    return candidate;
+  }
+
   // 规则触发：LLM 没给 suggestion（这里由调用方保证 suggested 为空），台词命中熬夜类词 → dark。
   let candidate: Accent | null = input.suggested ?? null;
   if (candidate === null) {

@@ -1,17 +1,21 @@
 /**
  * 弹幕（S6b §4）：纯函数。
  *
- * 只显示「用户自己发的」和「语音转写的文字」——不做假观众弹幕（D40 YAGNI）。
+ * 只显示「用户自己发的」「语音转写的文字」——不做假观众弹幕（D40 YAGNI）。
  * 桌面右侧弹幕栏、手机左下浮层共用同一份数据。
+ *
+ * S6l §3：新增「观众引导弹幕」——带随机昵称、可点击（点击 = 把该文字当用户输入发送）。
  */
 
-export type DanmakuKind = "user" | "transcript";
+export type DanmakuKind = "user" | "transcript" | "guide";
 
 export type Danmaku = {
   /** 单调递增的本地 id（用于 React key 与淡出顺序）。 */
   id: number;
   kind: DanmakuKind;
   text: string;
+  /** S6l §3：观众引导弹幕的随机昵称（其他 kind 为 null）。 */
+  nickname: string | null;
 };
 
 export type DanmakuState = {
@@ -28,8 +32,10 @@ export const MAX_MOBILE_DANMAKU = 6;
 export const initialDanmakuState: DanmakuState = { items: [], nextId: 1 };
 
 export type DanmakuAction =
-  | { type: "APPEND"; kind: DanmakuKind; text: string; max?: number }
-  | { type: "CLEAR" };
+  | { type: "APPEND"; kind: DanmakuKind; text: string; max?: number; nickname?: string | null }
+  | { type: "CLEAR" }
+  /** S6l §3：切节点时移除旧节点的观众引导弹幕（保留用户自己的弹幕）。 */
+  | { type: "PRUNE_GUIDES" };
 
 /**
  * 追加一条弹幕；超过 `max` 时从**最旧**的一端丢弃（新的在下、旧的向上淡出）。
@@ -41,7 +47,7 @@ export function danmakuReducer(state: DanmakuState, action: DanmakuAction): Danm
       const text = action.text.trim();
       if (text === "") return state;
       const max = action.max ?? MAX_DESKTOP_DANMAKU;
-      const item: Danmaku = { id: state.nextId, kind: action.kind, text };
+      const item: Danmaku = { id: state.nextId, kind: action.kind, text, nickname: action.nickname ?? null };
       const items = [...state.items, item];
       return {
         items: items.length > max ? items.slice(items.length - max) : items,
@@ -50,6 +56,8 @@ export function danmakuReducer(state: DanmakuState, action: DanmakuAction): Danm
     }
     case "CLEAR":
       return { items: [], nextId: state.nextId };
+    case "PRUNE_GUIDES":
+      return { ...state, items: state.items.filter((item) => item.kind !== "guide") };
   }
 }
 

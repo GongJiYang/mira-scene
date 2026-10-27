@@ -24,6 +24,11 @@ export type LLMContext = {
    * （「对方想换个背景，你这边正在换」）。角色照常回话，扩写与生图在后台进行。
    */
   sceneNotes?: string;
+  /**
+   * S6l §5：本轮输入类型。`text`（缺省）= 普通文字；`poke` = 戳一下；`gift` = 送礼物。
+   * poke / gift 时 Mock 走 `pack.events` 情景回应；真实 LLM 由 `sceneNotes` 描述。
+   */
+  kind?: "text" | "poke" | "gift";
 };
 
 /** 音频端口：方法都必须接收 AbortSignal。 */

@@ -11,7 +11,7 @@
  * 注意：本脚本会消耗 Fish 额度，**不在任何测试里运行**。
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Emotion, StoryNode } from "@mira/protocol";
 import { createFishTts } from "../src/adapters/fish/fishTts";
 import { composeBeats } from "../src/adapters/mock/mockLlm";
@@ -62,8 +62,18 @@ export function collectLines(pack: Pack): Line[] {
         push(beat.say, beat.emotion);
       }
     }
+    // S6l §4：沉默钩子（nudge 轮说该节点的 hook；ending 无 hook → 回退全局 nudge）。
+    for (const beat of composeBeats({ history: [], scene: { ...createInitialScene(), node }, userText: "", pack, nudge: true }, pack)) {
+      push(beat.say, beat.emotion);
+    }
+    // S6l §5：戳一下 / 送礼物（事件台词）。
+    for (const kind of ["poke", "gift"] as const) {
+      for (const beat of composeBeats({ history: [], scene: { ...createInitialScene(), node }, userText: "", pack, kind }, pack)) {
+        push(beat.say, beat.emotion);
+      }
+    }
   }
-  // D32 主动开口轮的两句。
+  // D32 主动开口轮的两句（全局 nudge 回退）。
   for (const beat of composeBeats({ history: [], scene: createInitialScene(), userText: "", pack, nudge: true }, pack)) {
     push(beat.say, beat.emotion);
   }
@@ -83,7 +93,15 @@ async function main(): Promise<void> {
     throw new Error("缺少 FISH_API_KEY：请在仓库根 .env 里配置后再运行 pnpm voices:record");
   }
 
-  const manifestPath = resolveVoiceManifestPath();
+  // S6l §7：`--character <id>` 指定角色（缺省取第一个角色）。只录 manifest 里缺失的条目（已有的不重录）。
+  const characterArgIndex = process.argv.indexOf("--character");
+  const characterId = characterArgIndex >= 0 ? process.argv[characterArgIndex + 1] : undefined;
+  const packs = loadPacks();
+  const pack = characterId !== undefined ? packs.get(characterId) : packs.get(defaultCharacterId(packs));
+  if (!pack) throw new Error(`找不到角色包：${characterId ?? "(缺省)"}`);
+
+  // Mock TTS 按角色查表：`<根清单目录>/<characterId>/manifest.json`（与 mockTts 的 manifestFor 一致）。
+  const manifestPath = join(dirname(resolveVoiceManifestPath()), pack.id, "manifest.json");
   const clipsDir = clipsDirFor(manifestPath);
   mkdirSync(clipsDir, { recursive: true });
 
@@ -95,12 +113,6 @@ async function main(): Promise<void> {
     model: fish.ttsModel,
     log: (record) => console.log(JSON.stringify(record)),
   });
-
-  // S6b §1：台词按角色包取；本脚本只录缺省角色（多角色录制留到需要时再扩展）。
-  // S6f §1：缺省角色 = 第一个未隐藏角色。
-  const packs = loadPacks();
-  const pack = packs.get(defaultCharacterId(packs));
-  if (!pack) throw new Error("找不到缺省角色包");
 
   const lines = collectLines(pack);
   let recorded = 0;

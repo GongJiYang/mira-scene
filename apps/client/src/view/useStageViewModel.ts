@@ -4,7 +4,7 @@
  * 约束：UI 组件不得直接 import store、connection、audio —— 只能通过 useStageViewModel 读写。
  * G1-c 只新增字段（performance / storyMedia / pendingNudge），已有字段未改。
  */
-import type { Media } from "@mira/protocol";
+import type { Media, StoryNode } from "@mira/protocol";
 import { useStore } from "zustand";
 import { intents, reports, useNudgeStore, type Intents, type StageReports } from "../core/controller";
 import { useFallbackStore } from "../core/fallback";
@@ -82,6 +82,8 @@ export type StageView = {
   sceneStatus: { kind: string; label?: string };
   /** S6c §5：当前生效的背景（ready 后换成新背景；null 用角色包默认背景）。 */
   sceneBackground: { desktop: string; mobile: string } | null;
+  /** S6l §2：当前剧情节点（只认服务端）。 */
+  node: StoryNode;
 };
 
 export type StageViewModel = StageView & { intents: Intents; reports: StageReports };
@@ -149,6 +151,7 @@ export function toStageView(input: StageViewInput): StageView {
     debugMode: input.debugMode ?? false,
     sceneStatus: input.sceneStatus ?? { kind: "idle" },
     sceneBackground: input.sceneBackground ?? null,
+    node: stage.node,
   };
 }
 

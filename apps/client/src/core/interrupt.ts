@@ -11,7 +11,7 @@
  */
 import type { MouthShape } from "../state/performance";
 
-export type InterruptReason = "ptt" | "text";
+export type InterruptReason = "ptt" | "text" | "tap";
 
 export type InterruptPlanInput = {
   reason: InterruptReason;

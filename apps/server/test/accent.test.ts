@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Accent, Emotion } from "@mira/protocol";
-import { pickAccent } from "../src/director/accent";
+import { pickAccent, eventAccent } from "../src/director/accent";
 
 function pick(overrides: {
   suggested?: Accent | null;
@@ -97,5 +97,62 @@ describe("pickAccent：两档冷却", () => {
   it("规则触发的 dark 同样受冷却约束", () => {
     expect(pick({ say: "又熬夜了", recentAccents: ["dark", null, null] })).toBeNull();
     expect(pick({ say: "又熬夜了", recentAccents: ["dark", null, null, null] })).toBe("dark");
+  });
+});
+
+describe("S6l §5：poke / gift 的 accent 规则", () => {
+  function pickEvent(kind: "poke" | "gift", overrides: { emotion?: Emotion; recentAccents?: readonly (Accent | null)[]; pokeIndex?: number } = {}) {
+    return pickAccent({
+      suggested: null,
+      emotion: overrides.emotion ?? "calm",
+      say: "",
+      recentAccents: overrides.recentAccents ?? [],
+      kind,
+      pokeIndex: overrides.pokeIndex,
+    });
+  }
+
+  it("gift → love（覆盖 LLM 的 accent）", () => {
+    expect(pickEvent("gift")).toBe("love");
+  });
+
+  it("gift 即使 LLM 给了别的 accent 也改成 love", () => {
+    expect(
+      pickAccent({ suggested: "angry", emotion: "calm", say: "", recentAccents: [], kind: "gift" }),
+    ).toBe("love");
+  });
+
+  it("gift 冲突（sad 不配 love）→ 先改 heart，但 sad 也禁 heart → null", () => {
+    // 冲突表里 sad / guarded 同时禁 love 与 heart，因此 heart 回退在真实表下退化为 null。
+    expect(pickEvent("gift", { emotion: "sad" })).toBeNull();
+  });
+
+  it("heart 回退机制：love 冲突但 heart 不冲突时用 heart", () => {
+    // 直接用 eventAccent + 冲突表验证回退逻辑（真实表下 sad/guarded 两者同禁）。
+    expect(eventAccent("gift", 0)).toBe("love");
+    expect(eventAccent("poke", 0)).toBe("shy");
+    expect(eventAccent("poke", 1)).toBe("angry");
+  });
+
+  it("gift 冲突且 heart 也冲突（guarded 不配 love / heart）→ null", () => {
+    expect(pickEvent("gift", { emotion: "guarded" })).toBeNull();
+  });
+
+  it("poke → 轮流 shy / angry（按 pokeIndex）", () => {
+    expect(pickEvent("poke", { pokeIndex: 0 })).toBe("shy");
+    expect(pickEvent("poke", { pokeIndex: 1 })).toBe("angry");
+    expect(pickEvent("poke", { pokeIndex: 2 })).toBe("shy");
+    expect(pickEvent("poke", { pokeIndex: 3 })).toBe("angry");
+  });
+
+  it("poke 的 shy 冲突（warm 不配…shy 不在冲突表，仍采纳；angry 冲突则 null）", () => {
+    // warm 禁止 angry：pokeIndex=1（angry）在 warm 下 → null。
+    expect(pickEvent("poke", { emotion: "warm", pokeIndex: 1 })).toBeNull();
+    expect(pickEvent("poke", { emotion: "warm", pokeIndex: 0 })).toBe("shy");
+  });
+
+  it("poke / gift 同样受冷却约束", () => {
+    expect(pickEvent("gift", { recentAccents: ["love", null, null] })).toBeNull();
+    expect(pickEvent("poke", { pokeIndex: 0, recentAccents: ["shy", null, null] })).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import type { Accent, Action, Beat, Camera, Emotion, Fx, Hands, Media, ServerMessage } from "@mira/protocol";
+import type { Accent, Action, Beat, Camera, Emotion, Fx, Hands, Media, ServerMessage, StoryNode } from "@mira/protocol";
 
 export type Phase =
   | { kind: "idle" }
@@ -26,6 +26,8 @@ export type ClientState = {
   visual: Visual;
   media: Media | null;
   audioStopToken: number;
+  /** S6l §2：当前剧情节点（只认服务端下发的 snapshot / beat.story，客户端不自己推断）。 */
+  node: StoryNode;
 };
 
 export type ClientAction =

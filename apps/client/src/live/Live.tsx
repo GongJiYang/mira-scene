@@ -9,7 +9,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useStageViewModel } from "../view/useStageViewModel";
 import { micInputLevel } from "../core/controller";
 import { characterOrDefault, VISIBLE_CHARACTERS } from "./characters";
-import { danmakuReducer, initialDanmakuState, MAX_MOBILE_DANMAKU, visibleDanmaku, danmakuOpacity } from "./danmaku";
+import { danmakuReducer, initialDanmakuState, MAX_MOBILE_DANMAKU, visibleDanmaku, danmakuOpacity, type Danmaku } from "./danmaku";
 import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layout";
 import { StageRenderer } from "./StageRenderer";
 import { LiveEntries, MobileMenu } from "./entries";
@@ -17,6 +17,8 @@ import { UI_TEXT } from "./uiText";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
 import { useSceneStatusStore } from "./scene/status";
+import { progressDots } from "./storyProgress";
+import { useGuideScheduler, useInteractionCooldowns, resolveTap } from "./interactionHooks";
 import "./live.css";
 import "../obs/obs.css";
 
@@ -42,11 +44,61 @@ function useLayout(): LiveLayout {
   return pickLayout(width);
 }
 
+/**
+ * S6l §2：直播间顶部剧情阶段——`streamTitle` + 4 个进度点（当前节点高亮）。
+ * 只认服务端下发的当前节点；节点切换时 0.3s 淡入。
+ */
+function StoryHeader({ characterId, node }: { characterId: string; node: string }) {
+  const character = characterOrDefault(characterId);
+  const title = character.streamTitles[node as keyof typeof character.streamTitles] ?? "";
+  const dots = progressDots(node as never);
+  return (
+    <div className="live-story-header" data-testid="story-header" data-node={node} key={node}>
+      <span className="live-story-title" data-testid="story-title">
+        {title}
+      </span>
+      <span className="live-story-dots" data-testid="story-dots" aria-label={title}>
+        {dots.map((state, index) => (
+          <i key={index} className="live-story-dot" data-state={state} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * S6l §3：一条弹幕。观众引导弹幕带随机昵称、可点（hover / 按下态 + 小提示「点一下替你说」）；
+ * 用户弹幕与语音转写沿用原样式。
+ */
+function DanmakuItem({ item, onGuideClick, style }: { item: Danmaku; onGuideClick?: (text: string) => void; style?: React.CSSProperties }) {
+  if (item.kind === "guide") {
+    return (
+      <button
+        type="button"
+        className="live-danmaku live-danmaku-guide"
+        data-kind="guide"
+        data-testid="guide-danmaku"
+        style={style}
+        title={UI_TEXT.guideHint}
+        onClick={() => onGuideClick?.(item.text)}
+      >
+        <span className="live-danmaku-nick">{item.nickname ?? UI_TEXT.viewerFallback}:</span>
+        <span className="live-danmaku-text">{item.text}</span>
+        <span className="live-danmaku-hint">{UI_TEXT.guideHint}</span>
+      </button>
+    );
+  }
+  return (
+    <p className="live-danmaku" data-kind={item.kind} style={style}>
+      {item.text}
+    </p>
+  );
+}
+
 export function Live() {
   const vm = useStageViewModel();
   const layout = useLayout();
   const character = characterOrDefault(vm.characterId);
-
   const [danmaku, dispatchDanmaku] = useReducer(danmakuReducer, initialDanmakuState);
   const [draft, setDraft] = useState("");
   const holding = useRef(false);
@@ -98,6 +150,61 @@ export function Live() {
       vm.intents.switchChannel(characterId);
     },
     [vm.characterId, vm.intents],
+  );
+
+  // ---- S6l §3：观众引导弹幕 ----
+  // 本节点已用过的引导（点过 / 出现过）；切节点清空（旧节点引导失效）。
+  const usedGuidesRef = useRef<Set<string>>(new Set());
+  // 当前显示的引导（从弹幕里 kind === "guide" 派生）。
+  const visibleGuides = danmaku.items.filter((item) => item.kind === "guide").map((item) => item.text);
+
+  // 切节点：清空已用集合 + 移除旧节点的引导弹幕（§3 切节点后旧节点引导失效）。
+  const lastNodeRef = useRef(vm.node);
+  useEffect(() => {
+    if (lastNodeRef.current === vm.node) return;
+    lastNodeRef.current = vm.node;
+    usedGuidesRef.current = new Set();
+    dispatchDanmaku({ type: "PRUNE_GUIDES" });
+  }, [vm.node]);
+
+  // 发送一条引导（点击 = 当作用户文字输入发送）。
+  const sendGuide = useCallback(
+    (text: string) => {
+      usedGuidesRef.current.add(text);
+      dispatchDanmaku({ type: "APPEND", kind: "user", text });
+      vm.intents.submitText(text);
+    },
+    [vm.intents],
+  );
+
+  useGuideScheduler({
+    node: vm.node,
+    phase: vm.phase,
+    characterId: vm.characterId,
+    dispatchDanmaku,
+    visibleGuides,
+    usedGuides: () => [...usedGuidesRef.current],
+    markUsed: (guide) => usedGuidesRef.current.add(guide),
+    submitText: sendGuide,
+    poke: () => {},
+    gift: () => {},
+    tapInterrupt: () => {},
+  });
+
+  // ---- S6l §5：戳一下 / 送礼物（冷却） ----
+  const cooldowns = useInteractionCooldowns({
+    poke: () => vm.intents.poke(),
+    gift: () => vm.intents.gift(),
+  });
+
+  // ---- S6l §6：点击画面 ----
+  const onStageTap = useCallback(
+    (hitCharacter: boolean) => {
+      const intent = resolveTap(vm.phase, hitCharacter);
+      if (intent === "interrupt") vm.intents.tapInterrupt();
+      else if (intent === "poke") cooldowns.poke();
+    },
+    [vm.phase, vm.intents, cooldowns],
   );
 
   const subtitle = vm.subtitle ?? vm.fallbackSubtitle ?? "";
@@ -154,6 +261,9 @@ export function Live() {
 
           <section className="live-main">
             <div className="live-stage" data-testid="live-stage">
+              <StageTapLayer onTap={onStageTap} />
+              {/* S6l §2：顶部剧情阶段（标题 + 进度点）。 */}
+              <StoryHeader characterId={character.id} node={vm.node} />
               {stage}
               {/* S6c §5：换背景转场状态条（右上角） */}
               <SceneStatusBar />
@@ -188,9 +298,7 @@ export function Live() {
             <h2 className="live-chat-title">{UI_TEXT.chat}</h2>
             <div className="live-chat-list" data-testid="danmaku-list">
               {danmaku.items.map((item) => (
-                <p key={item.id} className="live-danmaku" data-kind={item.kind}>
-                  {item.text}
-                </p>
+                <DanmakuItem key={item.id} item={item} onGuideClick={sendGuide} />
               ))}
             </div>
             <form
@@ -210,6 +318,16 @@ export function Live() {
               />
               <button type="submit" className="live-button">
                 {UI_TEXT.send}
+              </button>
+              <button
+                type="button"
+                className="live-button"
+                data-testid="gift"
+                aria-label={UI_TEXT.gift}
+                title={UI_TEXT.gift}
+                onClick={cooldowns.gift}
+              >
+                🎁
               </button>
               <button
                 type="button"
@@ -255,8 +373,41 @@ export function Live() {
       stage={stage}
       listening={listening}
       level={level}
+      onStageTap={onStageTap}
+      onGuideClick={sendGuide}
+      onGift={cooldowns.gift}
     />
   );
+}
+
+/**
+ * S6l §6：画面点击层。覆盖整个舞台，透明；点击时判定是否命中角色（用包围盒近似）。
+ * 在说话时点任何位置都打断；空闲时点到角色才戳一下。
+ */
+function StageTapLayer({ onTap, bboxSelector }: { onTap: (hitCharacter: boolean) => void; bboxSelector?: string }) {
+  const handle = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.currentTarget.parentElement;
+      let hitCharacter = true;
+      // 命中判定：角色画布占舞台中间竖条；用画布矩形近似包围盒（存在透明边，但够用）。
+      const selector = bboxSelector ?? '[data-testid="yuna-canvas"]';
+      const canvas = (target ?? event.currentTarget).querySelector(selector) as HTMLElement | null;
+      const root = target ?? event.currentTarget;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        // 角色实际占据画布中间约 60% 宽（模型两侧留白），高度全高。
+        const left = rect.left + rootRect.left * 0 + rect.width * 0.2;
+        const right = rect.left + rect.width * 0.8;
+        const x = event.clientX;
+        const y = event.clientY;
+        hitCharacter = x >= left && x <= right && y >= rect.top && y <= rect.bottom;
+      }
+      onTap(hitCharacter);
+    },
+    [onTap, bboxSelector],
+  );
+  return <div className="live-stage-tap" data-testid="stage-tap" onClick={handle} aria-hidden />;
 }
 
 /** S6c §5：换背景转场状态条（右上角）。 */
@@ -306,40 +457,65 @@ type MobileProps = {
   stage: React.ReactNode;
   listening: boolean;
   level: number;
+  onStageTap: (hitCharacter: boolean) => void;
+  onGuideClick: (text: string) => void;
+  onGift: () => void;
 };
 
 /** 手机布局：竖屏全屏 + 左下浮层弹幕 + 底部胶囊输入 + 上下滑切主播。 */
 function MobileLive(props: MobileProps) {
-  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, switchTo, stage, listening, level } = props;
+  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, switchTo, stage, listening, level, onStageTap, onGuideClick, onGift } = props;
   const character = characterOrDefault(characterId);
   const [slide, setSlide] = useState(0);
   const touch = useRef<{ y: number; t: number } | null>(null);
+  // S6l §5/§6：滑动切频道与点击打架——短按（无明显位移）才当作点击交给 tap 层。
+  const tap = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const onTouchStart = (event: React.TouchEvent): void => {
     const point = event.touches[0];
     if (!point) return;
     touch.current = { y: point.clientY, t: performance.now() };
+    tap.current = { x: point.clientX, y: point.clientY, t: performance.now() };
   };
 
   const onTouchEnd = (event: React.TouchEvent): void => {
     const start = touch.current;
     touch.current = null;
     const point = event.changedTouches[0];
+    const startTap = tap.current;
+    tap.current = null;
     if (!start || !point) return;
     const dy = point.clientY - start.y;
     const dt = Math.max(1, performance.now() - start.t);
     const direction = swipeDecision(dy, dy / dt);
-    if (direction === null) return;
-    const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, direction);
-    // 整屏滑动过渡：先滑出，再切换，再滑回。
-    setSlide(direction === "next" ? -1 : 1);
-    window.setTimeout(() => {
-      switchTo(next);
-      setSlide(0);
-    }, 180);
+    if (direction !== null) {
+      const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, direction);
+      // 整屏滑动过渡：先滑出，再切换，再滑回。
+      setSlide(direction === "next" ? -1 : 1);
+      window.setTimeout(() => {
+        switchTo(next);
+        setSlide(0);
+      }, 180);
+      return;
+    }
+    // S6l §5/§6：短按（无明显位移、<300ms）→ 当点击处理。
+    if (startTap) {
+      const moved = Math.abs(point.clientX - startTap.x) + Math.abs(point.clientY - startTap.y);
+      if (moved < 12 && performance.now() - startTap.t < 300) {
+        onStageTap(hitCharacterAt(point.clientX, point.clientY));
+      }
+    }
   };
 
   const visible = visibleDanmaku(danmaku, MAX_MOBILE_DANMAKU);
+
+  // S6l §5：手机端命中判定——角色画布中间竖条（近似包围盒）。
+  const hitCharacterAt = (x: number, y: number): boolean => {
+    const canvas = document.querySelector('[data-testid="yuna-canvas"]') as HTMLElement | null;
+    if (!canvas) return true;
+    const rect = canvas.getBoundingClientRect();
+    return x >= rect.left + rect.width * 0.2 && x <= rect.left + rect.width * 0.8 && y >= rect.top && y <= rect.bottom;
+  };
 
   return (
     <main
@@ -361,6 +537,8 @@ function MobileLive(props: MobileProps) {
           data-testid="live-stage"
           style={{ transform: `translateY(${slide * 100}%)` }}
         >
+          {/* S6l §2：顶部剧情阶段（标题 + 进度点）。 */}
+          <StoryHeader characterId={characterId} node={vm.node} />
           {stage}
           {/* S6c §5：换背景转场状态条（右上角，手机同样显示）。 */}
           <SceneStatusBar />
@@ -393,14 +571,7 @@ function MobileLive(props: MobileProps) {
 
         <div className="live-mobile-danmaku" data-testid="danmaku-list">
           {visible.map((item, index) => (
-            <p
-              key={item.id}
-              className="live-danmaku"
-              data-kind={item.kind}
-              style={{ opacity: danmakuOpacity(index, visible.length) }}
-            >
-              {item.text}
-            </p>
+            <DanmakuItem key={item.id} item={item} onGuideClick={onGuideClick} style={{ opacity: danmakuOpacity(index, visible.length) }} />
           ))}
         </div>
 
@@ -430,6 +601,16 @@ function MobileLive(props: MobileProps) {
             placeholder={UI_TEXT.inputPlaceholder}
             aria-label={UI_TEXT.inputPlaceholder}
           />
+          <button
+            type="button"
+            className="live-mobile-mic"
+            data-testid="gift"
+            aria-label={UI_TEXT.gift}
+            title={UI_TEXT.gift}
+            onClick={onGift}
+          >
+            🎁
+          </button>
           <button
             type="button"
             className="live-mobile-mic"

@@ -27,6 +27,12 @@ export type Intents = {
    * **不保留**聊天记录。
    */
   switchChannel(characterId: string): void;
+  /** S6l §5：戳一下（点到忧奈本人）。turnId / 打断逻辑与文字输入一致。 */
+  poke(): void;
+  /** S6l §5：送礼物（输入栏旁按钮）。 */
+  gift(): void;
+  /** S6l §6：点击打断（说话时点画面任何位置）。 */
+  tapInterrupt(): void;
 };
 
 export type ControllerDeps = { connection: Connection; recorder: Recorder };
@@ -38,6 +44,13 @@ export const useNudgeStore = create<NudgeSlice>()(() => ({ pending: false, limit
 
 /** Q8：图片加载失败时替换用的另一张预置照片。 */
 const FALLBACK_PHOTO: Media = { type: "photo", id: "photo_rain_street", url: "/stage/photos/photo_rain_street.png" };
+
+/**
+ * S6l §5：poke / gift 的占位 text。协议要求 text 非空；服务端把它们转成情景说明，
+ * 不当作用户台词，所以这里放中性占位（不显示在弹幕区）。
+ */
+export const POKE_PLACEHOLDER = "（戳了一下）";
+export const GIFT_PLACEHOLDER = "（送了一个礼物）";
 
 /** 渲染层的唯一例外：C 状态机的图片加载结果回调，必须经过 controller。 */
 export type StageReports = { mediaLoadFailed(storyEventId: string): void };
@@ -65,7 +78,7 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
     },
     forceMouthClosed,
     cancelTurn: (turnId) => timeline.cancelTurn(turnId),
-    clearState: (reason: InterruptReason) => dispatch({ type: reason === "ptt" ? "PTT_DOWN" : "SUBMIT_TEXT" }),
+    clearState: (reason: InterruptReason) => dispatch({ type: reason === "text" ? "SUBMIT_TEXT" : "PTT_DOWN" }),
     confirmListening: () => pushEvent("interrupt · 倾听态由 B 从 phase 推导"),
     sendInterrupt: (turnId) => connection.sendInterrupt(turnId),
     mark: (name) => {
@@ -163,6 +176,42 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       resetSceneFallback();
       setChannel(characterId);
       connection.switchCharacter?.(characterId);
+    },
+
+    /**
+     * S6l §5：戳一下。与 submitText 同样的「打断 → 起一轮」路径，只是 kind=poke，
+     * 用户台词用中性占位（服务端转成情景说明）。
+     */
+    poke() {
+      const { currentTurnId, phase } = getStageState();
+      pushEvent(`poke t${currentTurnId}`);
+      userSpoke();
+      if (phase.kind !== "idle") performInterrupt("text", currentTurnId);
+      else dispatch({ type: "SUBMIT_TEXT" });
+      reactionSfx()?.arm(getStageState().currentTurnId);
+      connection.sendText(POKE_PLACEHOLDER, "poke");
+    },
+
+    /** S6l §5：送礼物。 */
+    gift() {
+      const { currentTurnId, phase } = getStageState();
+      pushEvent(`gift t${currentTurnId}`);
+      userSpoke();
+      if (phase.kind !== "idle") performInterrupt("text", currentTurnId);
+      else dispatch({ type: "SUBMIT_TEXT" });
+      reactionSfx()?.arm(getStageState().currentTurnId);
+      connection.sendText(GIFT_PLACEHOLDER, "gift");
+    },
+
+    /**
+     * S6l §6：点击打断。只在说话时调用（由 UI 的 tapIntent 判定）；
+     * 走现有 interrupt.ts 执行器（reason="tap"，clearState 走 PTT_DOWN → 倾听）。
+     */
+    tapInterrupt() {
+      const { currentTurnId, phase } = getStageState();
+      if (phase.kind !== "speaking") return;
+      pushEvent(`tap interrupt t${currentTurnId}`);
+      performInterrupt("tap", currentTurnId);
     },
   };
 }

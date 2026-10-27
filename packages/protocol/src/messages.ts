@@ -28,6 +28,11 @@ export const helloPayloadSchema = z.object({
 
 export const textInputPayloadSchema = z.object({
   text: z.string().min(1).max(500),
+  /**
+   * S6l §5：输入类型。`text`（缺省）= 普通文字；`poke` = 戳一下；`gift` = 送礼物。
+   * poke / gift 时 `text` 仍必填（用于占位），服务端把它们转成给 LLM 的情景说明，不当作用户台词。
+   */
+  kind: z.enum(["text", "poke", "gift"]).optional(),
 });
 
 export const audioInputPayloadSchema = z.object({

@@ -34,6 +34,14 @@ export function composeBeats(ctx: LLMContext, pack: Pack): LlmBeat[] {
   const intent = classifyIntent(ctx.userText, pack.intentPatterns);
 
   if (ctx.nudge) {
+    // S6l §4：沉默时按阶段抛钩子——节点有 hook 就说 hook，否则回退到全局 nudge 台词。
+    const hook = pack.nodes[ctx.scene.node].hook;
+    if (hook !== "") {
+      return [
+        { say: "", emotion: pack.nodes[ctx.scene.node].look.emotion, suggest: pack.nodes[ctx.scene.node].look.silentAction, advance: null, accent: null },
+        { say: hook, emotion: pack.nodes[ctx.scene.node].look.emotion, suggest: null, advance: null, accent: null },
+      ];
+    }
     return pack.nudge.map((beat) => ({
       say: beat.say,
       emotion: beat.emotion,
@@ -41,6 +49,13 @@ export function composeBeats(ctx: LLMContext, pack: Pack): LlmBeat[] {
       advance: null,
       accent: beat.accent ?? null,
     }));
+  }
+
+  // S6l §5：戳一下 / 送礼物 → 角色的情景回应（来自 content.json 的 events）。
+  // accent 由服务端导演层规则决定（这里不给 suggest，规则触发才生效）。
+  if (ctx.kind === "poke" || ctx.kind === "gift") {
+    const lines = pack.events[ctx.kind];
+    return lines.map((say) => ({ say, emotion: "surprised", suggest: null, advance: null, accent: null }));
   }
 
   const node = ctx.scene.node;

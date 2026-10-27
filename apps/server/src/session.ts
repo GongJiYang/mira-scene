@@ -67,6 +67,8 @@ type Session = {
   recentActions: readonly (Action | null)[];
   /** D47：最近 10 个产出 beat 的 accent（含 null），供导演层 accent 冷却判定。 */
   recentAccents: readonly (Accent | null)[];
+  /** S6l §5：戳一下的累计次数（用于 poke 的 shy / angry 轮流）。 */
+  pokeCount: number;
   lastTurnId: number;
   /** 已接受的轮数（Q12 会话限额）。 */
   turnsUsed: number;
@@ -97,7 +99,7 @@ type Session = {
 
 /** 一轮输入的规范化形式：文字 / 语音 / 主动开口（D32）。 */
 type TurnInput =
-  | { type: "text_input"; turnId: number; text: string }
+  | { type: "text_input"; turnId: number; text: string; kind?: "text" | "poke" | "gift" }
   | { type: "audio_input"; turnId: number; mime: string; dataBase64: string }
   | { type: "nudge"; turnId: number };
 
@@ -343,9 +345,18 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         userText = input.text;
       }
 
+      // S6l §5：poke / gift 的情景说明（放 scene_notes，不当作用户台词）。
+      const inputKind = input.type === "text_input" ? (input.kind ?? "text") : "text";
+      const eventNote = inputKind === "poke" ? "观众戳了你一下" : inputKind === "gift" ? "观众送了你一个礼物" : undefined;
+      // poke / gift 的占位 user_text 不应该被当成观众说的话；用一句中性的场景描述。
+      if (eventNote !== undefined) userText = "（观众做出了一个动作，没有说话）";
+
       let nextSeq = 0;
       let firstBeatSeen = false;
       let beatsSent = 0;
+      // S6l §5：poke 的序号（本轮开始前的累计次数），用于 shy / angry 轮流。
+      const pokeIndex = session.pokeCount;
+      if (inputKind === "poke") session.pokeCount += 1;
       let directorCtx: DirectorContext = {
         scene: session.scene,
         recentActions: session.recentActions,
@@ -355,6 +366,9 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         beatsThisTurn: 0,
         // S6g-A §2：视觉（镜头 / 特效 / 媒体）只来自角色包节点表。
         nodeVisuals: session.pack.nodeVisuals,
+        // S6l §5：poke / gift 的 accent 规则与 gift 的 fx hearts。
+        inputKind,
+        pokeIndex,
       };
 
       // S6c §1：弹幕命中「换背景」→ 照常回话，并在后台启动场景任务。
@@ -369,9 +383,13 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         sceneNotes = sceneNotes === undefined ? "刚才背景没换成" : `${sceneNotes}。刚才背景没换成`;
         session.sceneJob.lastFailed = undefined;
       }
+      // S6l §5：poke / gift 的情景说明并入 scene_notes。
+      if (eventNote !== undefined) {
+        sceneNotes = sceneNotes === undefined ? eventNote : `${sceneNotes}。${eventNote}`;
+      }
       // S6c-fix1 §1：busy 兜底句用本轮 seq 分配器（在下方 LLM 流开始前发出），不再硬编码 0。
       let sceneBusyBeat: Beat | null = null;
-      if (!isNudge && input.type === "text_input") {
+      if (!isNudge && input.type === "text_input" && inputKind === "text") {
         const detected = detectSceneRequest(input.text, session.pack.sceneTriggerPattern);
         if (detected.hit) {
           // S6c-fix1 §6：缺扩写端口时准入直接拒绝（不用非空断言），并打日志。
@@ -471,7 +489,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
       try {
         for await (const raw of session.ports.llm.streamBeats(
-          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge, sceneNotes },
+          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge, sceneNotes, kind: inputKind },
           llmSignal,
         )) {
           // 收到第一个 token 即撤销超时；后续不确定性交给现有取消语义。
@@ -672,6 +690,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         scene: createInitialScene(),
         recentActions: [],
         recentAccents: [],
+        pokeCount: 0,
         lastTurnId: 0,
         turnsUsed: 0,
         controller: null,
@@ -839,7 +858,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       });
       return;
     }
-    await handleTurnInput(session, { type: "text_input", turnId: message.turnId, text: message.payload.text });
+    await handleTurnInput(session, { type: "text_input", turnId: message.turnId, text: message.payload.text, kind: message.payload.kind });
   }
 
   const sweepTimer = setInterval(() => {

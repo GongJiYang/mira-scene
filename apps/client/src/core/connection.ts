@@ -12,7 +12,7 @@ const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000] as const;
 
 type ClientPayloads = {
   hello: { resumeSessionId?: string; characterId?: string; faults?: string[] };
-  text_input: { text: string };
+  text_input: { text: string; kind?: "text" | "poke" | "gift" };
   audio_input: { mime: string; dataBase64: string };
   interrupt: { interruptedTurnId: number };
   nudge: Record<string, never>;
@@ -23,7 +23,7 @@ type ClientPayloads = {
 export type Connection = {
   connect(): void;
   disconnect(): void;
-  sendText(text: string): void;
+  sendText(text: string, kind?: "text" | "poke" | "gift"): void;
   sendAudio(mime: string, dataBase64: string): void;
   sendInterrupt(interruptedTurnId: number): void;
   /**
@@ -322,8 +322,8 @@ export function createConnection(): Connection {
       socket?.close();
       socket = null;
     },
-    sendText(text) {
-      sendEnvelope("text_input", { text });
+    sendText(text, kind) {
+      sendEnvelope("text_input", kind === undefined ? { text } : { text, kind });
     },
     sendAudio(mime, dataBase64) {
       sendEnvelope("audio_input", { mime, dataBase64 });

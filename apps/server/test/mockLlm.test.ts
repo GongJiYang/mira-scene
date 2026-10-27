@@ -115,6 +115,32 @@ describe("mockLlm：意图与台词", () => {
   });
 });
 
+describe("S6l §4：沉默钩子按节点选择", () => {
+  it("arrive / probe / reveal 的 nudge 说该节点的 hook", () => {
+    const expected: Record<string, string> = {
+      arrive: "……其实我在想一件事。",
+      probe: "我手机里倒是存着一张老截图。",
+      reveal: "你说，我还要继续播吗。",
+    };
+    for (const node of ["arrive", "probe", "reveal"] as const) {
+      const beats = composeBeats(
+        context({ scene: { ...createInitialScene(), node }, userText: "", nudge: true }),
+        pack,
+      );
+      const says = beats.map((beat) => beat.say).filter((say) => say !== "");
+      expect(says).toEqual([expected[node]]);
+    }
+  });
+
+  it("ending（无 hook）回退到全局 nudge 台词", () => {
+    const beats = composeBeats(
+      context({ scene: { ...createInitialScene(), node: "ending" }, userText: "", nudge: true }),
+      pack,
+    );
+    expect(beats.map((beat) => beat.say).filter((say) => say !== "")).toEqual(["……还在吗？弹幕好安静。"]);
+  });
+});
+
 describe("mockLlm：流式与取消", () => {
   it("每 beat 之间延迟，且可注入指定输出", async () => {
     const ctx = context();

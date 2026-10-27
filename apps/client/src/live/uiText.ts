@@ -10,7 +10,7 @@ export const UI_TEXT = {
   /** 固定观看人数占位（不做真实观看人数，D40 YAGNI）。 */
   viewers: "1.2K",
   /** 输入框占位。 */
-  inputPlaceholder: "<输入框占位>",
+  inputPlaceholder: "发条弹幕，或按住麦克风说话",
   /** 发送按钮。 */
   send: "发送",
   /** 麦克风按钮（按住说话）。 */
@@ -45,6 +45,12 @@ export const UI_TEXT = {
   obs: "观测",
   /** S6g-A §5：手机端可展开菜单的无障碍标签。 */
   menu: "菜单",
+  /** S6l §5：送礼物按钮。 */
+  gift: "送礼物",
+  /** S6l §3：观众引导弹幕的小提示。 */
+  guideHint: "点一下替你说",
+  /** S6l §3：观众昵称兜底。 */
+  viewerFallback: "观众",
 } as const;
 
 export type UiText = typeof UI_TEXT;
