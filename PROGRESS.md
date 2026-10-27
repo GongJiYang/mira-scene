@@ -1,45 +1,66 @@
-# PROGRESS（更新于 2026-10-28 02:55，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
+# PROGRESS（更新于 2026-10-28 04:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6c-fix1 · 派发】先 `git status -sb` 看 main 是否已推送（未推送就 `git push -u origin main`）；然后 `git worktree add -b s6c-fix1 /Users/gjy/mira-wt-s6cfix1 main`，拷 `.env`、`pnpm install --offline`，单独一条 `cd` 进 worktree，用 cmd 派发 `docs/tasks/s6c-fix1.md`（**先把下方「已知待修」前 4 条追加进任务说明**）。跑完简单检测 → 合并 → main 跑 `pnpm test`+`pnpm typecheck` → 推送 → 写 S6k 任务说明并派发。
+【S6l · 关卡 1–5】按 `mira-code-gate` 给用户过 S6l「剧情可感知」的五个框架（范围见下方路线第 2 项和 D48）。批准后写 `docs/tasks/s6l.md`，在 worktree 里派发。
 
 ## 当前位置
-main 已含 S6c（换背景）、S6f（四态）、S6h（观测页）、S6g-A（删夏凛；剧情视觉进角色包 `nodeVisuals`；Live2D 舞台镜头推近/拉远、stream_dim、hearts、截图卡片、ending 视频加载/结束/打断；眉毛写物理输入；抱熊渐变；首页「文档」「观测」入口）。717 单测全绿。夏凛已彻底删除（D43）。
+main 已经包含 S6c-fix1（换背景旁路修复 + 4 个界面问题）和 S6k（语境表情 accent，D47），共 787 个单测全绿，已推送。**路线已冻结（D48）**，依据是题目原文 `/Users/gjy/Downloads/0912-candidate(1) (1).pdf`。
 
-## 排队（一次只跑一批）
-**P0 必做**
-1. **S6c-fix1**（`docs/tasks/s6c-fix1.md`）：busy 兜底 seq 冲突吞真实回复、异步失败兜底被 turnId 丢弃（改剧情层）、90s 超时未生效、sceneController 恢复不重建、MIME、`$` 替换、参考图用当前背景。三条兜底预录已合成（`apps/client/public/characters/yuna/voice/fallback/scene_*.mp3`）。
-2. **S6k** 语境表情（D47）：LLM 可选 `accent` + 导演层冷却/冲突/规则触发 + 0.4s 渐变；全部表情开关放开，只有 `Param1–10` 恒为 0；提示词新增段交用户审。（任务说明还没写）
-3. 真实模式全流程走查（浏览器 arrive→ending、打断、生图、视频、断线）。
-4. README（8 项，复用 `docs/architecture/00-导读.md`）+ AI_USAGE.md；更新 `docs/checklist.md`（仍是夏凛时代的旧状态）。
-5. 部署（演示地址；手机测试依赖它）。
-**P1 加分**
-6. **S6i** 弹幕 @ 指令（D45：@换地方 / @动作 / @送礼物）。
-7. **S6g-B**：主身体 X/Z 驱动 + 音频起伏（D46②）、倾听加大；D44 透明关推流视频（现在 ending 视频不透明，整个盖住忧奈）；生成内容缓存。
-8. 录屏（用户，P1 后）；iPhone 真机（用户，部署后）。
-**P2 后续**：手臂/尾巴/耳朵物理后覆盖 + 动作测试页（D46③）；换配色接运行时；手机人物占满屏。
+## 冻结路线（D48；一次只跑一批；冻结点之后只修 bug）
+1. ✅ S6c-fix1、S6k
+2. **S6l 剧情可感知**：
+   - 修 arrive→probe 卡死（`advanceRule` 在 arrive 只写「允许进入 reveal」，`story.ts` 只放行 arrive→probe）
+   - 顶部显示剧情阶段 + 进度点
+   - **观众弹幕引导**：按阶段刷话题弹幕，点一下就作为自己的话发出（用户点名喜欢这个）
+   - 沉默时按阶段抛钩子；戳忧奈触发表情反应；送礼物（love + heart）
+   - 点击打断
+   - 设定为成年：22 岁、刚毕业的个人势主播
+   - 输入框文案「发条弹幕，或按住麦克风说话」
+3. **S6m 动作对比页**：参数法和 motion3 法两种都做（挥手 / 摇尾 / 抖耳 / 身体晃），用户看效果挑一种，都不行就放弃。
+4. **S6u Web UI 重设计**：用户不喜欢 DeepSeek 的界面风格。由 Claude 出设计稿、设计 token 和布局规范，cmd 按稿实现。
+5. **冻结点**
+6. 真实模式全流程走查 + 统一深审（`/code-review high`），然后出 fix 批。
+7. 冷启动验证（新克隆、无 Key、一条命令跑通 Mock）——必须等所有功能结束后再做。
+8. 文档收尾（最后统一改）：
+   - README 八项（含第三方来源、「已完成的可选扩展」一节、打断方式的理由）
+   - AI_USAGE.md
+   - 重写 checklist
+   - 导读注明夏凛 → 忧奈的变更
+   - cmd 日志移出仓库（目前已有 44 份提交到了公开仓库）
+9. 录屏：Claude 先尝试自动录（Playwright + 屏幕录制）并出分镜，不行再由用户录。
 
-## 已知待修（并入 S6c-fix1）
-- ending 时截图卡片没收起，叠在 OFFLINE 视频上。
-- 「平静」情绪截图里猫耳朵不见了（「防备」有），疑与 S6g-A 删耳朵动作有关，查 `ParamEarOFF` / 耳朵参数是否被写。
-- 「温暖」情绪的 e2e 截图在 ending 视频播放时截的，人物被挡住，改为在视频前截。
-- 文档页手机横向溢出 6px（`e2e/docs.spec.ts` 失败），疑为 `00-导读.md` 的宽代码块，代码块需在卡片内横向滚动。
-- 输入框占位文字「‹输入框占位›」：**等用户给正式文案**，不要自己写。
+**可选（全部做完再看）**：D44 透明结局视频（用户想看效果）；部署（最后做）。
+**不做，写进 README「两周演进」**：VAD、@ 指令（S6i 取消）、剧情分支、生成内容缓存、物理覆盖、运行时换配色、手机人物满屏、Live2D 自动化 AI 制作流水线、Drama3 本地部署（30B）。
 
-## 待统一深审（用户要求：现在只做简单检测，功能做完后统一做）
-S6g-A、S6c-fix1、S6k 及之后各批：核心逐行审 + `/code-review high` 二审 + 浏览器实测打断 / 剧情层不作废 / turnId 过滤。
+## 待统一深审（用户要求：现在只做简单检测，功能做完后统一深审）
+- 范围：S6g-A、S6c-fix1、S6k 以及之后的各批。
+- 方式：核心代码逐行审 + `/code-review high` + 浏览器实测（打断、剧情层不作废、turnId 过滤）。
+- 专项要确认：
+  - 「平静」情绪下耳朵是否可见（S6c-fix1 只是把 `ParamEarOFF` 写成 0，根因未证实）
+  - accent 在真实对话里的效果
+  - `pnpm smoke` 在 S6k 里走的是真实模式（`.env` 里设了 `PROVIDER_MODE=real`），要核实 smoke 是否应该固定用 Mock
 
 ## 执行环境（重要）
-- cmd：Command Code 账号 GongJiYang，`cmd -p "…" -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 800 < /dev/null > docs/tasks/.<批>-cmd.log 2>&1`（后台跑）。Systalyze 限流已停用。网络断开过一次（退出码 6）→ 同 worktree 新会话续跑，提示「先核对已完成部分，不要推倒重来」。
-- 一次只跑一批；派发前单独一条 `cd <worktree>`，派发后 `lsof -a -p <pid> -d cwd` 核对。任务里写「不要打开图片；长命令显式 timeout」。用户已授权直接派发。
-- 真实模式 dev server：http://localhost:5181（`PROVIDER_MODE=real PORT=8791 MIRA_CLIENT_PORT=5181 MIRA_SERVER_PORT=8791 pnpm dev`，改代码会自动重启）。5180/8790 是旧 Mock 服务器（Claude 停不了，用户可 `kill 49797 77336`）。实测 DeepSeek 首句 0.8–1.1s、首包 2.2–2.7s；换背景生图约 45s。
-- 忧奈语音补录：之前用的是会话临时目录里的一次性脚本（新会话里已不存在）；需要补录时让 cmd 给 `apps/server/scripts/record-voices.ts` 加 `--character`。
+- cmd 派发命令：`cd <worktree> && cmd -p "…" -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 800 < /dev/null > <worktree绝对路径>/docs/tasks/.<批>-cmd.log 2>&1`，后台跑。
+  - 必须和 `cd` 写在同一条命令里，单独一条 `cd` 会被重置回 main。
+  - 派发后用 `lsof -a -p <pid> -d cwd` 核对工作目录。
+  - 停 cmd 要停 **`command-code` 进程本身**，只杀外层 zsh 它会继续跑（这次因此在 main 上误改了 30 分钟；改动已备份并还原）。
+  - 任务说明里写明「不要打开图片；长命令显式 timeout」。用户已授权直接派发。
+- worktree 建法：`git worktree add -b <批> /Users/gjy/mira-wt-<批> main`，再拷 `.env`、跑 `pnpm install --offline`。旧 worktree `mira-wt-s6cfix1`、`mira-wt-s6k` 可以删。
+- 真实模式 dev server：http://localhost:5181（`PROVIDER_MODE=real PORT=8791 MIRA_CLIENT_PORT=5181 MIRA_SERVER_PORT=8791 pnpm dev`）。5180/8790 是旧的 Mock 服务器，用户可以 `kill 49797 77336` 停掉。
+- 和用户讨论只问技术、体验和 UI 的问题，设定类细节由 Claude 自己定。
 
-## 关键决策（完整见 decisions.md D1–D47）
-D43 只做忧奈；D44 关推流透明视频；D45 @ 指令；D46 物理覆盖（眉毛写输入、主身体 X/Z、物理后覆盖）；D47 全部表情按语境（accent）。Live2D 商用模型按用户选择**原样公开**在仓库里（用户知悉授权风险）。
+## 关键决策（完整见 decisions.md D1–D48）
+- D43 只做忧奈
+- D44 透明结局视频
+- D46 物理覆盖
+- D47 accent 表情
+- D48 路线冻结
+- Live2D 商用模型按用户的选择原样公开
 
 ## 待用户处理
-- 输入框正式提示文案；试听 `assets/voice/yuna/clips/`；换生图 Key；iPhone 真机。
+- 试听 `assets/voice/yuna/clips/`
+- 换生图 Key
 
 ## 不要碰
 - `skills/live2d-auto/SKILL.md`、`tools/live2d-pipeline/*`。
