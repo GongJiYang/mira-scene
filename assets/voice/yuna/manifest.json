@@ -1,4 +1,203 @@
 {
   "version": 1,
-  "clips": {}
+  "clips": {
+    "072cf21dcb677888": {
+      "file": "072cf21dcb677888.mp3",
+      "text": "[soft tone] 弹幕就剩你一条了，挺清楚的。",
+      "emotion": "guarded",
+      "durationMs": 4049
+    },
+    "0836a020535dfef3": {
+      "file": "0836a020535dfef3.mp3",
+      "text": "[soft tone] 你说老截图？",
+      "emotion": "guarded",
+      "durationMs": 2194
+    },
+    "08ed9de7bacfd338": {
+      "file": "08ed9de7bacfd338.mp3",
+      "text": "[soft tone] ……我手机里倒是存着一张。",
+      "emotion": "guarded",
+      "durationMs": 3500
+    },
+    "1477892832d7f7b0": {
+      "file": "1477892832d7f7b0.mp3",
+      "text": "[gentle] 我要关推流了哦。",
+      "emotion": "warm",
+      "durationMs": 2011
+    },
+    "1a757f88bcd2487c": {
+      "file": "1a757f88bcd2487c.mp3",
+      "text": "[soft tone] ……不过，有人在，确实好一点。",
+      "emotion": "guarded",
+      "durationMs": 4519
+    },
+    "2c2fc785bfde13f3": {
+      "file": "2c2fc785bfde13f3.mp3",
+      "text": "[calm] 谢谢……突然这么温柔干嘛。",
+      "emotion": "calm",
+      "durationMs": 4284
+    },
+    "4ace908a0191b32c": {
+      "file": "4ace908a0191b32c.mp3",
+      "text": "[soft tone] 你还没走啊。",
+      "emotion": "guarded",
+      "durationMs": 2011
+    },
+    "4c2bc07e4d1d84a3": {
+      "file": "4c2bc07e4d1d84a3.mp3",
+      "text": "[soft tone] 明天不用上班吗你。",
+      "emotion": "guarded",
+      "durationMs": 2534
+    },
+    "4fa106fb718cc518": {
+      "file": "4fa106fb718cc518.mp3",
+      "text": "[sad] 那我就……跟你说点真话吧。",
+      "emotion": "sad",
+      "durationMs": 3500
+    },
+    "572c1dca8ca87da9": {
+      "file": "572c1dca8ca87da9.mp3",
+      "text": "[calm] 截图？什么截图。",
+      "emotion": "calm",
+      "durationMs": 3030
+    },
+    "585b3b6c70b7f784": {
+      "file": "585b3b6c70b7f784.mp3",
+      "text": "[gentle] 截图我会留着的。",
+      "emotion": "warm",
+      "durationMs": 1933
+    },
+    "620555977687ccac": {
+      "file": "620555977687ccac.mp3",
+      "text": "[calm] ……诶？还有人？",
+      "emotion": "calm",
+      "durationMs": 3605
+    },
+    "633a0a73fc5047b6": {
+      "file": "633a0a73fc5047b6.mp3",
+      "text": "[calm] 嗯哼。",
+      "emotion": "calm",
+      "durationMs": 1045
+    },
+    "6ae6a81d500e962a": {
+      "file": "6ae6a81d500e962a.mp3",
+      "text": "[calm] 我没截过图啊，你记错了吧。",
+      "emotion": "calm",
+      "durationMs": 3500
+    },
+    "6dd2dd4fcfe00770": {
+      "file": "6dd2dd4fcfe00770.mp3",
+      "text": "[sad] 我没事，真的。",
+      "emotion": "sad",
+      "durationMs": 2560
+    },
+    "90aed4ddd9fcd8ca": {
+      "file": "90aed4ddd9fcd8ca.mp3",
+      "text": "[sad] 让我缓一下。",
+      "emotion": "sad",
+      "durationMs": 2116
+    },
+    "99f55b25ce317ec5": {
+      "file": "99f55b25ce317ec5.mp3",
+      "text": "[gentle] 我知道。",
+      "emotion": "warm",
+      "durationMs": 1358
+    },
+    "a0f2919c52cd5801": {
+      "file": "a0f2919c52cd5801.mp3",
+      "text": "[sad] 这是我第一次开播。",
+      "emotion": "sad",
+      "durationMs": 2377
+    },
+    "ad847bf1748fcbcf": {
+      "file": "ad847bf1748fcbcf.mp3",
+      "text": "[gentle] 晚安，最后一位观众。",
+      "emotion": "warm",
+      "durationMs": 3448
+    },
+    "afbef065f90cf1c4": {
+      "file": "afbef065f90cf1c4.mp3",
+      "text": "[soft tone] 我在听。",
+      "emotion": "guarded",
+      "durationMs": 1593
+    },
+    "be9802619adb0c8f": {
+      "file": "be9802619adb0c8f.mp3",
+      "text": "[sad] ……抱歉，刚才发呆了。",
+      "emotion": "sad",
+      "durationMs": 3448
+    },
+    "c34ddb0ccbd03a29": {
+      "file": "c34ddb0ccbd03a29.mp3",
+      "text": "[calm] ……还在吗？弹幕好安静。",
+      "emotion": "calm",
+      "durationMs": 4937
+    },
+    "c454a587e9955b6e": {
+      "file": "c454a587e9955b6e.mp3",
+      "text": "[gentle] 那三个人里，说不定也有你。",
+      "emotion": "warm",
+      "durationMs": 4153
+    },
+    "c77d76b8bc493018": {
+      "file": "c77d76b8bc493018.mp3",
+      "text": "[sad] 你还在。",
+      "emotion": "sad",
+      "durationMs": 1698
+    },
+    "c8c01d8a9d859b4b": {
+      "file": "c8c01d8a9d859b4b.mp3",
+      "text": "[calm] 我没事，就是有点累。",
+      "emotion": "calm",
+      "durationMs": 3213
+    },
+    "d6e41345d4b04c45": {
+      "file": "d6e41345d4b04c45.mp3",
+      "text": "[calm] 这位观众，下播时间不营业哦。",
+      "emotion": "calm",
+      "durationMs": 3553
+    },
+    "d9bb13529b36d75b": {
+      "file": "d9bb13529b36d75b.mp3",
+      "text": "[gentle] 谢谢你今晚没退出。",
+      "emotion": "warm",
+      "durationMs": 2299
+    },
+    "df329193cb6c08b9": {
+      "file": "df329193cb6c08b9.mp3",
+      "text": "[sad] 就是说出来，好像轻一点了。",
+      "emotion": "sad",
+      "durationMs": 3553
+    },
+    "ed5d8e53bd9b1dbc": {
+      "file": "ed5d8e53bd9b1dbc.mp3",
+      "text": "[gentle] 这次真的下播啦。",
+      "emotion": "warm",
+      "durationMs": 2246
+    },
+    "f00885d3dd5d4505": {
+      "file": "f00885d3dd5d4505.mp3",
+      "text": "[soft tone] 别这样，我会当真的。",
+      "emotion": "guarded",
+      "durationMs": 3213
+    },
+    "f5414c26df7a231a": {
+      "file": "f5414c26df7a231a.mp3",
+      "text": "[gentle] 谢谢你没劝我别走。",
+      "emotion": "warm",
+      "durationMs": 2299
+    },
+    "f6b2ee35d445a88e": {
+      "file": "f6b2ee35d445a88e.mp3",
+      "text": "[calm] 我以为大家都走了，推流忘关了。",
+      "emotion": "calm",
+      "durationMs": 3814
+    },
+    "f87da68723d493d2": {
+      "file": "f87da68723d493d2.mp3",
+      "text": "[sad] 三个观众，我紧张到一直在喝水。",
+      "emotion": "sad",
+      "durationMs": 4023
+    }
+  }
 }
