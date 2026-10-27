@@ -96,3 +96,11 @@
 - 过程：Command Code 先撞 5 小时额度、再撞周额度；改用 BYOK Systalyze。Systalyze 的 DeepSeek 不能看图（cmd 读截图即失败），且频繁报 `Failed to process successful response`，换 Kimi-K3 后稳定。Kimi 会在 shell 默认 30 秒超时上反复重试同一条 e2e，需在任务里写明「显式 timeout、超时两次就停」。
 - Claude 验收（核心逐行、其余看测试）抓到 DeepSeek/Kimi 自测没抓到的问题：TTS 音色全局（忧奈会用夏凛的声音）、两角色 Mock 语音同目录撞键、同一连接切频道后旧会话的后台媒体和迟到消息串进新频道、生图没用到对话（不满足题目）、生成图写进客户端 public（生产不可用）、e2e 截图全黑仍通过（断言不检查画面）、手机夏凛桌下露出下半身、素材里烧进假透明棋盘格（杯柄封闭区域，边界 flood fill 抠不到）。fix2 为修一个会话级错误把**所有** error 移出 turnId 过滤，破坏 D3/Q1 打断语义——Claude 否决，改为 error 带 `scope`。
 - Claude 用 Playwright 自己等 10 秒截图，确认「全黑」只是截图过早；杯柄修复前后铺深色底放大对比确认。
+
+## S6c-fix1 / S6k / 路线冻结 · 2026-10-28（Command Code · DeepSeek；Claude 审核与排查）
+- 交付：S6c-fix1（换背景旁路 7 条正确性修复 + 4 个界面问题）与 S6k（语境表情 accent，D47）**首次并行**派发到两个 worktree，合并时解两处冲突：`yunaParams.ts` 两段并存；`session.ts` 按 S6c-fix1 去掉服务端兜底 beat（改由客户端剧情层播放）。合并后 787 个单测全绿。
+- **事故：派发进程跑错目录。** 第一次派发时单独一条 `cd` 被重置回 main，cmd 实际在 main 上开工。Claude 发现后只杀了外层 zsh，真正干活的 `command-code` 子进程没停，在 main 上独立改了约 30 分钟（21 个文件），直到合并被挡住才暴露。处理：先把改动备份成补丁，再只还原它碰过的文件（用户在 `tools/`、`skills/` 的未提交改动未动）。教训写进 PROGRESS：派发必须 `cd <worktree> && cmd …` 写在同一条命令里；停 cmd 要停 `command-code` 进程本身。
+- **Claude 对照题目原文重核时发现：真实模式剧情永远卡在 arrive。** `advanceRule` 在 arrive 阶段只会告诉 LLM「允许进入 reveal」，而 `story.ts` 只放行 arrive→probe，LLM 照指示写的 `advance` 全被拒。Mock 剧本用单独代码推进，所以 e2e 一直是绿的，掩盖了问题。用户实测反馈「不知道剧情在哪」正是这个原因。修复排进 S6l，并新增「完全照提示词规则办事的假 LLM 走完全程」集成测试，专防这类被 Mock 掩盖的推进 bug。同时更正了 Claude 自己的两个旧判断：题目里「剧情分支」是可选项；「2 种非说话动作**或视觉状态**」已经满足（D48）。
+- **用户实测：第二次换背景必失败。** Claude 从 dev server 输出里按时间线排查：04:11 第一次成功，04:13、04:17 两次失败都只有「提示词已加载」一行、没有任何失败记录。根因是 S6c-fix1 §7 引入的回归：参考图改为「当前背景」，换成功后当前背景是生成图（URL `/generated/…`，文件在 `var/generated/`），但 `session.ts` 用 `resolveClientAssetPath()` 把它映射到不存在的 `apps/client/public/generated/…`，上传参考图即失败；任务失败时服务端又不写日志，于是静默失败。S6c-fix1 当时按用户要求只做了简单检测（测试全绿），**DeepSeek 的单测用的是注入的参考图路径，没覆盖「成功一次后再换」这条真实路径**。修复并入 S6l-fix1：按 URL 来源解析参考图路径（复用生图模块已有的目录解析）、失败/拒绝必须记日志、加「成功后再换一次」的集成测试。
+- **用户实测：刷新后生成背景和聊天记录丢失。** 会话能按 sessionId 恢复，但服务端的 `session` 消息只回剧情快照，背景和对话虽然都还在服务端却没发回。修复同样并入 S6l-fix1。
+- 路线冻结（D48）：S6l 剧情可感知（观众弹幕引导等）→ S6l-fix1 → S6m 动作对比 → S6u UI 重设计 → 冻结点 → 统一深审 → 冷启动验证 → 文档 → 录屏。S6u 的界面设计稿由 Claude 绘制（「深夜推流」4 张），用户一次批准，替换 DeepSeek 生成的界面风格。
