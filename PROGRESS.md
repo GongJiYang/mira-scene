@@ -1,13 +1,20 @@
-# PROGRESS（更新于 2026-10-28 00:50，最新提交 b905792）
+# PROGRESS（更新于 2026-10-28 01:05，最新提交 fc9d752）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6c · 关卡 8/9 · 验收】两批在 worktree 里跑（Systalyze Kimi-K3）：
-- S6c 弹幕换背景：`/Users/gjy/mira-wt-s6c`（分支 s6c-scene），日志 `docs/tasks/.s6c-cmd.log`，报告 `s6c-report.md`。
-- director 偶发超时小修：`/Users/gjy/mira-wt-flaky`（分支 s6-flaky），报告 `s6-flaky-director-report.md`。
+【S6c · 关卡 8/9 · 验收】S6c 弹幕换背景在 worktree `/Users/gjy/mira-wt-s6c`（分支 s6c-scene，Systalyze Kimi-K3）后台跑，日志 `docs/tasks/.s6c-cmd.log`，报告 `docs/tasks/s6c-report.md`。
+**新会话先查**：`ps -A -o pid,etime,command | grep "[c]md -p"`；进程没了且没有报告 → 在 worktree 里开新会话续跑（`cd /Users/gjy/mira-wt-s6c` 单独一条，再 cmd -p … 不用 --continue）。核心细审：`detectSceneRequest`、`composeScenePrompt`（构图锁必含）、`sceneJobReducer`（单任务/冷却 45s/每会话 5 次/90s 超时）、切频道取消任务。
 跑完后：核心逐行审、其余看测试（必要时自己跑 e2e、自己截图看）→ 合并回 main → 删 worktree。用户在 http://localhost:5180 （主目录 mock dev server）看直播间。
 
 ## 当前位置
-S6a、S6b（含 fix1–3）、S6d 文档窗口、S6e 换配色离线工具都已在 main。681+ 个单测、22 个 e2e。
+S6a、S6b（含 fix1–3）、S6d 文档窗口、S6e 换配色离线工具、director 测试超时修复都已在 main。695 个单测全绿、22 个 e2e。
+
+## 接真实模式清单
+- [ ] LLM：Command Code 周一 20:43 重置后 `LLM_PROVIDER=commandcode` 即可；或给官方 DeepSeek 充值，改 `LLM_PROVIDER=deepseek`（代码已就绪，首句约 0.8s）。Systalyze 太慢（首 token 14–19s），不用于回话。
+- [x] Fish TTS/STT：`s2.1-pro-free` 免费到 2026-11-30；`FISH_VOICE_ID`（夏凛）、`FISH_VOICE_ID_YUNA`（小鸟游星野 a7736406…）已配。
+- [x] 生图：`IMAGE_API_KEY`/`IMAGE_BASE_URL` 已配（建议换 Key）。
+- [ ] 跑 `pnpm smoke:real` 和 S6c 的 `pnpm smoke:scene`：S6b 后的按角色音色、带对话的生图都还没在真实模式验证过。
+- [ ] `PROVIDER_MODE=real pnpm dev`，两个频道各走一遍 arrive→ending（含 reveal 生图、ending 视频、切频道、打断）。
+- [ ] iPhone 真机测 iOS 音频。
 
 ## 已完成（最近的在前）
 | 批次 | 结果 | 提交 |
