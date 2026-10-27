@@ -1,7 +1,10 @@
-# PROGRESS（更新于 2026-10-27 20:10，最新提交 9555a76；S6b 已派发、未提交）
+# PROGRESS（更新于 2026-10-28 00:50，最新提交 a2e7b3a）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6b · 关卡 7/9 · 续跑】S6b 两次中断（网络、Command Code 5 小时额度，20:51 重置）。已完成到 §1 角色包后端，改用 Systalyze 的 DeepSeek-V4.1-Flash 续跑（日志 `.s6b-cmd-3.log`）。**S6c 起切回 Command Code 的 deepseek-v4-flash**（用户 2026-10-27）。完成后：跑完后按轻量验收（审核心逻辑 + 架构合规，不全量重跑）→ 桌面 1440 / 手机 390 开浏览器给用户看直播间 → 告诉用户 `docs/voice-pack.md` 已生成 → 提交。
+【S6c · 关卡 8/9 · 验收】两批在 worktree 里跑（Systalyze Kimi-K3）：
+- S6c 弹幕换背景：`/Users/gjy/mira-wt-s6c`（分支 s6c-scene），日志 `docs/tasks/.s6c-cmd.log`，报告 `s6c-report.md`。
+- director 偶发超时小修：`/Users/gjy/mira-wt-flaky`（分支 s6-flaky），报告 `s6-flaky-director-report.md`。
+跑完后：核心逐行审、其余看测试 → 合并回 main → 删 worktree。用户在 http://localhost:5180 （主目录 mock dev server）看直播间。
 
 ## 并行批次（D42）
 - S6d 开发文档窗口：worktree `/Users/gjy/mira-wt-s6d`（分支 s6d-docs），日志 `docs/tasks/.s6d-cmd.log`，报告 `s6d-docs-report.md`。
