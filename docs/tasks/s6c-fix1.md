@@ -40,8 +40,15 @@
 ## §8 清理
 `runner.ts` 里未使用的局部 `state`、永不返回的 `busy` 结果、直通包装 `admitScene` 删掉。
 
+## §8b 顺带修的 4 个界面问题（S6g-A 遗留）
+1. **ending 时截图卡片没收起**：进入 ending（OFFLINE 视频）时收起截图卡片，不能叠在视频上。加单测或 e2e 断言。
+2. **「平静」情绪猫耳朵消失**（「防备」正常）：查 S6g-A 删耳朵动作后 `ParamEarOFF` / 耳朵相关参数是否被写成隐藏值；平静时耳朵必须可见。加 `live2dParams` 单测覆盖四种情绪下耳朵参数。
+3. **「温暖」情绪 e2e 截图被 ending 视频挡住**：e2e 改为在 ending 视频出现之前截图。
+4. **文档页手机横向溢出 6px**（`e2e/docs.spec.ts` 失败）：疑为 `docs/architecture/00-导读.md` 的宽代码块；代码块在卡片内横向滚动（`overflow-x: auto`，`max-width: 100%`），页面本身不能横向溢出。`e2e/docs.spec.ts` 必须通过。
+- 不要改输入框占位文字「‹输入框占位›」。
+
 ## §9 测试
-`pnpm test`、`pnpm typecheck` 全绿；e2e 换背景用例通过；报告列出每条修复对应的新测试。
+`pnpm test`、`pnpm typecheck` 全绿；e2e 换背景用例、`e2e/docs.spec.ts` 通过；报告列出每条修复对应的新测试。
 
 ## §10 报告 `docs/tasks/s6c-fix1-report.md`
 
