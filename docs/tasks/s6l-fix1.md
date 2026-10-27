@@ -4,7 +4,7 @@
 > 关卡 1–5 结论见末尾（小修，Claude 决定）。
 
 ## 铁律
-冲突停下写进报告；Key 只从 `.env` 读取、不得打印；不准 commit；不碰 `tools/live2d-pipeline/**`、`skills/**`；不要用读文件工具打开任何图片；长命令显式传大 timeout，同一命令超时两次就停下写进报告；测试里不发真实网络请求。先写会失败的测试，再改代码。不改任何台词和样式。
+冲突停下写进报告；Key 只从 `.env` 读取、不得打印；不准 commit；不碰 `tools/live2d-pipeline/**`、`skills/**`；不要用读文件工具打开任何图片；长命令显式传大 timeout，同一命令超时两次就停下写进报告；测试里不发真实网络请求。**不要运行 `pnpm e2e`/Playwright**（用户 2026-10-28 决定：e2e 只在冻结点统一跑一次）；需要的 e2e 用例照写，但不运行，报告里注明「未运行」。先写会失败的测试，再改代码。不改任何台词和样式。
 
 ## 现状（已核实）
 - 刷新后客户端用 `sessionStorage` 的 `mira.sessionId` 发 `hello.resumeSessionId`，服务端 `session.ts` 能找回同一个会话（`session_resumed`）。
