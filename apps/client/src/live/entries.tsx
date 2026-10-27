@@ -9,8 +9,10 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { UI_TEXT } from "./uiText";
-import type { StagePhase } from "../view/useStageViewModel";
+import { SETTINGS_TEXT } from "./settings";
+import type { StagePhase, StageViewModel } from "../view/useStageViewModel";
 import { ActionPanelMobile } from "./ActionPanel";
+import { SettingsDrawerMobile } from "./SettingsPanel";
 
 /** 文档窗口默认打开的文档（DocsApp 支持 `?docs=1&doc=<path>`）。 */
 export const DOCS_URL = "?docs=1&doc=docs/architecture/00-%E5%AF%BC%E8%AF%BB.md";
@@ -31,11 +33,13 @@ export function LiveEntries() {
   );
 }
 
-/** 手机端可展开菜单：一个「☰」按钮 + 展开后的入口链接 + S6m §3 的「动作表」项。 */
-export function MobileMenu({ phase }: { phase: StagePhase }) {
+/** 手机端可展开菜单：一个「☰」按钮 + 展开后的入口链接 + S6m §3 的「动作表」项 + S6n §5 的「设置」项。 */
+export function MobileMenu({ phase, vm }: { phase: StagePhase; vm: StageViewModel }) {
   const [open, setOpen] = useState(false);
   // S6m §3：菜单里的「动作表」点开为底部抽屉。
   const [actionOpen, setActionOpen] = useState(false);
+  // D49 / S6n §5：菜单里的「设置」点开为底部抽屉。
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // 点击外部收起菜单。
@@ -75,6 +79,18 @@ export function MobileMenu({ phase }: { phase: StagePhase }) {
             >
               {UI_TEXT.actionPanel}
             </button>
+            {/* D49 / S6n §5：打开设置（底部抽屉）。 */}
+            <button
+              type="button"
+              className="live-entry"
+              data-testid="settings-toggle"
+              onClick={() => {
+                setSettingsOpen(true);
+                setOpen(false);
+              }}
+            >
+              {SETTINGS_TEXT.title}
+            </button>
             <a className="live-entry" data-testid="entry-docs" href={DOCS_URL}>
               {UI_TEXT.docs}
             </a>
@@ -99,6 +115,8 @@ export function MobileMenu({ phase }: { phase: StagePhase }) {
           <ActionPanelMobile phase={phase} open={actionOpen} />
         </div>
       )}
+      {/* D49 / S6n §5：手机设置底部抽屉。 */}
+      <SettingsDrawerMobile vm={vm} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

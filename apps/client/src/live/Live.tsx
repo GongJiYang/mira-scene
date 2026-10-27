@@ -14,6 +14,7 @@ import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layo
 import { StageRenderer } from "./StageRenderer";
 import { LiveEntries, MobileMenu } from "./entries";
 import { ActionPanelDesktop } from "./ActionPanel";
+import { ModeBadge, SettingsDialogDesktop } from "./SettingsPanel";
 import { UI_TEXT } from "./uiText";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
@@ -289,8 +290,12 @@ export function Live() {
                 </span>
                 <span className="live-hud-viewers">{UI_TEXT.viewers}</span>
                 <FirstAudioHud />
+                {/* D49 / S6n §5：顶栏模式小标签（Mock / 真实）。 */}
+                <ModeBadge vm={vm} />
                 {/* S6g-A §5：桌面顶栏右侧的「文档」「观测」入口。 */}
                 <LiveEntries />
+                {/* D49 / S6n §5：桌面顶栏「设置」入口（对话框）。 */}
+                <SettingsDialogDesktop vm={vm} />
               </div>
               {vm.error && vm.debugMode && (
                 <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>
@@ -575,6 +580,8 @@ function MobileLive(props: MobileProps) {
           </span>
           <span className="live-badge">{UI_TEXT.live}</span>
           <span className="live-mobile-spacer" />
+          {/* D49 / S6n §5：手机顶栏模式小标签。 */}
+          <ModeBadge vm={vm} />
           <button
             type="button"
             className="live-mobile-mic"
@@ -588,7 +595,7 @@ function MobileLive(props: MobileProps) {
             ⇅
           </button>
           {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口 + S6m §3 动作表）。 */}
-          <MobileMenu phase={vm.phase} />
+          <MobileMenu phase={vm.phase} vm={vm} />
         </div>
 
         <div className="live-mobile-danmaku" data-testid="danmaku-list" data-no-stage-tap>

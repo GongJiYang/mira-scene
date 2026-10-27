@@ -59,6 +59,8 @@ pnpm test && pnpm typecheck             # 可选：确认这台机器上也是�
 
 > 公开演示的建议：先用 `PROVIDER_MODE=mock` 上线验证页面、Live2D、语音播放都正常，再切 `real`。
 
+> 访问者也可在页面设置里填自己的 Key（只在其会话内存中使用）；服务器不配真实 Key 时，默认 Mock。
+
 ## 4. 用 systemd 跑服务端
 
 `/etc/systemd/system/mira.service`：

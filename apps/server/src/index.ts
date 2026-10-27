@@ -5,28 +5,17 @@ import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { parseClientMessage, type ServerMessage } from "@mira/protocol";
-import { createCommandCodeLlm } from "./adapters/commandcode/commandCodeLlm";
 import { assertCommandCodeReady } from "./adapters/commandcode/preflight";
-import { createDeepSeekLlm } from "./adapters/deepseek/deepseekLlm";
-import { withSttErrorDegrade } from "./adapters/fish/degrade";
-import { createFishStt } from "./adapters/fish/fishStt";
-import { createFishTts } from "./adapters/fish/fishTts";
-import { parseFaults, readFirstTokenTimeoutMs, withFaults } from "./adapters/faults";
-import { createMockLlm } from "./adapters/mock/mockLlm";
-import { createMockStt } from "./adapters/mock/mockStt";
-import { createMockTts } from "./adapters/mock/mockTts";
-import { createMockSceneWriter } from "./adapters/mock/mockSceneWriter";
-import { createImageGenMedia, defaultOutDir } from "./adapters/media/imageGen";
+import { parseFaults, readFirstTokenTimeoutMs } from "./adapters/faults";
 import { generatedFileFor } from "./adapters/media/generatedRoute";
-import { createPresetMedia } from "./adapters/media/presetMedia";
+import { defaultOutDir } from "./adapters/media/imageGen";
 import { loadPacks } from "./characters/pack";
-import { applyRepoEnv, loadConfig } from "./config";
+import { applyRepoEnv, loadConfig, readServerCredentials, type ProviderCredentials } from "./config";
 import { consoleLogger, type Logger } from "./log";
 import { createObsBuffer } from "./obs/buffer";
+import { redactSecrets } from "./obs/sanitize";
 import { summarize } from "./obs/summarize";
-import type { LLMPort, Ports, STTPort, TTSPort } from "./ports";
-import { withPaceCheck } from "./quality/paceGuard";
-import { createSceneWriter } from "./scene/writer";
+import { buildProviders, planSession, resolveKeys } from "./providers";
 import { createSessionManager, type SendFn } from "./session";
 import { createTokenStore } from "./tokens";
 
@@ -52,6 +41,16 @@ function messageBytes(raw: RawData): number {
   return raw.byteLength;
 }
 
+/**
+ * D49 / S6n §1：服务端不提供真实能力时的空凭据（mock 模式）。
+ * 只用于模式判定——`planSession` 只读 `apiKey` 是否为空，不读 baseUrl / model。
+ */
+const EMPTY_CREDENTIALS: ProviderCredentials = {
+  deepseek: { apiKey: "", baseUrl: "", model: "" },
+  fish: { apiKey: "", baseUrl: "", voiceId: "", ttsModel: "" },
+  image: { apiKey: "", baseUrl: "", model: "" },
+};
+
 function rejectUpgrade(socket: Duplex, status: string): void {
   socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
   socket.destroy();
@@ -70,7 +69,6 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     baseLogger(record);
   };
   const tokens = createTokenStore();
-  const { providers } = config;
 
   // S6b §1：启动时加载所有角色包；任何一个不合法 → 抛错，服务端启动失败（不静默降级）。
   const packs = loadPacks();
@@ -91,108 +89,34 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   }
 
   // S6a §2 契约：real + commandcode 时，启动检查 cmd 可执行且已登录；不满足直接报错退出，不降级。
+  // D49 / S6n §1：commandcode 仅服务端本地开发可用，BYOK 不支持 commandcode（访客恒走 DeepSeek）。
   if (config.providerMode === "real" && config.llmProvider === "commandcode") {
     await assertCommandCodeReady();
     logger({ ts: Date.now(), event: "commandcode_ready" });
   }
 
-  // 按模式选择适配器：real 模式下缺 Key 的端口单独回退到 Mock，并记 provider_fallback（§4）。
-  function buildPorts(): Ports {
-    const wantReal = config.providerMode === "real";
-    const fallback = (port: string, reason: string): void => {
-      logger({ ts: Date.now(), event: "provider_fallback", detail: { port, reason } });
-    };
+  // D49 / S6n：启动时按服务端 `.env` 的 Key 预建一套 Mock（无状态，全局共享）。
+  // 服务端显式 real（PROVIDER_MODE=real）且 `.env` 有真实 Key 时，再预建一套「服务端真实」
+  // （供不带 Key 的访客与 auto 模式使用）。mock 模式下服务端不提供真实能力（`pnpm smoke` 走 mock）。
+  const serverCredentials = readServerCredentials(options.env ?? process.env);
+  const serverResolved = resolveKeys(undefined, serverCredentials);
+  const hasServerKeys = serverResolved.deepseek.value !== "" && serverResolved.fish.value !== "";
+  const mockBuilt = buildProviders({ mode: "mock", keys: serverResolved, serverCredentials, serverConfig: config, logger });
+  const serverRealAvailable = config.providerMode === "real" && hasServerKeys;
+  logger({
+    ts: Date.now(),
+    event: "providers_ready",
+    detail: { providerMode: config.providerMode, serverReal: serverRealAvailable },
+  });
 
-    let stt: STTPort;
-    if (wantReal && providers.fish.apiKey !== "") {
-      stt = withSttErrorDegrade(
-        createFishStt({ baseUrl: providers.fish.baseUrl, apiKey: providers.fish.apiKey, log: logger }),
-        { log: logger },
-      );
-    } else {
-      if (wantReal) fallback("stt", "missing_key");
-      stt = createMockStt();
-    }
-
-    let llm: LLMPort;
-    // S6b §1：提示词改由角色包提供，LLM 适配器不再持有单一提示词（每轮从 ctx.pack 渲染）。
-    if (wantReal && config.llmProvider === "commandcode") {
-      // D39 / S6a §2：走 Command Code 的额度。启动契约已在 startServer 里检查过。
-      llm = createCommandCodeLlm({
-        model: config.commandCodeModel,
-        log: logger,
-      });
-    } else if (wantReal && providers.deepseek.apiKey !== "") {
-      llm = createDeepSeekLlm({
-        baseUrl: providers.deepseek.baseUrl,
-        apiKey: providers.deepseek.apiKey,
-        model: providers.deepseek.model,
-        log: logger,
-      });
-    } else {
-      if (wantReal) fallback("llm", "missing_key");
-      llm = createMockLlm();
-    }
-
-    let tts: TTSPort;
-    if (wantReal && providers.fish.apiKey !== "") {
-      tts = withPaceCheck(
-        createFishTts({
-          baseUrl: providers.fish.baseUrl,
-          apiKey: providers.fish.apiKey,
-          // S6b-fix1 §1：默认音色置空 —— 真实音色由会话层按角色包经 TtsOptions.voiceId 注入。
-          voiceId: "",
-          model: providers.fish.ttsModel,
-          log: logger,
-        }),
-        { log: logger },
-      );
-    } else {
-      if (wantReal) fallback("tts", "missing_key");
-      // S5 §1：Mock 语音方案 B。manifest 存在但非法会在启动时（此处）直接抛错。
-      tts = createMockTts({ manifestPath: config.voiceManifestPath, log: logger });
-    }
-
-    return { stt, llm, tts };
-  }
-
-  // 每个会话一份端口，故障（hello.faults / FAULTS）在创建端口实例时套上装饰器。
-  const basePorts = buildPorts();
   // sessionId → 连接：`ws_drop` 需要服务端主动关闭会话所在的连接。
   const sessionSockets = new Map<string, WebSocket>();
   // send 回调 → 连接：S6b §1 未知 characterId 时关闭对应连接。
   const socketSendMap = new Map<SendFn, WebSocket>();
   const sessions = createSessionManager({
-    ...basePorts,
-    createPorts: (faults) =>
-      faults.length === 0
-        ? basePorts
-        : {
-            stt: withFaults(basePorts.stt, "stt", faults),
-            llm: withFaults(basePorts.llm, "llm", faults),
-            tts: withFaults(basePorts.tts, "tts", faults),
-          },
+    ...mockBuilt.ports,
     defaultFaults: parseFaults(process.env.FAULTS),
     firstTokenTimeoutMs: readFirstTokenTimeoutMs(),
-    // D27 / S6b §5.5：媒体端口。`IMAGE_API_KEY` 配置时用真实生图（配置选择，非余额降级）；
-    // 未配置时沿用预置照片适配器（等待 config.mediaPresetDelayMs 后发送 media_ready）。
-    // 提示词按 media.id 反查所属角色包的 imagePrompt 模板（{{conversation}} 由 buildImagePrompt 填）。
-    media:
-      config.providerMode === "real" && providers.image.apiKey !== ""
-        ? createImageGenMedia({
-            baseUrl: providers.image.baseUrl,
-            apiKey: providers.image.apiKey,
-            model: providers.image.model,
-            // S6b-fix1 §5：写到服务端数据目录 var/generated/（GENERATED_DIR 可覆盖）。
-            outDir: defaultOutDir(options.env ?? process.env),
-            log: (event, detail) => logger({ ts: Date.now(), event, detail }),
-          })
-        : createPresetMedia({
-            delayMs: config.mediaPresetDelayMs,
-            // D43：`/stage/` 目录随夏凛删除；预置照片 / 视频改落在忧奈角色包目录。
-            basePath: "/characters/yuna",
-            videoBasePath: "/characters/yuna",
-          }),
     dropConnection: (sessionId) => {
       const socket = sessionSockets.get(sessionId);
       if (!socket) return;
@@ -210,27 +134,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     log: logger,
     sessionTurnLimit: config.sessionTurnLimit,
     dailyTurnLimit: config.dailyTurnLimit,
-    // S6c §4：换背景端口（Mock 用查表；真实按 LLM_PROVIDER 复用适配器）。
-    sceneWriter:
-      config.providerMode === "real"
-        ? createSceneWriter({
-            provider: config.llmProvider,
-            deepseek: providers.deepseek.apiKey !== "" ? providers.deepseek : undefined,
-            commandcode: { model: config.commandCodeModel },
-            log: logger,
-          })
-        : createMockSceneWriter(),
-    // S6c §4：生图参数（真实模式用 image credentials；Mock 模式也要能跑，用假 fetch 或预置图由 e2e 处理）。
-    sceneImageGen:
-      config.providerMode === "real" && providers.image.apiKey !== ""
-        ? {
-            baseUrl: providers.image.baseUrl,
-            apiKey: providers.image.apiKey,
-            model: providers.image.model,
-            outDir: defaultOutDir(options.env ?? process.env),
-            log: (event, detail) => logger({ ts: Date.now(), event, detail }),
-          }
-        : undefined,
+    // D49 / S6n §1/§2：模式与 Key 决策（纯函数）+ 工厂。
+    // 服务端不提供真实能力时（mock 模式），只把访问者自带的 Key 计入判定。
+    planSession: (mode, keys) => planSession(mode, keys, serverRealAvailable ? serverCredentials : EMPTY_CREDENTIALS),
+    mockProviders: mockBuilt,
+    buildProviders: (mode, keys) => buildProviders({ mode, keys, serverCredentials, serverConfig: config, logger, env: options.env ?? process.env }),
     // S6c §4：参考图 = 当前背景（桌面 / 手机）。由会话层按 pack.stage.background 动态解析本地文件路径。
     sceneReferencePaths: undefined,
   });
@@ -354,7 +262,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
           sessionId: parsed.data.sessionId,
           turnId: parsed.data.turnId,
           event: "handler_failed",
-          detail: error instanceof Error ? error.message : String(error),
+          detail: redactSecrets(error instanceof Error ? error.message : String(error)),
         });
       });
     });

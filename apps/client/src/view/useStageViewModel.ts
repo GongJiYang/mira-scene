@@ -20,6 +20,7 @@ import {
 } from "../core/store";
 import { useStoryMediaStore } from "../core/storyMediaLink";
 import { useSceneStatusStore } from "../live/scene/status";
+import { useSettingsStore, DEFAULT_SETTINGS as DEFAULT_VIEW_SETTINGS, type CapabilitySource, type Settings } from "../live/settings";
 import type { ClientState, Phase, Visual } from "../state";
 import {
   initialPerformanceState,
@@ -84,6 +85,12 @@ export type StageView = {
   sceneBackground: { desktop: string; mobile: string } | null;
   /** S6l §2：当前剧情节点（只认服务端）。 */
   node: StoryNode;
+  /** D49 / S6n §5：本设备保存的设置（面板回显用）。 */
+  settings: Settings;
+  /** D49 / S6n §2：本会话实际生效的模式；null = 未连接。 */
+  sessionMode: "mock" | "real" | null;
+  /** D49 / S6n §2：各类能力来源（设置面板来源标签用）。 */
+  capabilities: { llm: CapabilitySource; voice: CapabilitySource; image: CapabilitySource } | null;
 };
 
 export type StageViewModel = StageView & { intents: Intents; reports: StageReports };
@@ -104,6 +111,10 @@ export type StageViewInput = {
   sceneStatus?: { kind: string; label?: string };
   /** S6c §5：当前生效的背景。 */
   sceneBackground?: { desktop: string; mobile: string } | null;
+  /** D49 / S6n §5：设置与能力来源。 */
+  settings?: Settings;
+  sessionMode?: "mock" | "real" | null;
+  capabilities?: { llm: CapabilitySource; voice: CapabilitySource; image: CapabilitySource } | null;
 };
 
 /** S6b §2：`?debug=1` 才显示原始错误信息。 */
@@ -152,6 +163,9 @@ export function toStageView(input: StageViewInput): StageView {
     sceneStatus: input.sceneStatus ?? { kind: "idle" },
     sceneBackground: input.sceneBackground ?? null,
     node: stage.node,
+    settings: input.settings ?? DEFAULT_VIEW_SETTINGS,
+    sessionMode: input.sessionMode ?? null,
+    capabilities: input.capabilities ?? null,
   };
 }
 
@@ -168,6 +182,9 @@ export function useStageViewModel(): StageViewModel {
   const fallbackSubtitle = useStore(useFallbackStore, (state) => state.subtitle);
   const sceneStatus = useSceneStatusStore((state) => state.display);
   const sceneBackground = useSceneStatusStore((state) => state.backgroundUrl);
+  const settings = useStore(useSettingsStore, (state) => state.settings);
+  const sessionMode = useStore(useSettingsStore, (state) => state.sessionMode);
+  const capabilities = useStore(useSettingsStore, (state) => state.capabilities);
   const debugMode = useDebugMode();
 
   return {
@@ -185,6 +202,9 @@ export function useStageViewModel(): StageViewModel {
       debugMode,
       sceneStatus,
       sceneBackground,
+      settings,
+      sessionMode,
+      capabilities,
     }),
     intents,
     reports,
