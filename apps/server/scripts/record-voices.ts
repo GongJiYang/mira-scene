@@ -26,7 +26,7 @@ import { applyRepoEnv, loadConfig, resolveVoiceManifestPath } from "../src/confi
 import { buildTtsText } from "../src/director/vocab";
 import type { Intent } from "../src/intent";
 import { createInitialScene } from "../src/story";
-import { DEFAULT_CHARACTER_ID, loadPacks, type Pack } from "../src/characters/pack";
+import { defaultCharacterId, loadPacks, type Pack } from "../src/characters/pack";
 
 /** 能稳定命中每种意图的代表文本（与各角色 content.json 的关键词表一致）。 */
 const TEXT_BY_INTENT: ReadonlyArray<[Intent, string]> = [
@@ -97,9 +97,10 @@ async function main(): Promise<void> {
   });
 
   // S6b §1：台词按角色包取；本脚本只录缺省角色（多角色录制留到需要时再扩展）。
+  // S6f §1：缺省角色 = 第一个未隐藏角色。
   const packs = loadPacks();
-  const pack = packs.get(DEFAULT_CHARACTER_ID);
-  if (!pack) throw new Error(`找不到缺省角色包：${DEFAULT_CHARACTER_ID}`);
+  const pack = packs.get(defaultCharacterId(packs));
+  if (!pack) throw new Error("找不到缺省角色包");
 
   const lines = collectLines(pack);
   let recorded = 0;

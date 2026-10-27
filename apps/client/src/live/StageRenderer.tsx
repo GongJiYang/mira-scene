@@ -132,6 +132,16 @@ function Live2dStage({
   const frameRef = useRef({ phase, emotion, performance });
   frameRef.current = { phase, emotion, performance };
 
+  // S6f §2：相位计时（phaseSinceSec / idleSinceSec / 首句惊讶 / 待机 seed）。
+  const clockRef = useRef({
+    phaseSince: 0,
+    idleSince: 0,
+    firstSpokeAt: null as number | null,
+    seed: 0.5,
+    lastPhase: phase,
+    lastAt: 0,
+  });
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -144,9 +154,29 @@ function Live2dStage({
       frame: () => {
         const { phase: currentPhase, emotion: currentEmotion, performance: current } = frameRef.current;
         // 注意：这里不能用名为 `performance` 的局部变量，否则会遮住全局 performance。
-        const tSec = (typeof globalThis.performance !== "undefined" ? globalThis.performance.now() : Date.now()) / 1000;
+        const nowMs = typeof globalThis.performance !== "undefined" ? globalThis.performance.now() : Date.now();
+        const tSec = nowMs / 1000;
         const yunaEmotion = toYunaEmotion(currentEmotion);
         const blinkOpen = current.blink === "closed" ? 0 : current.blink === "half" ? 0.5 : 1;
+
+        // S6f §2：相位计时推进（纯本地，不依赖 B 的绝对时刻——phase 变化时重置）。
+        const clock = clockRef.current;
+        if (clock.lastPhase !== currentPhase) {
+          clock.phaseSince = 0;
+          clock.idleSince = 0;
+          clock.lastPhase = currentPhase;
+          if (currentPhase === "idle") clock.seed = Math.random();
+        } else if (clock.lastAt > 0) {
+          const dt = (nowMs - clock.lastAt) / 1000;
+          clock.phaseSince += dt;
+          if (currentPhase === "idle") clock.idleSince += dt;
+        }
+        clock.lastAt = nowMs;
+
+        // S6f §2：首句回话开始时刻（speaking 第一次出现）。
+        if (currentPhase === "speaking" && clock.firstSpokeAt === null) clock.firstSpokeAt = nowMs;
+        const firstSpokeSinceSec = clock.firstSpokeAt === null ? undefined : (nowMs - clock.firstSpokeAt) / 1000;
+
         return {
           params: yunaParams({
             phase: currentPhase,
@@ -154,6 +184,11 @@ function Live2dStage({
             mouth: current.mouth,
             blinkOpen,
             tSec,
+            phaseSinceSec: clock.phaseSince,
+            idleSinceSec: clock.idleSince,
+            firstSpokeSinceSec,
+            silentAction: current.activeAction?.action ?? null,
+            seed: clock.seed,
           }),
           emotion: yunaEmotion,
           manualBlink: blinkOpen,

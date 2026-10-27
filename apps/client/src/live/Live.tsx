@@ -7,7 +7,8 @@
  */
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useStageViewModel } from "../view/useStageViewModel";
-import { characterOrDefault, CLIENT_CHARACTERS } from "./characters";
+import { micInputLevel } from "../core/controller";
+import { characterOrDefault, VISIBLE_CHARACTERS } from "./characters";
 import { danmakuReducer, initialDanmakuState, MAX_MOBILE_DANMAKU, visibleDanmaku, danmakuOpacity } from "./danmaku";
 import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layout";
 import { StageRenderer } from "./StageRenderer";
@@ -105,6 +106,23 @@ export function Live() {
 
   const subtitle = vm.subtitle ?? vm.fallbackSubtitle ?? "";
 
+  // S6f §2：倾听声波随输入音量跳动（rAF 本地读取 recorder 的 RMS）。
+  const listening = vm.phase === "listening";
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    if (!listening) {
+      setLevel(0);
+      return;
+    }
+    let raf = 0;
+    const tick = (): void => {
+      setLevel(micInputLevel());
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [listening]);
+
   const stage = (
     <StageRenderer
       characterId={character.id}
@@ -124,7 +142,7 @@ export function Live() {
       <main className="live-root" data-testid="live" data-layout="desktop" data-phase={vm.phase} data-connection={vm.connection}>
         <div className="live-desktop">
           <nav className="live-sidebar" aria-label={UI_TEXT.channels}>
-            {CLIENT_CHARACTERS.map((item) => (
+            {VISIBLE_CHARACTERS.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -155,6 +173,14 @@ export function Live() {
             </div>
             <p className="live-subtitle" data-testid="subtitle">
               {subtitle}
+              {/* S6f §2：思考时字幕区出现「……」三点动画（不是聊天气泡，不改字幕区结构）。 */}
+              {vm.phase === "thinking" && (
+                <span className="live-thinking-dots" data-testid="thinking-dots" aria-hidden>
+                  <i>.</i>
+                  <i>.</i>
+                  <i>.</i>
+                </span>
+              )}
             </p>
           </section>
 
@@ -198,6 +224,15 @@ export function Live() {
               >
                 ●
               </button>
+              {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
+              {listening && (
+                <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                  <span className="live-wave-label">{UI_TEXT.listening}</span>
+                </span>
+              )}
             </form>
           </aside>
         </div>
@@ -218,6 +253,8 @@ export function Live() {
       endPtt={endPtt}
       switchTo={switchTo}
       stage={stage}
+      listening={listening}
+      level={level}
     />
   );
 }
@@ -234,11 +271,13 @@ type MobileProps = {
   endPtt: () => void;
   switchTo: (characterId: string) => void;
   stage: React.ReactNode;
+  listening: boolean;
+  level: number;
 };
 
 /** 手机布局：竖屏全屏 + 左下浮层弹幕 + 底部胶囊输入 + 上下滑切主播。 */
 function MobileLive(props: MobileProps) {
-  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, switchTo, stage } = props;
+  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, switchTo, stage, listening, level } = props;
   const character = characterOrDefault(characterId);
   const [slide, setSlide] = useState(0);
   const touch = useRef<{ y: number; t: number } | null>(null);
@@ -258,7 +297,7 @@ function MobileLive(props: MobileProps) {
     const dt = Math.max(1, performance.now() - start.t);
     const direction = swipeDecision(dy, dy / dt);
     if (direction === null) return;
-    const next = cycleChannel(CLIENT_CHARACTERS.map((item) => item.id), characterId, direction);
+    const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, direction);
     // 整屏滑动过渡：先滑出，再切换，再滑回。
     setSlide(direction === "next" ? -1 : 1);
     window.setTimeout(() => {
@@ -306,7 +345,7 @@ function MobileLive(props: MobileProps) {
             data-testid="switch-channel"
             aria-label={UI_TEXT.switchChannel}
             onClick={() => {
-              const next = cycleChannel(CLIENT_CHARACTERS.map((item) => item.id), characterId, "next");
+              const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, "next");
               switchTo(next);
             }}
           >
@@ -329,6 +368,13 @@ function MobileLive(props: MobileProps) {
 
         <p className="live-mobile-subtitle" data-testid="subtitle">
           {subtitle}
+          {vm.phase === "thinking" && (
+            <span className="live-thinking-dots" data-testid="thinking-dots" aria-hidden>
+              <i>.</i>
+              <i>.</i>
+              <i>.</i>
+            </span>
+          )}
         </p>
 
         <form
@@ -359,6 +405,15 @@ function MobileLive(props: MobileProps) {
           >
             ●
           </button>
+          {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
+          {listening && (
+            <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
+              <i />
+              <i />
+              <i />
+              <span className="live-wave-label">{UI_TEXT.listening}</span>
+            </span>
+          )}
         </form>
 
         {vm.error && vm.debugMode && <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>}

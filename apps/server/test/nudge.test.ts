@@ -8,7 +8,7 @@ import type { LLMContext, LLMPort } from "../src/ports";
 import { renderPrompt, NUDGE_SCENE_NOTE } from "../src/prompts/renderPrompt";
 import { createSessionManager, NUDGE_USER_TEXT, type SendFn, type SessionManager } from "../src/session";
 import { createInitialScene } from "../src/story";
-import { testPack, testPacks } from "./helpers/pack";
+import { testPack, testPacksWithRinVisible } from "./helpers/pack";
 
 type Harness = {
   manager: SessionManager;
@@ -28,7 +28,7 @@ function setup(options: { llm?: LLMPort; sessionTurnLimit?: number; dailyTurnLim
     llm: options.llm ?? createMockLlm({ beatDelayMs: 0 }),
     tts: createMockTts({ delayMs: 0 }),
     log: silentLogger,
-    packs: testPacks(),
+    packs: testPacksWithRinVisible(),
     sessionTurnLimit: options.sessionTurnLimit,
     dailyTurnLimit: options.dailyTurnLimit,
     idleTimeoutMs: 24 * 60 * 60 * 1000,

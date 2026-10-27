@@ -82,17 +82,19 @@ test.describe("直播间 UI v1", () => {
     await shot(page, `live-danmaku-${layout}`);
   });
 
-  test("切换频道", async ({ page }, testInfo) => {
+  // S6f §1：夏凛已隐藏，频道栏只剩忧奈；切换频道的用例改为验证「单频道下切换按钮不破坏当前频道」。
+  test("单频道下切换按钮不破坏当前频道", async ({ page }, testInfo) => {
     const layout = testInfo.project.name === "desktop" ? "desktop" : "mobile";
     await openLive(page);
 
-    // 默认频道是夏凛。
-    await expect(page.getByTestId("live-name")).toHaveText("夏凛");
+    // 默认频道是忧奈（S6f §1）。
+    await expect(page.getByTestId("live-name")).toHaveText("忧奈");
 
     if (layout === "desktop") {
+      // 桌面只剩一个频道：点它还是忧奈。
       await page.getByTestId("channel-yuna").click();
     } else {
-      // 手机：上下滑动切换（向上滑 = 下一个主播）。
+      // 手机：上下滑动（单频道时仍停在忧奈）。
       const stage = page.getByTestId("live-mobile");
       const box = await stage.boundingBox();
       if (!box) throw new Error("live-mobile 不可见");
@@ -125,28 +127,22 @@ test.describe("直播间 UI v1", () => {
     await shot(page, `live-switch-${layout}`);
   });
 
-  test("夏凛频道舞台图层已加载", async ({ page }, testInfo) => {
+  // S6f §1：夏凛已隐藏；改为验证默认频道（忧奈）的舞台已渲染。
+  test("默认频道（忧奈）舞台已渲染", async ({ page }, testInfo) => {
     const layout = testInfo.project.name === "desktop" ? "desktop" : "mobile";
     await openLive(page);
-    // 默认频道夏凛（layered）：角色基底图与前景桌图都加载完成。
-    await expect(page.getByTestId("live-name")).toHaveText("夏凛");
-    await page.waitForFunction(
-      () => {
-        const layers = Array.from(document.querySelectorAll(".live-layer img")) as HTMLImageElement[];
-        return layers.length > 0 && layers.every((img) => img.complete && img.naturalWidth > 0);
-      },
-      undefined,
-      { timeout: 20_000, polling: 250 },
-    );
+    await expect(page.getByTestId("live-name")).toHaveText("忧奈");
+    await waitLive2DPainted(page);
     await waitBackgroundComplete(page);
-    await shot(page, `live-rin-${layout}`);
+    await shot(page, `live-default-${layout}`);
   });
 
   // S6b-fix2 §2：手机竖屏角色基底层按前景桌完全不透明下沿裁切——
   // 桌沿下方 40px 内，角色基底层（char:base）的可渲染区域（clip 后）不透明像素为 0。
   // 读图层的 bounding rect 与 clip-path 值即可断言，不需要看图。
+  // S6f §1：夏凛已隐藏，本用例跳过（裁切逻辑针对夏凛的分层立绘）。
   test("手机竖屏角色基底在桌沿下方被裁切", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "iphone-13", "仅手机竖屏断言裁切");
+    test.skip(true, "S6f §1：夏凛已隐藏，裁切用例随之跳过");
     await openLive(page);
     await expect(page.getByTestId("live-name")).toHaveText("夏凛");
     await page.waitForFunction(

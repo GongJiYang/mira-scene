@@ -4,7 +4,7 @@ import { createPresetMedia, DEFAULT_PRESET_DELAY_MS } from "../src/adapters/medi
 import { silentLogger } from "../src/log";
 import type { LLMPort, MediaContext, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPack, testPacks } from "./helpers/pack";
+import { testPack, testPacksWithRinVisible } from "./helpers/pack";
 
 type LlmBeatFixture = { say: string; emotion?: string; suggest?: string | null; advance?: string | null };
 
@@ -47,7 +47,7 @@ function setup(scripts: LlmBeatFixture[][], mediaDelayMs = DEFAULT_PRESET_DELAY_
     llm: scriptedLlm(scripts),
     tts: immediateTts,
     media: createPresetMedia({ delayMs: mediaDelayMs }),
-    packs: testPacks(),
+    packs: testPacksWithRinVisible(),
     log: silentLogger,
     idleTimeoutMs: 24 * 60 * 60 * 1000,
   });
@@ -173,7 +173,7 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
       llm: scriptedLlm([[beat("我在等人。", { advance: "probe" })], ENTER_REVEAL, [beat("嗯。")]]),
       tts: immediateTts,
       media: createPresetMedia({ delayMs: 300 }),
-      packs: testPacks(),
+      packs: testPacksWithRinVisible(),
       log: silentLogger,
       idleTimeoutMs: 24 * 60 * 60 * 1000,
     });
@@ -181,8 +181,8 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
     const envelope = (type: ClientMessage["type"], payload: unknown, sessionId: string, turnId: number): ClientMessage =>
       ({ v: 1, sessionId, turnId, seq: 0, ts: Date.now(), type, payload }) as ClientMessage;
 
-    // rin hello（缺省）。
-    await manager.handleMessage(send, envelope("hello", {}, "", 0));
+    // S6f §1：缺省角色已是 yuna；本用例需要 rin 的媒体任务，显式加载隐藏包。
+    await manager.handleMessage(send, envelope("hello", { characterId: "rin" }, "", 0));
     const rinSession = sent.findLast((m) => m.type === "session")?.sessionId ?? "";
     await manager.handleMessage(send, envelope("text_input", { text: "你在等谁？" }, rinSession, 1));
     await manager.handleMessage(send, envelope("text_input", { text: "然后呢" }, rinSession, 2));
@@ -218,7 +218,7 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
       llm: scriptedLlm([[beat("我在等人。", { advance: "probe" })], ENTER_REVEAL]),
       tts: immediateTts,
       media: capturingMedia as never,
-      packs: testPacks(),
+      packs: testPacksWithRinVisible(),
       log: silentLogger,
       idleTimeoutMs: 24 * 60 * 60 * 1000,
     });

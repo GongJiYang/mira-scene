@@ -7,7 +7,7 @@ import { createMockTts } from "../src/adapters/mock/mockTts";
 import { silentLogger, type LogRecord } from "../src/log";
 import type { LLMPort, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPacks } from "./helpers/pack";
+import { testPacksWithRinVisible } from "./helpers/pack";
 
 type LlmBeatFixture = {
   say: string;
@@ -94,7 +94,7 @@ function setup(ports: { llm?: LLMPort; stt?: STTPort; tts?: TTSPort; log?: (reco
     stt: ports.stt ?? createMockStt({ delayMs: 0 }),
     llm: ports.llm ?? createMockLlm({ beatDelayMs: 0 }),
     tts: ports.tts ?? createMockTts({ delayMs: 0 }),
-    packs: testPacks(),
+    packs: testPacksWithRinVisible(),
     log: ports.log ?? silentLogger,
   });
   activeManager = manager;

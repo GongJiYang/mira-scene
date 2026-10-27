@@ -167,6 +167,11 @@ const recorder = createRecorder();
 /** 视图模型只暴露这 4 个意图（D14）。 */
 export const intents: Intents = createController({ connection, recorder });
 
+/** S6f §2：当前麦克风输入音量（0–1），倾听声波据此跳动；未录音时为 0。 */
+export function micInputLevel(): number {
+  return recorder.level();
+}
+
 /**
  * D32：B 产出 nudge 时调用。A 为 idle 且连接正常、且未超频率限制时才发送；
  * turnId 递增，服务端按一次新输入处理（不计入 trust / 限额）。

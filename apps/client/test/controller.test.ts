@@ -26,6 +26,7 @@ function fakeRecorder(recording: Recording | null): Recorder {
   return {
     start: () => Promise.resolve(true),
     stop: () => Promise.resolve(recording),
+    level: () => 0,
   };
 }
 
@@ -132,6 +133,7 @@ describe("controller：PTT", () => {
         return Promise.resolve(false);
       },
       stop: () => Promise.resolve(null),
+      level: () => 0,
     };
     const controller = createController({ connection: fakeConnection(events), recorder: denied });
 

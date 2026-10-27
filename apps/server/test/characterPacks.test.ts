@@ -5,7 +5,7 @@ import { createMockStt } from "../src/adapters/mock/mockStt";
 import { createMockTts } from "../src/adapters/mock/mockTts";
 import { silentLogger } from "../src/log";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPacks } from "./helpers/pack";
+import { testPacks, testPacksWithRinVisible } from "./helpers/pack";
 
 /**
  * S6b §1 / §6：两个角色包都能在 Mock 模式下跑完 arrive → ending；
@@ -22,7 +22,7 @@ type Harness = {
 
 let active: SessionManager | null = null;
 
-function setup(): Harness {
+function setup(packs = testPacks()): Harness {
   const sent: ServerMessage[] = [];
   let closed = 0;
   const send: SendFn = (message) => void sent.push(message);
@@ -30,7 +30,7 @@ function setup(): Harness {
     stt: createMockStt({ delayMs: 0 }),
     llm: createMockLlm({ beatDelayMs: 0 }),
     tts: createMockTts({ delayMs: 0 }),
-    packs: testPacks(),
+    packs,
     closeConnection: () => {
       closed += 1;
     },
@@ -65,13 +65,20 @@ afterEach(() => {
 const lastSnapshot = (sent: ServerMessage[]) =>
   sent.filter((message) => message.type === "state_snapshot").at(-1)?.payload.snapshot;
 
-describe("角色包：hello.characterId（S6b §1）", () => {
-  it("缺省 → rin（兼容旧客户端）", async () => {
+describe("角色包：hello.characterId（S6b §1 / S6f §1）", () => {
+  it("缺省 → 第一个未隐藏角色 yuna（S6f §1）", async () => {
     const harness = setup();
     await harness.hello({});
     const session = harness.sent.find((message) => message.type === "session");
     expect(session).toBeDefined();
     expect(harness.closed).toBe(0);
+
+    await harness.input(1, "你好");
+    const beats = harness.sent.flatMap((message) =>
+      message.type === "beat" ? [message.payload.beat.say] : [],
+    );
+    // 缺省会话用的是忧奈的剧本。
+    expect(beats).toContain("……诶？还有人？");
   });
 
   it("显式 yuna → 会话建立，且台词来自忧奈的剧本", async () => {
@@ -87,7 +94,7 @@ describe("角色包：hello.characterId（S6b §1）", () => {
     expect(beats).toContain("我以为大家都走了，推流忘关了。");
   });
 
-  it("未知 id → error{unknown_character} 并关闭会话，不回退夏凛", async () => {
+  it("未知 id → error{unknown_character} 并关闭会话，不回退", async () => {
     const harness = setup();
     await harness.hello({ characterId: "nobody" });
 
@@ -95,6 +102,27 @@ describe("角色包：hello.characterId（S6b §1）", () => {
     expect(error).toMatchObject({ payload: { code: "unknown_character", retryable: false } });
     expect(harness.sent.some((message) => message.type === "session")).toBe(false);
     expect(harness.closed).toBe(1);
+  });
+
+  it("S6f §1：隐藏角色 rin → 按 unknown_character 处理（不回退）", async () => {
+    const harness = setup();
+    await harness.hello({ characterId: "rin" });
+
+    const error = harness.sent.find((message) => message.type === "error");
+    expect(error).toMatchObject({ payload: { code: "unknown_character", retryable: false } });
+    expect(harness.sent.some((message) => message.type === "session")).toBe(false);
+    expect(harness.closed).toBe(1);
+  });
+
+  it("S6f §1：显式加载隐藏包（hidden 覆盖为 false）后 rin 可连接、台词来自夏凛剧本", async () => {
+    const harness = setup(testPacksWithRinVisible());
+    await harness.hello({ characterId: "rin" });
+    await harness.input(1, "你好");
+
+    const beats = harness.sent.flatMap((message) =>
+      message.type === "beat" ? [message.payload.beat.say] : [],
+    );
+    expect(beats).toContain("雨还在下。");
   });
 });
 
@@ -107,7 +135,8 @@ describe("角色包：Mock 模式跑完 arrive → ending（S6b §6）", () => {
 
   for (const id of ["rin", "yuna"] as const) {
     it(`${id}：四轮推进到 ending`, async () => {
-      const harness = setup();
+      // rin 是隐藏角色（S6f §1）：显式加载隐藏包。
+      const harness = setup(id === "rin" ? testPacksWithRinVisible() : testPacks());
       await harness.hello({ characterId: id });
 
       // arrive → probe（第 2 次输入起）
@@ -131,7 +160,8 @@ describe("角色包：Mock 模式跑完 arrive → ending（S6b §6）", () => {
   }
 
   it("两个角色的台词互不相同（确认按 pack 取剧本）", async () => {
-    const rin = setup();
+    // rin 是隐藏角色（S6f §1）：显式加载隐藏包。
+    const rin = setup(testPacksWithRinVisible());
     await rin.hello({ characterId: "rin" });
     await rin.input(1, "你好");
     const rinBeats = rin.sent.flatMap((message) => (message.type === "beat" ? [message.payload.beat.say] : []));

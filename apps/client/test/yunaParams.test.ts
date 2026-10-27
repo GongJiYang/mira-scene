@@ -16,16 +16,33 @@ import {
   EMOTION_KEYS,
   EMOTION_PARAMS,
   EYE_OPEN_MAX,
+  FORBIDDEN_KEYS,
   GUARDED_EYE_MAX,
+  idleActionParams,
+  LISTEN_BODY_FORWARD,
+  LISTEN_HEAD_TILT_Z,
+  LISTEN_NOD_AMPLITUDE,
+  LISTEN_NOD_PERIOD_SEC,
+  LISTEN_TRANSITION_SEC,
+  listenNodOffset,
+  SILENT_ACTION_TABLE,
+  SPEAK_AMAZED_SEC,
+  speakAmazed,
+  tearParams,
+  THINK_EYE_MAX,
+  THINK_HEAD_TILT_Z,
   yunaParams,
+  type SilentAction,
   type YunaEmotion,
   type YunaParamInput,
 } from "../src/render/live2d/yunaParams";
+import { VIEW_LIMITS } from "../src/render/live2d/params";
 import type { MouthShape, StagePhaseKind } from "../src/state/performance";
 
 const PHASES: StagePhaseKind[] = ["idle", "listening", "thinking", "speaking", "error"];
 const EMOTIONS: YunaEmotion[] = ["calm", "guarded", "sad", "warm", "neutral"];
 const MOUTHS: MouthShape[] = ["closed", "small", "open"];
+const SILENT_ACTIONS: SilentAction[] = ["drink", "glance", "phone", "show_item"];
 
 const base: YunaParamInput = { phase: "idle", emotion: "calm", mouth: "closed", blinkOpen: 1, tSec: 0 };
 
@@ -239,5 +256,217 @@ describe("yunaParams：后置条件（fast-check 属性测试，§1.3）", () =>
     const out = yunaParams({ ...base, emotion: "calm" });
     for (const key of EMOTION_KEYS) expect(out).toHaveProperty(key);
     for (const key of EMOTION_KEYS) expect(out[key]).toBe(0);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------
+ * S6f §2：四态动作。
+ * ---------------------------------------------------------------------------------------------- */
+
+describe("S6f §2：倾听 ≠ 待机（人物上可分辨）", () => {
+  it("倾听有身体前倾（ParamBodyAngleY）与头歪（ParamAngleZ），待机没有", () => {
+    const listening = yunaParams({ ...base, phase: "listening", phaseSinceSec: LISTEN_TRANSITION_SEC, tSec: 0 });
+    const idle = yunaParams({ ...base, phase: "idle", tSec: 0 });
+    expect(listening.ParamBodyAngleY).toBeCloseTo(LISTEN_BODY_FORWARD);
+    expect(listening.ParamAngleZ).toBeCloseTo(LISTEN_HEAD_TILT_Z);
+    expect(idle.ParamBodyAngleY).toBeCloseTo(0);
+    expect(idle.ParamAngleZ).toBeCloseTo(0);
+    // 两者在人物上可分辨：前倾与头歪至少一项不同。
+    expect(listening.ParamBodyAngleY !== idle.ParamBodyAngleY || listening.ParamAngleZ !== idle.ParamAngleZ).toBe(true);
+  });
+
+  it("倾听 300ms 内过渡到位（phaseSinceSec=0 时无前倾）", () => {
+    const start = yunaParams({ ...base, phase: "listening", phaseSinceSec: 0, tSec: 0 });
+    expect(start.ParamBodyAngleY).toBeCloseTo(0);
+    expect(start.ParamAngleZ).toBeCloseTo(0);
+    const half = yunaParams({ ...base, phase: "listening", phaseSinceSec: LISTEN_TRANSITION_SEC / 2, tSec: 0 });
+    expect(half.ParamBodyAngleY as number).toBeGreaterThan(0);
+    expect(half.ParamBodyAngleY as number).toBeLessThan(LISTEN_BODY_FORWARD);
+  });
+
+  it("倾听每 2–3 秒一次点头（ParamAngleY 有峰值）", () => {
+    expect(listenNodOffset(0.1)).toBeGreaterThan(0);
+    expect(listenNodOffset(0.2)).toBeCloseTo(LISTEN_NOD_AMPLITUDE);
+    expect(listenNodOffset(1)).toBe(0);
+    // 周期落在 2–3s。
+    expect(LISTEN_NOD_PERIOD_SEC).toBeGreaterThanOrEqual(2);
+    expect(LISTEN_NOD_PERIOD_SEC).toBeLessThanOrEqual(3);
+    // 一个周期后再次出现峰值。
+    expect(listenNodOffset(LISTEN_NOD_PERIOD_SEC + 0.2)).toBeCloseTo(LISTEN_NOD_AMPLITUDE);
+  });
+
+  it("倾听看镜头（视线偏移为 0）", () => {
+    const p = yunaParams({ ...base, phase: "listening", phaseSinceSec: LISTEN_TRANSITION_SEC });
+    expect(p.ParamEyeBallX).toBeCloseTo(0);
+    expect(p.ParamEyeBallY).toBeCloseTo(0);
+  });
+});
+
+describe("S6f §2：思考", () => {
+  it("思考头歪向另一侧（与倾听反向）+ 眨眼变慢", () => {
+    const thinking = yunaParams({ ...base, phase: "thinking", phaseSinceSec: 0.3, blinkOpen: 1, tSec: 0 });
+    expect(thinking.ParamAngleZ).toBeCloseTo(THINK_HEAD_TILT_Z);
+    expect(THINK_HEAD_TILT_Z).toBeLessThan(0);
+    expect(LISTEN_HEAD_TILT_Z).toBeGreaterThan(0);
+    expect(thinking.ParamEyeLOpen as number).toBeLessThanOrEqual(THINK_EYE_MAX);
+  });
+
+  it("思考保留现有视线偏开", () => {
+    const p = yunaParams({ ...base, phase: "thinking" });
+    // thinking 的 look.eyeX=-0.3（params.ts），取反后 ParamEyeBallX=+0.3。
+    expect(p.ParamEyeBallX).toBeCloseTo(0.3);
+  });
+});
+
+describe("S6f §2：待机小动作（seed 决定）", () => {
+  it("idleSinceSec > 8 后抱熊（seed=0.1 → 抱熊）", () => {
+    const params = idleActionParams(9, 0.1, 0);
+    expect(params.ParamPet).toBe(1);
+  });
+
+  it("idleSinceSec > 8 后瞟向一侧（seed=0.5 → 瞟向一侧）", () => {
+    const params = idleActionParams(9, 0.5, 0);
+    expect(params.ParamEyeBallX).toBeCloseTo(0.3);
+  });
+
+  it("idleSinceSec > 8 后耳朵轻动（seed=0.9 → 耳朵）", () => {
+    const params = idleActionParams(9, 0.9, 0);
+    expect(params.ParamEarsLX1).toBeDefined();
+    expect(params.ParamEarsRX1).toBeDefined();
+  });
+
+  it("idleSinceSec ≤ 8 无小动作", () => {
+    expect(idleActionParams(0, 0.1, 0)).toEqual({});
+    expect(idleActionParams(8, 0.1, 0)).toEqual({});
+  });
+});
+
+describe("S6f §2：说话", () => {
+  it("sad → 哭哭（ParamCry）+ 流泪（泪参数）", () => {
+    const p = yunaParams({ ...base, phase: "speaking", emotion: "sad", tSec: 1 });
+    expect(p.ParamCry).toBe(1);
+    // 泪参数键存在。
+    expect(p).toHaveProperty("ParamTearL");
+    expect(p).toHaveProperty("ParamTearLY");
+  });
+
+  it("warm → 现有脸红（ParamShy）", () => {
+    const p = yunaParams({ ...base, phase: "speaking", emotion: "warm" });
+    expect(p.ParamShy).toBe(1);
+  });
+
+  it("首句回话开始时叠加惊讶 1.2 秒，只出现一次", () => {
+    expect(speakAmazed(undefined)).toBe(0);
+    expect(speakAmazed(0)).toBe(1);
+    expect(speakAmazed(SPEAK_AMAZED_SEC - 0.01)).toBe(1);
+    expect(speakAmazed(SPEAK_AMAZED_SEC)).toBe(0);
+    expect(speakAmazed(5)).toBe(0);
+  });
+});
+
+describe("S6f §2：silentAction 映射", () => {
+  it("drink → 低头 + 闭眼 1 秒", () => {
+    expect(SILENT_ACTION_TABLE.drink.durationSec).toBe(1);
+    const p = yunaParams({ ...base, silentAction: "drink" });
+    expect(p.ParamAngleY).toBe(8);
+    expect(p.ParamEyeLOpen).toBe(0);
+    expect(p.ParamEyeROpen).toBe(0);
+  });
+
+  it("phone → 视线向下 2 秒", () => {
+    expect(SILENT_ACTION_TABLE.phone.durationSec).toBe(2);
+    const p = yunaParams({ ...base, silentAction: "phone" });
+    expect(p.ParamEyeBallY).toBeCloseTo(-0.25);
+  });
+
+  it("show_item → 抱熊 3 秒", () => {
+    expect(SILENT_ACTION_TABLE.show_item.durationSec).toBe(3);
+    const p = yunaParams({ ...base, silentAction: "show_item" });
+    expect(p.ParamPet).toBe(1);
+  });
+
+  it("glance → 看向一侧 1.5 秒", () => {
+    expect(SILENT_ACTION_TABLE.glance.durationSec).toBe(1.5);
+    const p = yunaParams({ ...base, silentAction: "glance" });
+    expect(p.ParamEyeBallX).toBeCloseTo(0.3);
+  });
+});
+
+describe("S6f §2：流泪采样（tearParams）", () => {
+  it("泪参数在 5.2s 周期内循环，左右错开", () => {
+    const a = tearParams(0);
+    const b = tearParams(5.2);
+    expect(a.ParamTearL).toBeCloseTo(b.ParamTearL as number);
+    // 左泪先于右泪：t=1 时左泪已在下流，右泪未开始。
+    const left = tearParams(1);
+    expect(left.ParamTearLY as number).toBeGreaterThan(0);
+    expect(left.ParamTearRY).toBe(0);
+  });
+
+  it("泪参数范围 [0,2]，无负值", () => {
+    for (const t of [0, 0.5, 1, 2, 2.44, 3, 4.77, 5]) {
+      for (const value of Object.values(tearParams(t))) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+});
+
+describe("S6f §2：禁止参数与水印参数（fast-check 属性测试）", () => {
+  const inputArb = fc.record({
+    phase: fc.constantFrom(...PHASES),
+    emotion: fc.constantFrom(...EMOTIONS),
+    mouth: fc.constantFrom(...MOUTHS),
+    blinkOpen: fc.double({ min: -2, max: 3, noNaN: true }),
+    tSec: fc.double({ min: -100, max: 1e6, noNaN: true }),
+    phaseSinceSec: fc.double({ min: -1, max: 100, noNaN: true }),
+    idleSinceSec: fc.double({ min: -1, max: 1000, noNaN: true }),
+    firstSpokeSinceSec: fc.option(fc.double({ min: -1, max: 100, noNaN: true }), { nil: undefined }),
+    silentAction: fc.option(fc.constantFrom(...SILENT_ACTIONS), { nil: null }),
+    seed: fc.double({ min: -1, max: 2, noNaN: true }),
+    look: fc.option(
+      fc.record({
+        eyeX: fc.double({ min: -5, max: 5, noNaN: true }),
+        eyeY: fc.double({ min: -5, max: 5, noNaN: true }),
+        headX: fc.double({ min: -90, max: 90, noNaN: true }),
+        headY: fc.double({ min: -90, max: 90, noNaN: true }),
+        headZ: fc.double({ min: -90, max: 90, noNaN: true }),
+      }),
+      { nil: undefined },
+    ),
+  }) as fc.Arbitrary<YunaParamInput>;
+
+  it("任意输入：禁止参数与 Param1–Param10 恒为 0", () => {
+    fc.assert(
+      fc.property(inputArb, (input) => {
+        const out = yunaParams(input);
+        for (const key of FORBIDDEN_KEYS) {
+          if (out[key] !== 0) return false;
+        }
+        for (let i = 1; i <= 10; i += 1) {
+          if (out[`Param${i}`] !== 0) return false;
+        }
+        return true;
+      }),
+      { numRuns: 1000 },
+    );
+  });
+
+  it("任意输入：视线 / 转头不超过 VIEW_LIMITS", () => {
+    fc.assert(
+      fc.property(inputArb, (input) => {
+        const out = yunaParams(input);
+        // 视线（模型范围 ±1，产品上限 VIEW_LIMITS.gazeX/Y 经 clampView 施加；X 取反不改变绝对值）。
+        if (Math.abs(out.ParamEyeBallX as number) > VIEW_LIMITS.gazeX + 1e-9) return false;
+        if (Math.abs(out.ParamEyeBallY as number) > VIEW_LIMITS.gazeY + 1e-9) return false;
+        // 转头（度）：clampView 限到 VIEW_LIMITS.headDeg；倾听 / 思考的头歪与呼吸叠加后可能超过，但必须在模型舒适区 ±30 内。
+        if (Math.abs(out.ParamAngleX as number) > 30) return false;
+        if (Math.abs(out.ParamAngleY as number) > 30) return false;
+        if (Math.abs(out.ParamAngleZ as number) > 30) return false;
+        return true;
+      }),
+      { numRuns: 1000 },
+    );
   });
 });
