@@ -33,6 +33,11 @@ export type ServerConfig = {
   dailyTurnLimit: number;
   /** D27：预置照片媒体就绪的模拟时长（毫秒，默认 2500）。 */
   mediaPresetDelayMs: number;
+  /**
+   * S5 §1：Mock 预录语音清单路径（默认 `<仓库根>/assets/voice/manifest.json`，
+   * 可用 `VOICE_MANIFEST` 覆盖）。仅在 Mock TTS 适配器里使用，不读取任何 Key。
+   */
+  voiceManifestPath: string;
   /** real 模式下的凭据；mock 模式下全为空串，绝不读取 Key。 */
   providers: ProviderCredentials;
 };
@@ -42,6 +47,8 @@ const SUPPORTED_MODES: readonly ProviderMode[] = ["mock", "real"];
 export const DEFAULT_SESSION_TURN_LIMIT = 30;
 export const DEFAULT_DAILY_TURN_LIMIT = 300;
 export const DEFAULT_MEDIA_PRESET_DELAY_MS = 2_500;
+/** S5 §1：默认预录语音清单相对仓库根的位置。 */
+export const DEFAULT_VOICE_MANIFEST_RELATIVE = "assets/voice/manifest.json";
 export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 export const DEFAULT_FISH_BASE_URL = "https://api.fish.audio";
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
@@ -109,8 +116,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     sessionTurnLimit: readPositiveInt(env, "SESSION_TURN_LIMIT", DEFAULT_SESSION_TURN_LIMIT),
     dailyTurnLimit: readPositiveInt(env, "DAILY_TURN_LIMIT", DEFAULT_DAILY_TURN_LIMIT),
     mediaPresetDelayMs: readPositiveInt(env, "MEDIA_PRESET_DELAY_MS", DEFAULT_MEDIA_PRESET_DELAY_MS),
+    voiceManifestPath: resolveVoiceManifestPath(env),
     providers: rawMode === "real" ? readCredentials(env) : EMPTY_PROVIDERS,
   };
+}
+
+/** Mock 预录语音清单路径：`VOICE_MANIFEST` 覆盖，否则用仓库根下的默认位置。 */
+export function resolveVoiceManifestPath(env: NodeJS.ProcessEnv = process.env): string {
+  const override = env.VOICE_MANIFEST?.trim();
+  if (override) return override;
+  return join(repoRoot(), DEFAULT_VOICE_MANIFEST_RELATIVE);
 }
 
 /** 极简 .env 解析：KEY=VALUE，支持 # 注释与成对引号。 */
@@ -139,6 +154,11 @@ function findRepoRoot(start: string): string {
     if (parent === dir) throw new Error("找不到仓库根目录（pnpm-workspace.yaml）");
     dir = parent;
   }
+}
+
+/** 从本模块位置向上找仓库根（`pnpm-workspace.yaml` 所在处）。 */
+function repoRoot(): string {
+  return findRepoRoot(dirname(fileURLToPath(import.meta.url)));
 }
 
 /** 读取仓库根目录的 `.env`（不存在则返回空表）。Key 只在这里读取，永不打印。 */

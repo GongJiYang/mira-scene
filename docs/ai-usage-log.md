@@ -78,3 +78,9 @@
 - **Q1 实测**：从按下到静音、到闭嘴均为 0.10ms，远低于 150ms 的预算，因为执行器在 pointerdown 事件里同步完成。
 - 亮点：DeepSeek 主动做了「测试有没有牙齿」的验证：故意把 stopAudio 改成空操作，属性测试按预期失败，之后再还原。
 - Claude 验收：432 个测试、typecheck、smoke、e2e（6 个通过，桌面端按规格跳过 4 个）均已复跑；B 改写的 2 条测试都在授权范围内（随机口型 → 跟随音量）。
+
+## S5 · 2026-10-27（Command Code · DeepSeek；mira-code-gate 关卡 1–9）
+- 交付：Mock 预录语音（voiceKey 查表，查不到退回占位音，另附录制脚本）、iOS 音频解锁加固、竖屏适配、照片放大避开脸（`photoRect`）、按舞台框尺寸选素材、WebM 剧情视频（加载中、播放结束、中途打断、失败四种情况）。共 479 个测试，3 组 fast-check 属性测试各 1000 次。
+- DeepSeek 发现任务说明和现有测试冲突（导演层的不变量规定 ending 不带 media）后，**停下来逐条报告**，只改了字面值，并把不变量扩写到视频分支。另外主动列出 4 处越出授权范围的必要偏差，交给 Claude 裁定（D37 补充）。
+- Claude 验收：typecheck、test、smoke、e2e 全部独立复跑，仓库里 Key 泄露为 0。读代码后发现报告里提到、但被当作「观感问题」带过的两个缺陷：ending 前会先出现空白相纸、reveal 的照片被视频替换掉。这两处在录屏里会很明显，所以排进 S5-fix。
+- 过程里的人工纠偏：用户口头说的「command go」被 Claude 误解成了 OpenCode Go，用户纠正后改回 Command Code（`cmd`）。另外，派发 `--yolo` 代理被自动模式拦截，用户授权加了 `Bash(cmd -p:*)` 规则后才放行。

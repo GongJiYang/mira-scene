@@ -44,6 +44,118 @@ function mark(state: StoryMediaState, storyEventId: string, status: StoryMediaMa
   return { ...state.processed, [storyEventId]: status };
 }
 
+/* ------------------------------------------------------------------------------------------------
+ * S5 §5：剧情视频（状态机 C 的视频子状态，纯 reducer）。
+ *
+ * 与照片的区别（D34 的明确例外）：照片打断后保留，视频打断**就结束**、不恢复。
+ * 契约（架构关卡 §4）：
+ * 1. 同一时刻最多只有一个视频在播；
+ * 2. 任何状态下，turnId 已失效（不是 A 的当前轮）的视频都不得出现。
+ * ---------------------------------------------------------------------------------------------- */
+
+export type VideoStatus = "idle" | "loading" | "playing" | "ended" | "failed" | "dismissed";
+
+export type VideoState = {
+  status: VideoStatus;
+  /** 视频事件的 storyEventId（同时用作 `<video>` 的 key 与去重依据）。 */
+  eventId: string | null;
+  /** 视频所属轮次。 */
+  turnId: number | null;
+  /** A 的当前轮次镜像：与 `turnId` 不符的视频不得出现。 */
+  currentTurnId: number;
+  /** 视频地址。 */
+  url: string | null;
+  /** 失败时的不打断提示。 */
+  notice: string | null;
+};
+
+export type VideoAction =
+  | { type: "LOAD"; eventId: string; turnId: number; url: string }
+  | { type: "CANPLAY"; eventId: string }
+  | { type: "ENDED"; eventId: string }
+  | { type: "ERROR"; eventId: string }
+  | { type: "TIMEOUT"; eventId: string }
+  | { type: "TURN"; turnId: number };
+
+export const initialVideoState: VideoState = {
+  status: "idle",
+  eventId: null,
+  turnId: null,
+  currentTurnId: 0,
+  url: null,
+  notice: null,
+};
+
+/** 失败提示（不打断体验，§5）。 */
+export const VIDEO_FAILED_NOTICE = "视频暂时放不出来，先看一张照片吧";
+
+/** 视频层是否可见：只有 `playing` 才出现（loading 时舞台照常）。 */
+export function isVideoVisible(state: VideoState): boolean {
+  return state.status === "playing";
+}
+
+/** 视频是否仍在其所属轮次里推进（loading / playing）。 */
+export function isVideoActive(state: VideoState): boolean {
+  return state.status === "loading" || state.status === "playing";
+}
+
+/** 视频所属轮次是否已失效（A 已经进入更新的轮次）。 */
+export function isVideoStale(state: VideoState): boolean {
+  return state.turnId !== null && state.turnId !== state.currentTurnId;
+}
+
+/**
+ * 视频状态转移（§5 的四种情况 + 失败）：
+ * - LOAD：视频事件到达 → loading（同一事件只处理一次：打断后不复活；迟到的旧轮次直接忽略）；
+ * - CANPLAY：loading → playing（淡入覆盖角色区域，字幕照常）；
+ * - ENDED：playing → ended（淡出，回到常驻角色）；
+ * - INTERRUPT 由 `TURN` 表达：A 进入新轮次 → loading/playing 直接 dismissed（立即结束，不恢复）；
+ * - ERROR / TIMEOUT：loading/playing → failed（视频不出现，改显示静态图 + 提示）。
+ */
+export function videoReducer(state: VideoState, action: VideoAction): VideoState {
+  switch (action.type) {
+    case "LOAD": {
+      if (state.eventId === action.eventId) return state;
+      if (action.turnId < state.currentTurnId) return state;
+      return {
+        status: "loading",
+        eventId: action.eventId,
+        turnId: action.turnId,
+        currentTurnId: action.turnId,
+        url: action.url,
+        notice: null,
+      };
+    }
+    case "CANPLAY": {
+      if (state.eventId !== action.eventId || state.status !== "loading" || isVideoStale(state)) return state;
+      return { ...state, status: "playing" };
+    }
+    case "ENDED": {
+      if (state.eventId !== action.eventId || state.status !== "playing") return state;
+      return { ...state, status: "ended" };
+    }
+    case "ERROR":
+    case "TIMEOUT": {
+      if (state.eventId !== action.eventId) return state;
+      if (state.status !== "loading" && state.status !== "playing") return state;
+      return { ...state, status: "failed", notice: VIDEO_FAILED_NOTICE };
+    }
+    case "TURN": {
+      if (state.currentTurnId === action.turnId) return state;
+      const dismissed = isVideoActive(state) && state.turnId !== action.turnId;
+      return { ...state, currentTurnId: action.turnId, status: dismissed ? "dismissed" : state.status };
+    }
+  }
+}
+
+/** `<sessionId>:<turn>:<seq>` → turn；解析失败返回 null。 */
+export function turnIdFromStoryEventId(storyEventId: string): number | null {
+  const parts = storyEventId.split(":");
+  if (parts.length < 3) return null;
+  const turn = Number(parts[1]);
+  return Number.isInteger(turn) && turn >= 0 ? turn : null;
+}
+
 export function storyMediaReducer(state: StoryMediaState, action: StoryMediaAction): StoryMediaState {
   switch (action.type) {
     case "REQUEST": {

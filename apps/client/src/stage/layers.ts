@@ -48,10 +48,18 @@ export type StageVm = {
   develop: number;
 };
 
+/**
+ * S5 §4 ②：角色的脸部框（以舞台百分比表示）——照片放大态必须避开它。
+ * 定义放在 `photoRect.ts`（紧挨着消费它的几何计算），这里转出，作为角色定义的一部分。
+ */
+export { FACE_BOX } from "./photoRect";
+
 /** 背景访问前缀：`apps/client/public/stage/assets` → 仓库 `assets/`。 */
 export const STAGE_ASSETS = "/stage/assets";
 /** 预置照片访问前缀（服务端 media.url 也用它）。 */
 export const STAGE_PHOTOS = "/stage/photos";
+/** S5 §5：剧情视频访问前缀。 */
+export const STAGE_VIDEOS = "/stage/videos";
 
 export function partUrl(name: string): string {
   return `${STAGE_ASSETS}/parts/${name}.png`;
@@ -61,9 +69,26 @@ export function photoUrl(media: Media): string {
   return media.url ?? `${STAGE_PHOTOS}/${media.id}.png`;
 }
 
-/** 竖屏（宽高比 <1）用 `_v`，横屏用 `_h`（§1）。 */
+/** S5 §5：剧情视频地址。 */
+export function videoUrl(media: Media): string {
+  return media.url ?? `${STAGE_VIDEOS}/${media.id}.webm`;
+}
+
+/**
+ * S4 遗留 ①（S5 §4）：按**舞台框**尺寸选素材，不按窗口尺寸（纯函数）。
+ *
+ * 舞台固定 2:3，所以对任意舞台尺寸都返回 `portrait` —— 相机所在区域不会被裁掉。
+ */
+export function pickStageAsset(stageWidth: number, stageHeight: number): Orientation {
+  return stageHeight >= stageWidth ? "portrait" : "landscape";
+}
+
+/**
+ * @deprecated 用 `pickStageAsset(舞台框尺寸)`。这个旧实现按窗口尺寸判断，桌面横屏会选错素材。
+ * 保留仅为兼容既有单测（S4 行为）。
+ */
 export function orientationFor(width: number, height: number): Orientation {
-  return height >= width ? "portrait" : "landscape";
+  return pickStageAsset(width, height);
 }
 
 export type BackgroundKey = "main" | "rainstop" | "closing";
@@ -122,6 +147,8 @@ function clamp01(value: number): number {
 
 function photoLayer(vm: StageVm): StageLayer | null {
   const { status, media } = vm.storyMedia;
+  // S5 §5：视频不是照片——它由 `<StoryVideo>` 渲染，不能落进相纸/照片图层（否则 <img> 会 404）。
+  if (media !== null && media.type === "video") return null;
   if (status === "developing" || status === "ready") {
     // 空白相纸：由外壳渲染成白色卡片（src 为空）。
     return { id: "photo:card", src: "", opacity: 1, transform: "none", z: 60 };

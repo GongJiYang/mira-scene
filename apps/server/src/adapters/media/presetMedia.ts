@@ -15,13 +15,21 @@ export const DEFAULT_PRESET_DELAY_MS = 2_500;
 export type PresetMediaOptions = {
   /** 等待多久后判定「就绪」，默认 2.5s。 */
   delayMs?: number;
-  /** 客户端访问前缀，默认 `/stage/photos`。 */
+  /** 照片访问前缀，默认 `/stage/photos`。 */
   basePath?: string;
+  /** S5 §5：视频访问前缀，默认 `/stage/videos`。 */
+  videoBasePath?: string;
 };
+
+/** 媒体类型 → 客户端访问地址（视频是 webm，照片是 png）。 */
+export function presetMediaUrl(media: Media, basePath: string, videoBasePath: string): string {
+  return media.type === "video" ? `${videoBasePath}/${media.id}.webm` : `${basePath}/${media.id}.png`;
+}
 
 export function createPresetMedia(options: PresetMediaOptions = {}): MediaPort {
   const delayMs = options.delayMs ?? DEFAULT_PRESET_DELAY_MS;
   const basePath = options.basePath ?? "/stage/photos";
+  const videoBasePath = options.videoBasePath ?? "/stage/videos";
 
   return {
     preset(media: Media, signal: AbortSignal): Promise<PresetMediaResult> {
@@ -36,7 +44,7 @@ export function createPresetMedia(options: PresetMediaOptions = {}): MediaPort {
         };
         const timer = setTimeout(() => {
           signal.removeEventListener("abort", onAbort);
-          resolve({ url: `${basePath}/${media.id}.png`, status: "ready" });
+          resolve({ url: presetMediaUrl(media, basePath, videoBasePath), status: "ready" });
         }, delayMs);
         // 不阻塞进程退出（真实运行时定时器会随会话 dispose 取消）。
         timer.unref?.();

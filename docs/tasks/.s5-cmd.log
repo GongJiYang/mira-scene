@@ -1,0 +1,21 @@
+Done. Here's the summary of what I executed.
+
+**Read and followed `docs/tasks/s5.md` end‑to‑end. All four acceptance gates pass:**
+- `pnpm typecheck` ✅ · `pnpm test` ✅ 50 files / **479 tests** · `pnpm smoke` ✅ · `pnpm e2e` ✅ **11 passed / 9 skipped** (mobile spec: 5 passed, all three viewports)
+
+**What I built**
+- **§1 Mock 语音方案 B** — pure `voiceKey(text, emotion)` (NFKC + ideographic-punctuation folding + sha256), zod-validated `voiceManifest` (missing→empty, invalid→throws at startup), `mockTts` lookup with `voice_fallback` log, `record-voices.ts` + `pnpm voices:record`, empty `assets/voice/manifest.json`. Only the Mock TTS adapter changed; `TTSPort`/session/director untouched.
+- **§2 iOS 解锁加固** — re-`resume()` on every `pointerdown`/`keydown`/`touchend` when state ≠ running; `visibilitychange` sets the needs-unlock flag.
+- **§3 竖屏** — `viewport-fit=cover`, `100dvh`, `env(safe-area-inset-*)`, no horizontal scroll.
+- **§4 遗留** — `pickStageAsset` on ResizeObserver-measured stage box; `photoRect` + `FACE_BOX = {left:0.33, top:0.05, w:0.34, h:0.37}` so the enlarged photo never covers the face. Both with fast-check property tests (1000 runs).
+- **§5 WebM** — `make-placeholder-video.sh` → `clip_ending.webm` (VP9, 720×1080, 6.0s, no audio, **186 KB**); director adds video media at ending; `presetMedia` serves `.webm`; a pure `videoReducer` in `storyMedia.ts` (only additions) with a 1000-run property test; `StoryVideo.tsx` + wiring in `Stage.tsx`; video tests in `e2e/mobile.spec.ts`.
+
+**Two iron-rule conflicts, itemized in the report (§5):**
+1. `director.test.ts` asserted `media: null` for ending — literal changed to the video media.
+2. `director.property.test.ts` asserted media ⇒ always the reveal photo — added an ending/video branch to the same invariant.
+
+Both are forced by §5's explicit "add video media at ending". Everything else (440 tests) is untouched.
+
+**Deviations flagged for review (§6):** added `zod` to `apps/server/package.json` (needed for the required zod validation); `?fail=video` handled client-side (server `faults.ts` out of scope); video routed through state machine C because `connection.ts`/`storyMediaLink.ts` aren't in scope; e2e viewports switched inside `mobile.spec.ts` rather than `playwright.config.ts`.
+
+Report is at `docs/tasks/s5-report.md`, including the change list, gate→code map, faceBox values, recording-script usage, the iOS manual-test checklist, and the video-interrupt exception implementation. Nothing committed; the recording script was not run; `tools/` and `skills/` untouched.

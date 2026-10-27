@@ -13,6 +13,8 @@ export type TtsAudioMessage = Extract<ServerMessage, { type: "tts_audio" }>;
 
 let context: AudioContext | null = null;
 let unlocked = false;
+/** S5 §2：切回前台 / 首次进入时置位，下一次手势必须再 resume 一次。 */
+let needsUnlock = true;
 let source: AudioBufferSourceNode | null = null;
 let playing: { turnId: number; seq: number } | null = null;
 /** 无声 beat 的停留命令 id（D34：改由时间线驱动）。 */
@@ -58,22 +60,42 @@ function ensureContext(): AudioContext | null {
   return context;
 }
 
-/** 第一次用户手势时 resume()，用于解锁 iOS AudioContext。 */
+/**
+ * S5 §2：iOS 音频解锁加固。
+ *
+ * iOS 的 AudioContext 状态不只有 `suspended`，还可能是 `interrupted`（来电、锁屏、切后台后回来），
+ * 所以不能再「第一次手势后就不再管」：
+ * - 每次 `pointerdown` / `keydown` / `touchend`，只要 state 不是 `running` 就再 `resume()`；
+ * - `visibilitychange` 变回可见时把「需要解锁」置位，等下一次手势再解。
+ */
 export function installAudioUnlock(): void {
   if (typeof window === "undefined") return;
-  const unlock = () => {
-    void ensureContext()
-      ?.resume()
-      .then(() => {
+
+  const ensureUnlocked = (): void => {
+    const audioContext = ensureContext();
+    if (!audioContext) return;
+    const state: string = audioContext.state;
+    if (!needsUnlock && state === "running") return;
+    void audioContext.resume().then(
+      () => {
+        needsUnlock = false;
         if (unlocked) return;
         unlocked = true;
-        window.removeEventListener("pointerdown", unlock);
-        window.removeEventListener("keydown", unlock);
         pushEvent("audio unlocked");
-      });
+      },
+      () => {
+        // resume 失败（例如手势不被识别为激活）：保留 needsUnlock，等下一次手势。
+      },
+    );
   };
-  window.addEventListener("pointerdown", unlock);
-  window.addEventListener("keydown", unlock);
+
+  window.addEventListener("pointerdown", ensureUnlocked, { passive: true });
+  window.addEventListener("keydown", ensureUnlocked);
+  window.addEventListener("touchend", ensureUnlocked, { passive: true });
+  // 回到前台后必须再解一次锁（ios 的 interrupted 态）。
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") needsUnlock = true;
+  });
 }
 
 /** §1：接线 `source → analyser → destination`；只会创建一次 AnalyserNode。 */

@@ -102,7 +102,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       );
     } else {
       if (wantReal) fallback("tts", "missing_key");
-      tts = createMockTts();
+      // S5 §1：Mock 语音方案 B。manifest 存在但非法会在启动时（此处）直接抛错。
+      tts = createMockTts({ manifestPath: config.voiceManifestPath, log: logger });
     }
 
     return { stt, llm, tts };

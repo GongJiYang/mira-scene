@@ -149,11 +149,19 @@ describe("属性：direct 的契约后置条件与不变量", () => {
               }
               if (beat.fx === "rain_heavy") expect(isFirstSessionBeat).toBe(true);
               if (beat.fx === "rain_stop") expect(beat.story?.advance).toBe("reveal");
+              // S5 §5：reveal 带照片、ending 带剧情视频；两者都只来自剧情推进（不变量的意图未变）。
               if (beat.media !== null) {
-                expect(beat.media).toEqual({ type: "photo", id: "photo_letters" });
-                expect(beat.story?.advance).toBe("reveal");
-                expect(beat.camera).toBe("close_up");
-                expect(beat.fx).toBe("rain_stop");
+                if (beat.media.type === "video") {
+                  expect(beat.media).toEqual({ type: "video", id: "clip_ending" });
+                  expect(beat.story?.advance).toBe("ending");
+                  expect(beat.camera).toBe("wide");
+                  expect(beat.fx).toBe("warm_glow");
+                } else {
+                  expect(beat.media).toEqual({ type: "photo", id: "photo_letters" });
+                  expect(beat.story?.advance).toBe("reveal");
+                  expect(beat.camera).toBe("close_up");
+                  expect(beat.fx).toBe("rain_stop");
+                }
               }
 
               // emotion 透传；reveal 的 neutral → sad 是唯一例外。

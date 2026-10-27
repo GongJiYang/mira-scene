@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@mira/protocol": "workspace:*",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

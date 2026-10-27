@@ -60,6 +60,9 @@ importers:
       ws:
         specifier: ^8.22.0
         version: 8.22.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

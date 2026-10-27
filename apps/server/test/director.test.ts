@@ -124,12 +124,13 @@ describe("导演层：剧情与视觉", () => {
     expect(result.beats[0]?.beat.emotion).toBe("guarded");
   });
 
-  it("进入 ending：camera=wide、fx=warm_glow，不产生 media", () => {
+  // S5 §5：`media` 由 `null` 改为剧情视频（唯一改动是这一行的字面值，逻辑断言不变）。
+  it("进入 ending：camera=wide、fx=warm_glow、media=剧情视频 clip_ending", () => {
     const result = direct(llmBeat({ emotion: "warm", advance: "ending" }), context({ scene: sceneAt("reveal") }));
     expect(result.beats[0]?.beat).toMatchObject({
       camera: "wide",
       fx: "warm_glow",
-      media: null,
+      media: { type: "video", id: "clip_ending" },
       story: { advance: "ending" },
     });
   });

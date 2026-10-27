@@ -2,7 +2,7 @@
 name: mira-code-gate
 description: >
   mira-scene 项目每一批代码开工前必须走的「架构关卡」。先和用户一起过一遍 SDFrame 里 5 个固定的代码架构框架
-  （YAGNI、端口/适配器、函数式核心、契约式设计、测试奖杯），讨论出结论后，再写任务说明交给 Command Code
+  （YAGNI、端口/适配器、函数式核心、契约式设计、测试奖杯），讨论出结论后，再写任务说明交给 Command Code（cmd）
   的 DeepSeek 去写代码，最后验收、提交。每条消息都要标出阶段编号。适用场景：用户说「开始写 S3/S4…」「派发下一批」
   「写代码」「下一批」，或者任何需要为 mira-scene 写新代码的时候。
 ---
@@ -20,9 +20,9 @@ description: >
 | 4/9 | **契约式设计**：新边界的前置条件、后置条件、不变量，以及谁违约就怪谁 | 同上 |
 | 5/9 | **测试奖杯**：类型检查、单测、集成测试、端到端测试各放多少；真实网络只出现在哪里 | 同上 |
 | 6/9 | 汇总结论 → 写 `docs/tasks/<批次>.md`（每条结论都要写进去）→ **用户确认** | Claude |
-| 7/9 | 派发：Command Code 的 DeepSeek（见下方命令） | Claude |
+| 7/9 | 派发：Command Code（cmd）的 DeepSeek（见下方命令） | Claude |
 | 8/9 | 验收：自己重跑 test、typecheck、smoke，阅读关键代码，对照关卡 1–5 的结论逐条核对 | Claude |
-| 9/9 | 提交，更新 `docs/ai-usage-log.md` 和桌面上的进度文件 | Claude |
+| 9/9 | 提交，更新 `docs/ai-usage-log.md`；按 `session-handoff` 存档，重写 `PROGRESS.md` | Claude |
 
 关卡 1–5 **合并成一条消息**：每个框架只问 1 个关键问题，并附上 Claude 的建议答案，用户一次性回复即可。用户回答「可以」或「批准」，就按建议执行。
 
@@ -39,9 +39,9 @@ description: >
 
 ## 派发命令（关卡 7/9）
 ```bash
-cd ~/mira-scene && commandcode -p "请完整阅读 docs/tasks/<批次>.md 并严格执行……" \
+cd ~/mira-scene && cmd -p "请完整阅读 docs/tasks/<批次>.md 并严格执行……" \
   -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 400 \
-  < /dev/null > docs/tasks/.<批次>-cmd.log 2>&1      # 用后台方式运行
+  < /dev/null > docs/tasks/.<批次>-cmd.log 2>&1      # 用后台方式运行；cmd 即 Command Code（用户口中的 command go）
 ```
 每份任务说明里都必须包含：铁律（冲突时停下报告；不许改也不许绕过；Key 只从 .env 读取、不得打印；不准 commit）、授权范围、引用的 Q 编号，以及关卡 1–5 的结论。
 

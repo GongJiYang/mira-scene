@@ -9,6 +9,11 @@ body,
 #root {
   margin: 0;
   padding: 0;
+  /* S5 §3：页面高度用 100dvh（移动端地址栏收放不抖动）。 */
+  min-height: 100dvh;
+  /* S5 §3：任何视口下都不出现横向滚动。 */
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -22,6 +27,10 @@ body {
   align-items: center;
   gap: 10px;
   padding: 10px 10px 16px;
+  /* S5 §3：底部输入栏避开安全区（刘海屏 home indicator）。 */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(10px, env(safe-area-inset-left, 0px));
+  padding-right: max(10px, env(safe-area-inset-right, 0px));
   overflow-x: hidden;
   color: #e8eef5;
   font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -161,6 +170,53 @@ body {
   width: 30%;
   aspect-ratio: 1 / 1.18;
   transform: none;
+}
+
+/* S5 §5：剧情视频层。loading 不可见，playing 淡入覆盖角色区域；打断时快速淡出。 */
+.stage-video {
+  position: absolute;
+  inset: 0;
+  z-index: 58;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.stage-video[data-status="playing"] {
+  opacity: 1;
+}
+
+.stage-video > video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* S5 §5：视频失败 → 显示静态图 + 缓慢推近的 CSS 动效。 */
+.stage-video-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 58;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stage-video-fallback > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  animation: video-fallback-zoom 6s ease-out forwards;
+}
+
+@keyframes video-fallback-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
 }
 
 .stage-subtitle {

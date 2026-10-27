@@ -117,6 +117,8 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   } else if (advancedTo === "ending") {
     camera = "wide";
     fx = "warm_glow";
+    // S5 §5：进入 ending 时播放占位剧情视频（type 已在协议里，不改协议）。
+    media = { type: "video", id: "clip_ending" };
   }
 
   // 规则 5：只切本轮第一句；切不动就保持原样。
