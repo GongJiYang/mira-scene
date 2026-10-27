@@ -23,6 +23,10 @@ main 已含 S6f（隐藏夏凛 + 忧奈四态）、S6h（观测页 `?obs=1` + `?
 10. 手臂/尾巴/耳朵物理后覆盖（D46③）+ 动作测试页（逐参数扫范围截图）；挥手/举罐/摇尾巴。
 11. 换配色接运行时、手机端人物占满屏幕、其余表情开关。
 
+## 待统一深审（用户 2026-10-28：先简单检测，功能做完后统一做）
+- 各批核心逐行审 + `/code-review high` 二审 + 浏览器实测打断/剧情层/turnId：S6g-A、S6c-fix1、S6k 及之后各批。
+- 已知待修（并入 S6c-fix1）：ending 时截图卡片未收起、叠在 OFFLINE 上；输入框占位文字「‹输入框占位›」需用户定正式文案。
+
 ## 执行环境（重要）
 - cmd 现在登录用户的另一个 Command Code 账号（GongJiYang），用 `-m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all`，不加 `--local-only`。**Systalyze 会限流（Rate limit exceeded，退出码 5），停用**。
 - **一次只跑一批**（并行会撞限流）。派发前单独一条 `cd <worktree>`，派发后 `lsof -a -p <pid> -d cwd` 核对。
