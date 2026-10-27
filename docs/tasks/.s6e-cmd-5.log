@@ -1,0 +1,13 @@
+完成。任务从前一会话的中断点继续，未推倒重来：
+
+**做了什么**
+- 修正 part 分类规则：原规则只匹配 24 个 drawable（漏了裙子/躯干/发带），「发带/发箍」被 exclude「发」误杀。调整后 112 个 clothing drawable。
+- 改了 `selectClothingDrawables` 继承语义：exclude 显式阻断继承，解决「下半身(clothing)→腿（皮肤）→鞋（clothing)」链上腿被误染色的问题。
+- palettes 色相区间收窄到 235–310°，避开 h320 皮肤主峰。
+- 生成了三个变体（sakura/mint/mono）+ 对比预览，幂等可重复。
+- 补了 14 个测试（fast-check 属性 + 真实模型集成不变量核对），全过；`pnpm typecheck` 全绿；根脚本 `pnpm assets:palettes` 已加。
+- 删除了 17 个一次性 debug 脚手架（挡 typecheck，非交付物）。
+
+**按约定停下记录的事**：`pnpm test` 全量跑时 `apps/server/test/director.property.test.ts`（预存、本分支未碰）两次超时——单独跑 4112ms 贴 5000ms 上限，属 flaky；未改 `apps/server`，写进了报告 §6。其余 560 个测试全通过。
+
+报告在 `docs/tasks/s6e-recolor-report.md`，含 part 匹配清单、三变体规则、文件大小、两条不变量核对结果（alpha 与蒙版外均 0 违规）、5 条歧义判断。未 commit。
