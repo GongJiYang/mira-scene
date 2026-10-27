@@ -56,6 +56,11 @@ export type YunaParamInput = {
   accentSinceSec?: number;
   /** D47：beat 结束时 accent 已持续的秒数（0.4s 渐出用；未传表示 beat 尚未结束，不渐出）。 */
   accentEndedSinceSec?: number;
+  /**
+   * S6l-fix2 §8：已算好的 accent 参数（含「正在渐出的上一个 accent」的合成结果）。
+   * 传入时直接用它（与其它效果取最大值），不再用 `accent` / `accentSinceSec` 单条计算。
+   */
+  accentBlended?: Record<string, number>;
   /** S6f §2：待机小动作的种子（0–1，调用方每 8–14s 换一个新的）；纯函数可测。 */
   seed?: number;
 };
@@ -538,9 +543,11 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
 
   // D47：accent 贡献与已有效果**取最大值**合并
   // （warm 自带 ParamShy、sad 自带 ParamCry + 泪、首句 ParamAmazed、hearts 特效 ParamHeart）。
-  for (const [name, value] of Object.entries(
-    accentParams(input.accent ?? null, input.accentSinceSec ?? 0, input.accentEndedSinceSec),
-  )) {
+  // S6l-fix2 §8：优先用调用方算好的合成结果（含上一段 accent 的渐出）；否则按单条 accent 计算。
+  const accentContribution =
+    input.accentBlended ??
+    accentParams(input.accent ?? null, input.accentSinceSec ?? 0, input.accentEndedSinceSec);
+  for (const [name, value] of Object.entries(accentContribution)) {
     out[name] = Math.max(out[name] ?? 0, value);
   }
 

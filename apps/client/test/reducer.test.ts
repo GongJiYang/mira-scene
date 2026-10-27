@@ -359,6 +359,45 @@ describe("beat 与视觉/字幕", () => {
     expect(state.visual.accent).toBeNull();
   });
 
+  it("S6l-fix2 §3：带 accent 的 beat 播完 turn_end → idle 后 accent 为 null", () => {
+    const state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { accent: "fly_head" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+      { type: "SERVER_MESSAGE", message: turnEndMsg(1) },
+      { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 },
+    );
+    expect(state.phase).toEqual({ kind: "idle" });
+    expect(state.visual.accent).toBeNull();
+  });
+
+  it("S6l-fix2 §3：带 accent 的 beat 中 PTT_DOWN / SUBMIT_TEXT 打断 → accent 清空", () => {
+    const speaking = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { accent: "black" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+    );
+    expect(speaking.visual.accent).toBe("black");
+    expect(reducer(speaking, { type: "PTT_DOWN" }).visual.accent).toBeNull();
+    expect(reducer(speaking, { type: "SUBMIT_TEXT" }).visual.accent).toBeNull();
+  });
+
+  it("S6l-fix2 §3：点击打断（listening）用 INPUT_CANCELLED 回 idle 时 accent 清空", () => {
+    const speaking = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { accent: "dark" })) },
+      { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 },
+    );
+    // 模拟点击打断：先 PTT_DOWN 进入 listening（已清 accent），再 INPUT_CANCELLED 回 idle。
+    const listening = reducer(speaking, { type: "PTT_DOWN" });
+    const idle = reducer(listening, { type: "INPUT_CANCELLED", turnId: listening.currentTurnId });
+    expect(idle.phase).toEqual({ kind: "idle" });
+    expect(idle.visual.accent).toBeNull();
+  });
+
   it("重复 seq 的 beat 被忽略", () => {
     const state = run(
       reducer(initialState, { type: "SUBMIT_TEXT" }),

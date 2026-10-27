@@ -8,6 +8,7 @@
  * 纯决策在 `guides.ts` / `interaction.ts`；这里只做计时、React 状态与调用意图。
  */
 import { useCallback, useEffect, useRef } from "react";
+import { GIFT_COOLDOWN_MS, POKE_COOLDOWN_MS } from "@mira/protocol";
 import type { DanmakuAction } from "./danmaku";
 import { MAX_VISIBLE_GUIDES, nextGuide } from "./guides";
 import { tapIntent } from "./interaction";
@@ -15,10 +16,10 @@ import { characterOrDefault } from "./characters";
 
 /** 刷引导弹幕的间隔（用户和角色都安静约 8 秒）。 */
 export const GUIDE_INTERVAL_MS = 8_000;
-/** 戳一下的冷却（§5）。 */
-export const POKE_COOLDOWN_MS = 3_000;
-/** 送礼物的冷却（§5）。 */
-export const GIFT_COOLDOWN_MS = 10_000;
+/** 戳一下的冷却（§5；S6l-fix2 §6：与服务端共享常量）。 */
+export { POKE_COOLDOWN_MS };
+/** 送礼物的冷却（§5；S6l-fix2 §6：与服务端共享常量）。 */
+export { GIFT_COOLDOWN_MS };
 
 /** 观众昵称词库（沿用现有随机昵称机制；这里是唯一列表）。 */
 export const VIEWER_NICKNAMES: readonly string[] = [

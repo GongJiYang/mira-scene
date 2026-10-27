@@ -287,6 +287,18 @@ describe("导演层：D47 语境表情 accent", () => {
     expect(result.beats[0]?.beat.accent).toBe("dark");
   });
 
+  it("S6l-fix2 §2：LLM 同时给了动作与 accent 时，accent 不被丢弃", () => {
+    const result = direct(llmBeat({ say: "看这个。", suggest: "glance", accent: "amazed" }), context());
+    expect(result.beats[0]?.beat.action).toBe("glance");
+    expect(result.beats[0]?.beat.accent).toBe("amazed");
+  });
+
+  it("S6l-fix2 §2：给出动作但没给 accent、台词含熬夜 → 规则触发 dark", () => {
+    const result = direct(llmBeat({ say: "你又熬夜了。", suggest: "drink", accent: null }), context());
+    expect(result.beats[0]?.beat.action).toBe("drink");
+    expect(result.beats[0]?.beat.accent).toBe("dark");
+  });
+
   it("ctx.recentAccents 更新：保留最近 10 个 beat 的 accent（含 null）", () => {
     const result = direct(llmBeat({ accent: "shy" }), context());
     expect(result.ctx.recentAccents).toEqual(["shy"]);

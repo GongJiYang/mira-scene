@@ -330,7 +330,7 @@ function teardownLocalVoice(handle: LocalVoiceHandle | null): void {
 }
 
 /** §6：用共享 AudioContext 播放一段本地语音（fetch → decode → 播放）。 */
-function playLocalVoiceAudio(url: string): LocalVoiceHandle | null {
+function playLocalVoiceAudio(url: string, onEnded?: () => void): LocalVoiceHandle | null {
   const audioContext = ensureContext();
   if (!audioContext) return null;
   teardownLocalVoice(activeLocalVoice);
@@ -347,6 +347,11 @@ function playLocalVoiceAudio(url: string): LocalVoiceHandle | null {
     },
   };
   activeLocalVoice = handle;
+  // S6l-fix2 §9：自然播完 → 清空 activeLocalVoice（否则 isPlaying() 一直为 true）。
+  const finish = (): void => {
+    if (activeLocalVoice === handle) activeLocalVoice = null;
+    onEnded?.();
+  };
 
   void fetch(url)
     .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error(`本地语音 ${response.status}`))))
@@ -358,10 +363,8 @@ function playLocalVoiceAudio(url: string): LocalVoiceHandle | null {
       source.connect(gain);
       handle.source = source;
       source.onended = () => {
-        if (activeLocalVoice === handle) {
-          activeLocalVoice = null;
-          gain.disconnect();
-        }
+        gain.disconnect();
+        finish();
       };
       source.start();
     })
@@ -370,7 +373,7 @@ function playLocalVoiceAudio(url: string): LocalVoiceHandle | null {
       if (!handle.stopped) {
         handle.stopped = true;
         gain.disconnect();
-        if (activeLocalVoice === handle) activeLocalVoice = null;
+        finish();
       }
     });
 
@@ -517,6 +520,7 @@ export function handleTtsAudio(message: TtsAudioMessage): void {
 
 // audioStopToken 或 currentTurnId 变化 → 立即停止并清空就绪缓冲；其余变化也重新调度。
 // 打断执行器已经做过同样的事，这里是幂等的兜底（重复 stop 不报错）。
+let observedPhase = getStageState().phase.kind;
 useStageStore.subscribe((state) => {
   if (state.audioStopToken !== observedToken || state.currentTurnId !== observedTurnId) {
     observedToken = state.audioStopToken;
@@ -529,6 +533,12 @@ useStageStore.subscribe((state) => {
     turnStartedAt = nowMs();
     playbackReported = false;
     pushEvent(`audio stop t${observedTurnId}`);
+  }
+  // S6l-fix2 §9：本轮结束、回到 idle / listening → 播放排队的本地语音（不在 beat 之间播）。
+  const phase = state.phase.kind;
+  if (phase !== observedPhase) {
+    observedPhase = phase;
+    if (phase === "idle" || phase === "listening") localAudio.turnEnded();
   }
   schedule();
 });

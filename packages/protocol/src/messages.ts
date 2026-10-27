@@ -56,8 +56,9 @@ export const playbackStartedPayloadSchema = z.object({
 
 /**
  * S6l-fix1 §1：恢复会话时随 `session` 下发的背景与对话记录。
- * - `background`：当前正在显示的生成背景（`sceneJob.lastReadyUrls`）；没换过背景为 null。
+ * - `background`：当前正在显示的生成背景（`sceneJob.currentBackground`）；没换过背景为 null。
  * - `transcript`：最近最多 40 条对话（user / assistant），用于刷新后恢复用户弹幕。
+ *   S6l-fix2 §7：只含 `source === "user"` 的用户条目（nudge / poke / gift 占位不进弹幕区）。
  * 新会话为 `background: null, transcript: []`；对旧客户端是新增可选字段，不破坏解析。
  */
 export const sessionTranscriptEntrySchema = z.object({

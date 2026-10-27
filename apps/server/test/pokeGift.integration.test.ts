@@ -18,6 +18,8 @@ type Harness = {
   hello(): Promise<void>;
   input(text: string, turnId: number, kind?: "text" | "poke" | "gift"): Promise<void>;
   beats(turnId: number): Array<NonNullable<Extract<ServerMessage, { type: "beat" }>["payload"]["beat"]>>;
+  /** S6l-fix2 §6：推进可注入时钟，跳过 poke / gift 冷却。 */
+  advanceClock(ms: number): void;
 };
 
 let active: SessionManager | null = null;
@@ -29,22 +31,25 @@ afterEach(() => {
 function setup(): Harness {
   const sent: ServerMessage[] = [];
   const send: SendFn = (message) => void sent.push(message);
+  let nowMs = 1_000_000;
   const manager = createSessionManager({
     stt: createMockStt({ delayMs: 0 }),
     llm: createMockLlm({ beatDelayMs: 0 }),
     tts: { synthesize: async () => ({ mime: "audio/mpeg", data: Buffer.alloc(16_000) }) },
     packs: testPacks(),
     log: () => {},
+    now: () => nowMs,
   });
   active = manager;
 
   const envelope = (type: ClientMessage["type"], payload: unknown, sessionId: string, turnId: number): ClientMessage =>
-    ({ v: 1, sessionId, turnId, seq: 0, ts: Date.now(), type, payload }) as ClientMessage;
+    ({ v: 1, sessionId, turnId, seq: 0, ts: nowMs, type, payload }) as ClientMessage;
 
   let sessionId = "";
   return {
     manager,
     sent,
+    advanceClock: (ms) => void (nowMs += ms),
     get sessionId() {
       return sessionId;
     },
@@ -87,6 +92,8 @@ describe("S6l §5 集成：poke / gift（Mock）", () => {
     expect(first.map((beat) => beat.say)).toEqual(["干嘛戳我。", "再戳要收费了哦。"]);
     expect(first[0]?.accent).toBe("shy");
 
+    // S6l-fix2 §6：第二次 poke 要跳过服务端 3 秒冷却才会起新轮。
+    harness.advanceClock(3_000);
     await harness.input("", 2, "poke");
     const second = harness.beats(2);
     expect(second[0]?.accent).toBe("angry");
@@ -100,5 +107,48 @@ describe("S6l §5 集成：poke / gift（Mock）", () => {
     const beats = harness.beats(1);
     expect(beats.every((beat) => beat.story === null)).toBe(true);
     expect(harness.sent.some((m) => m.type === "scene_status")).toBe(false);
+  });
+});
+
+/**
+ * S6l-fix2 §6：服务端限量 poke / gift——冷却内重复请求直接忽略（不起新轮、不扣轮数）。
+ * 用可注入时钟推进冷却。
+ */
+describe("S6l-fix2 §6：服务端 poke / gift 限流", () => {
+  it("3 秒内的第二次 poke 被忽略（不起新轮、无 beat）", async () => {
+    const harness = setup();
+    await harness.hello();
+
+    await harness.input("", 1, "poke");
+    expect(harness.beats(1)).toHaveLength(2);
+    // 冷却内重复：turnId 更大但应被忽略。
+    await harness.input("", 2, "poke");
+    expect(harness.beats(2)).toHaveLength(0);
+  });
+
+  it("超过 3 秒后的 poke 正常起轮", async () => {
+    const harness = setup();
+    await harness.hello();
+
+    await harness.input("", 1, "poke");
+    harness.advanceClock(3_000);
+    await harness.input("", 2, "poke");
+    expect(harness.beats(2)).toHaveLength(2);
+  });
+
+  it("礼物冷却 10 秒：5 秒内第二次 gift 被忽略，10 秒后正常", async () => {
+    const harness = setup();
+    await harness.hello();
+
+    await harness.input("", 1, "gift");
+    expect(harness.beats(1).length).toBeGreaterThan(0);
+
+    harness.advanceClock(5_000);
+    await harness.input("", 2, "gift");
+    expect(harness.beats(2)).toHaveLength(0);
+
+    harness.advanceClock(5_000);
+    await harness.input("", 3, "gift");
+    expect(harness.beats(3).length).toBeGreaterThan(0);
   });
 });

@@ -52,6 +52,9 @@ const FALLBACK_PHOTO: Media = { type: "photo", id: "photo_rain_street", url: "/s
 export const POKE_PLACEHOLDER = "（戳了一下）";
 export const GIFT_PLACEHOLDER = "（送了一个礼物）";
 
+/** S6l-fix2 §4：点击打断后进入倾听，超过这个时长没有新输入就回到 idle。 */
+export const TAP_LISTEN_GRACE_MS = 5_000;
+
 /** 渲染层的唯一例外：C 状态机的图片加载结果回调，必须经过 controller。 */
 export type StageReports = { mediaLoadFailed(storyEventId: string): void };
 
@@ -215,6 +218,20 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       if (phase.kind !== "speaking") return;
       pushEvent(`tap interrupt t${currentTurnId}`);
       performInterrupt("tap", currentTurnId);
+      // S6l-fix2 §4：打断后进入倾听，但没有录音、也没有退出路径。
+      // 宽限 TAP_LISTEN_GRACE_MS 内没有新输入（文字 / 按住说话 / 引导点击都会递增 turnId）就回 idle。
+      const listeningTurn = getStageState().currentTurnId;
+      timeline.schedule({
+        key: `tap-listen-grace:${listeningTurn}`,
+        turnId: listeningTurn,
+        atMs: timeline.now() + TAP_LISTEN_GRACE_MS,
+        run: () => {
+          const state = getStageState();
+          if (state.currentTurnId !== listeningTurn || state.phase.kind !== "listening") return;
+          pushEvent(`tap listen grace expired t${listeningTurn} → idle`);
+          dispatch({ type: "INPUT_CANCELLED", turnId: listeningTurn });
+        },
+      });
     },
   };
 }

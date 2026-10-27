@@ -149,6 +149,31 @@ describe("renderPrompt", () => {
     const messages = renderPrompt(pack, ctx({ scene: { ...createInitialScene(), node: "probe" }, userText: "那杯咖啡，是给他点的吧？" }));
     expect(messages[1]?.content).toContain(ADVANCE_ALLOW_REVEAL);
   });
+
+  it("S6l-fix2 §7：历史里只有 nudge / poke / gift 占位时，arrive 不推进", () => {
+    const history: LLMHistoryEntry[] = [
+      { role: "user", text: "（客人安静地坐着，没有说话）", source: "nudge" },
+      { role: "assistant", text: "……" },
+      { role: "user", text: "（观众做出了一个动作，没有说话）", source: "poke" },
+      { role: "assistant", text: "干嘛戳我。" },
+      { role: "user", text: "（观众做出了一个动作，没有说话）", source: "gift" },
+      { role: "assistant", text: "谢谢。" },
+    ];
+    const messages = renderPrompt(pack, ctx({ scene: createInitialScene(), history }));
+    expect(messages[1]?.content).toContain(ADVANCE_HOLD);
+    expect(messages[1]?.content).not.toContain(ADVANCE_ALLOW_PROBE);
+  });
+
+  it("S6l-fix2 §7：有一句真实用户输入后按原规则推进（arrive → 允许进入 probe）", () => {
+    const history: LLMHistoryEntry[] = [
+      { role: "user", text: "（客人安静地坐着，没有说话）", source: "nudge" },
+      { role: "assistant", text: "……" },
+      { role: "user", text: "你在等谁？" },
+      { role: "assistant", text: "没有谁。" },
+    ];
+    const messages = renderPrompt(pack, ctx({ scene: createInitialScene(), history }));
+    expect(messages[1]?.content).toContain(ADVANCE_ALLOW_PROBE);
+  });
 });
 
 describe("loader", () => {

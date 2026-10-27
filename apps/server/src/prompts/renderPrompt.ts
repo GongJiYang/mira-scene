@@ -88,7 +88,10 @@ export function renderPrompt(pack: PromptPack, ctx: PromptContext): ChatMessage[
     : classifyIntent(ctx.userText, pack.intentPatterns);
   // S6l §1：arrive → probe 需要「用户说过至少 1 轮」，与 Mock 的 `priorUserTurns >= 1` 一致
   // （只看历史里的用户轮数，不含本轮）。
-  const userTurns = ctx.history.filter((entry) => entry.role === "user").length;
+  // S6l-fix2 §7：只数真实用户（source === "user"）；主动开口 / poke / gift 的占位不算用户说过话。
+  const userTurns = ctx.history.filter(
+    (entry) => entry.role === "user" && (entry.source ?? "user") === "user",
+  ).length;
   const rule = advanceRule({ ...ctx.scene, trust: care }, intent, ctx.scene.turnCount, userTurns);
   const node = pack.nodes[ctx.scene.node];
   // S6l §4：沉默时按阶段抛钩子——nudge 轮把当前节点的 hook 提示给 LLM（无 hook 时用原提示）。

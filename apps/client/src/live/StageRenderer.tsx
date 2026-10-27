@@ -20,7 +20,7 @@ import type { StagePerformance, StagePhase } from "../view/useStageViewModel";
 import { createYunaRenderer, YunaLoadError, type YunaRendererHandle } from "../render/live2d/cubism/yunaRenderer";
 import { cameraFor, type StageOrientation } from "../render/live2d/cameraFor";
 import { yunaParams } from "../render/live2d/yunaParams";
-import { ACCENT_FADE_SEC } from "../render/live2d/accentParams";
+import { ACCENT_FADE_SEC, accentBlend, type AccentTiming } from "../render/live2d/accentParams";
 import { toYunaEmotion } from "./emotionMap";
 import { StoryVideo } from "../stage/StoryVideo";
 import {
@@ -149,10 +149,18 @@ function Live2dStage({
   // S6g-A §4.3：silentAction 进入时刻（抱熊渐入渐出用）。
   const silentRef = useRef<{ action: string | null; sinceMs: number }>({ action: null, sinceMs: 0 });
   // D47：accent 起止时刻（0.4s 渐入渐出用）。beat 被打断 → 按「结束」处理（endedAtMs 记下）。
-  const accentRef = useRef<{ accent: Accent | null; startedAtMs: number; endedAtMs: number | null }>({
+  // S6l-fix2 §8：A 直接切到 B 时，保留「正在渐出的上一个 accent」（prev + endedAtMs），
+  // 渲染时两者都经 accentBlend 取最大值，避免 A 瞬间消失。
+  const accentRef = useRef<{
+    accent: Accent | null;
+    startedAtMs: number;
+    endedAtMs: number | null;
+    prev: { accent: Accent; startedAtMs: number; endedAtMs: number } | null;
+  }>({
     accent: null,
     startedAtMs: 0,
     endedAtMs: null,
+    prev: null,
   });
 
   // S6f §2：相位计时（phaseSinceSec / idleSinceSec / 首句惊讶 / 待机 seed）。
@@ -211,12 +219,15 @@ function Live2dStage({
         const silentActionSinceSec = (nowMs - silentRef.current.sinceMs) / 1000;
 
         // D47：accent 起止时刻（0.4s 渐入渐出）。
-        // - 新的非 null accent → 记起点，并给上一个 accent 记结束点；
+        // - 新的非 null accent 且与当前不同 → 把当前 accent 变成「正在渐出的 prev」，再起新 accent；
         // - accent 变 null（下一句 / 打断）→ 给当前 accent 记结束点，随后按「结束」渐出。
         const incomingAccent = currentVisual.accent;
         const accentState = accentRef.current;
         if (incomingAccent !== null && incomingAccent !== accentState.accent) {
-          if (accentState.accent !== null) accentState.endedAtMs = nowMs;
+          if (accentState.accent !== null) {
+            // S6l-fix2 §8：保留上一个 accent 作为渐出层（endedAtMs = 切换时刻）。
+            accentState.prev = { accent: accentState.accent, startedAtMs: accentState.startedAtMs, endedAtMs: nowMs };
+          }
           accentState.accent = incomingAccent;
           accentState.startedAtMs = nowMs;
           accentState.endedAtMs = null;
@@ -228,9 +239,30 @@ function Live2dStage({
           accentState.accent = null;
           accentState.endedAtMs = null;
         }
-        const accentSinceSec = (nowMs - accentState.startedAtMs) / 1000;
-        const accentEndedSinceSec =
-          accentState.endedAtMs === null ? undefined : (accentState.endedAtMs - accentState.startedAtMs) / 1000;
+        // prev 渐出完成后丢弃（不再计入渲染）。
+        if (accentState.prev !== null && (nowMs - accentState.prev.endedAtMs) / 1000 >= ACCENT_FADE_SEC) {
+          accentState.prev = null;
+        }
+
+        // S6l-fix2 §8：把 prev（渐出）与当前（渐入）合成为一帧 accent 参数。
+        const prevTiming: AccentTiming | null =
+          accentState.prev === null
+            ? null
+            : {
+                accent: accentState.prev.accent,
+                sinceSec: (nowMs - accentState.prev.startedAtMs) / 1000,
+                untilSec: (accentState.prev.endedAtMs - accentState.prev.startedAtMs) / 1000,
+              };
+        const currentTiming: AccentTiming | null =
+          accentState.accent === null
+            ? null
+            : {
+                accent: accentState.accent,
+                sinceSec: (nowMs - accentState.startedAtMs) / 1000,
+                untilSec:
+                  accentState.endedAtMs === null ? undefined : (accentState.endedAtMs - accentState.startedAtMs) / 1000,
+              };
+        const accentBlended = accentBlend(prevTiming, currentTiming);
 
         return {
           params: yunaParams({
@@ -247,8 +279,9 @@ function Live2dStage({
             heart,
             heartSinceSec: (nowMs - heartRef.current.since) / 1000,
             accent: accentState.accent,
-            accentSinceSec,
-            accentEndedSinceSec,
+            accentSinceSec: currentTiming?.sinceSec ?? 0,
+            accentEndedSinceSec: currentTiming?.untilSec,
+            accentBlended,
             seed: clock.seed,
           }),
           emotion: yunaEmotion,
