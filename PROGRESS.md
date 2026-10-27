@@ -1,48 +1,44 @@
-# PROGRESS（更新于 2026-10-28 00:50，最新提交 a2e7b3a）
+# PROGRESS（更新于 2026-10-28 00:50，最新提交 b905792）
 
 ## ▶ 下一步（新会话直接从这里开始）
 【S6c · 关卡 8/9 · 验收】两批在 worktree 里跑（Systalyze Kimi-K3）：
 - S6c 弹幕换背景：`/Users/gjy/mira-wt-s6c`（分支 s6c-scene），日志 `docs/tasks/.s6c-cmd.log`，报告 `s6c-report.md`。
 - director 偶发超时小修：`/Users/gjy/mira-wt-flaky`（分支 s6-flaky），报告 `s6-flaky-director-report.md`。
-跑完后：核心逐行审、其余看测试 → 合并回 main → 删 worktree。用户在 http://localhost:5180 （主目录 mock dev server）看直播间。
-
-## 并行批次（D42）
-- S6d 开发文档窗口：worktree `/Users/gjy/mira-wt-s6d`（分支 s6d-docs），日志 `docs/tasks/.s6d-cmd.log`，报告 `s6d-docs-report.md`。
-- S6e 换配色离线工具：worktree `/Users/gjy/mira-wt-s6e`（分支 s6e-recolor），日志 `.s6e-cmd.log`，报告 `s6e-recolor-report.md`。
-- **Command Code 周额度已用完（2026-10-27 撞到，周一 20:43 重置）**：三批都在 Systalyze 上跑；真实模式回话（`LLM_PROVIDER=commandcode`）在重置前不可用。
-- Systalyze 的模型**不能看图**：`~/.commandcode/config.json` 的 `imageVisionEnabled` 已改为 false（备份 `config.json.bak-20261027`），切回 Command Code 的看图模型时再改回来。
-- **模型选择**：Systalyze 的 DeepSeek-V4.1-Flash 频繁报 `Failed to process successful response`（与看图无关），改用 **Systalyze Kimi-K3**（`-m systalyze/moonshotai/kimi-k3`）更稳定。换模型时开新会话，不要 `--continue` 旧模型的会话。
-- 验收后由 Claude 合并回 main（S6b 先合），再删 worktree。
+跑完后：核心逐行审、其余看测试（必要时自己跑 e2e、自己截图看）→ 合并回 main → 删 worktree。用户在 http://localhost:5180 （主目录 mock dev server）看直播间。
 
 ## 当前位置
-S6a（含 fix1/fix2）已提交 9555a76。S6b 关卡 1–6 已过（D40）：角色包、情景化兜底、忧奈接入舞台（全身 + 低机位卧室背景）、直播间 UI v1、语音包清单、真实生图适配器。
+S6a、S6b（含 fix1–3）、S6d 文档窗口、S6e 换配色离线工具都已在 main。681+ 个单测、22 个 e2e。
 
 ## 已完成（最近的在前）
 | 批次 | 结果 | 提交 |
 |---|---|---|
-| S6a 忧奈预览 / cmd 适配器 / S5-fix / fix1 / fix2 | 547 个测试；D39 | 9555a76 |
-| S5 Mock 语音 B / 移动端 / 照片避脸 / WebM 视频 | 479 个测试、e2e 通过；D37 | 1d22b6b |
-| D34 可打断时间线 | Q1=0.10ms；432 个测试 | 6edb91a |
-| S4 舞台 | 背景/雨/推镜/拍立得/主动开口 | 12cdab1 / 8c5e86c |
-| S3 真实语音链路 | Fish TTS/STT、导演层 | 423c55f |
+| S6e 换配色离线工具（sakura/mint/mono） | 领结与颈部同图块未换色（已知） | 2f284d6 |
+| S6d 开发文档窗口 `?docs=1` | 虚拟模块插件、单一白名单 | 1fdd803 |
+| S6b 角色包 / 直播间 UI / 兜底 / 忧奈上舞台 / 语音包清单 / 生图 | fix1–3；D40/D42 | 793e005 |
+| S6a 忧奈预览 / cmd 适配器 / S5-fix | D39 | 9555a76 |
+| S5 / D34 / S4 / S3 | 见 decisions.md | 1d22b6b 等 |
 
 ## 排队（按顺序）
-1. **S6b**（进行中）→ **S6c 弹幕换背景**（`docs/tasks/s6c.md`、D41，已批准，S6b 提交后派发）。之后：换服装（先换配色，D41）；手机端人物占满屏幕（用户提出，后续再调）。
-2. **S6a 推迟项，必须补上**：14 个按键表情 exp3、流泪动作、4096 贴图/压缩纹理。
-3. 开发文档窗口（D21）。
-4. S6 交付：README（已知问题写「Live2D 自动管线效果不理想」）、AI_USAGE.md、录屏、部署（**cmd 在服务器上怎么用**要解决）。
-估计：S6a 1 天 + S6b 1.5 天 + 文档 0.5 天 + 交付 1 天 ≈ 4 个工作日。
+1. S6c（进行中）→ 后续：换配色接运行时（角色包 `palettes` + 渲染器换贴图）、领结按 drawable 细分；手机端人物占满屏幕（用户提出）。
+2. S6a 推迟项：14 个按键表情 exp3、流泪动作、4096 贴图/压缩纹理。
+3. S6 交付：README、AI_USAGE.md、录屏、部署（线上 LLM 用哪个要定：推荐官方 DeepSeek 充值）。
 
-## 关键决策（完整记录见 decisions.md D1–D39）
-- 每批代码走 mira-code-gate 9 关；代码全部由 cmd 写。派发：先单独一条 `cd ~/mira-scene`，再 `cmd -p …`。**Command Code 5 小时额度到了时**改用 BYOK：`export STLZ_API_KEY=$(grep '^STLZ_API_KEY=' .env | cut -d= -f2-) && cmd -p … -m systalyze/deepseek-ai/deepseek-v4.1-flash-1017 --local-only …`（每轮约 15s；模型已加进 `~/.commandcode/providers.json`，备份 `providers.json.bak-20261027`）。
-- LLM 先走 Command Code 额度（`LLM_PROVIDER=commandcode`），首句约 2.5–3s；DeepSeek 适配器保留（D39）。
-- Fish 用免费 `s2.1-pro-free`，TTS/STT 实测可用，免费期到 2026-11-30（D39）。
-- 余额/额度只提醒，不写降级（D37）。打断时照片保留、视频结束（D37）。
-- 两个角色都保留，都做主播；忧奈用正版 Live2D，可公开（D38）。
+## 执行环境（重要）
+- **Command Code 周额度已用完**（周一 20:43 重置）：写代码的 cmd 用 BYOK `-m systalyze/moonshotai/kimi-k3 --local-only`，派发前 `export STLZ_API_KEY=$(grep '^STLZ_API_KEY=' .env | cut -d= -f2-)`。Systalyze 的 DeepSeek 不稳定，别用。额度恢复后切回 Command Code 的 deepseek-v4-flash（用户 2026-10-27）。
+- 真实模式回话（`LLM_PROVIDER=commandcode`）在重置前不可用；Mock 模式正常。
+- Systalyze 模型不能看图：`~/.commandcode/config.json` 的 `imageVisionEnabled=false`（备份 `.bak-20261027`），切回能看图的模型时改回。任务里要写「不要打开图片；长命令显式 timeout，超时两次就停」。
+- 并行用 git worktree；派发前单独一条 `cd <worktree>`，派发后 `lsof -a -p <pid> -d cwd` 核对；换模型开新会话，不 `--continue`。
+
+## 关键决策（完整记录见 decisions.md D1–D42）
+- 每批走 mira-code-gate；代码全部由 cmd 写；Claude 核心逐行审、其余看测试。
+- 角色包数据驱动；切频道不保留记录、同连接解绑旧会话；error 带 scope（会话级才跳过 D3 过滤）。
+- 弹幕换背景：AI 扩写场景 + 代码锁死构图 + 参考图生图（D41）。
+- 余额/额度只提醒，不写降级（D37）。
 
 ## 待用户处理
-- 审阅 `characters/yuna/prompt.v1.md`、`content.json`；按 `docs/voice-pack.md` 自己录 Mock/兜底语音；在中转站换一个新的生图 Key（旧 Key 出现在聊天记录里）；审阅 `prompts/rin.v1.md` 和信中「暗号」那句。
-- iPhone 真机手测 iOS 音频（`docs/tasks/s5-report.md` §7）。
+- 审阅 `characters/yuna/prompt.v1.md`、`content.json`、两份 `scene.v1.md`；按 `docs/voice-pack.md` 录 Mock/兜底语音（已按角色分目录，可以开始录）。
+- 中转站换一个新的生图 Key（旧 Key 出现在聊天记录里）。
+- iPhone 真机手测 iOS 音频。
 
 ## 不要碰
 - `skills/live2d-auto/SKILL.md`、`tools/live2d-pipeline/*`：Live2D 管线会话的改动，不归 Claude 提交。
