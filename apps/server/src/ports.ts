@@ -3,7 +3,16 @@ import type { PromptPack } from "./prompts/renderPrompt";
 
 export type AudioData = { mime: string; data: Buffer };
 
-export type LLMHistoryEntry = { role: "user" | "assistant"; text: string };
+/**
+ * S6l-fix2 §7：history 条目来源。
+ * - `"user"`（缺省，兼容旧数据）：用户真实输入（文字 / 语音）；
+ * - `"nudge"`：主动开口轮的占位（客户端那一句没有说话）；
+ * - `"poke"` / `"gift"`：戳一下 / 送礼物的占位。
+ * 只有 `source === "user"` 的用户条目算「用户说过话」。
+ */
+export type HistorySource = "user" | "nudge" | "poke" | "gift";
+
+export type LLMHistoryEntry = { role: "user" | "assistant"; text: string; source?: HistorySource };
 
 export type LLMContext = {
   history: LLMHistoryEntry[];

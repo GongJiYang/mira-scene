@@ -143,9 +143,10 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   const beats: DirectedBeat[] = [];
 
   // D47：accent 只放在切分后的第一个 beat（第二个 beat 为 null）。
-  // 规则触发（熬夜类 → dark）只在 LLM 没给 suggest 时生效。
+  // S6l-fix2 §2：LLM 给的 accent 始终采纳（不再因同时给了 suggest 而丢弃）；
+  // 规则触发（熬夜类 → dark）只在 LLM 没给 accent 时生效（由 pickAccent 内部判定）。
   const accent: Accent | null = pickAccent({
-    suggested: llmBeat.suggest === null ? llmBeat.accent : null,
+    suggested: llmBeat.accent,
     emotion,
     say: llmBeat.say,
     recentAccents: ctx.recentAccents,

@@ -25,6 +25,8 @@ function beginTurn(state: ClientState, phase: Phase): ClientState {
     turnEnded: false,
     subtitle: null,
     media: null,
+    // S6l-fix2 §3：打断后表情立即清除（渲染端按「结束」渐出 0.4s，不留到下一句）。
+    visual: { ...state.visual, accent: null },
     audioStopToken: state.audioStopToken + 1,
   };
 }
@@ -42,7 +44,14 @@ function enqueueBeat(state: ClientState, beat: Beat): ClientState {
  * media 不清理——媒体生命周期在 S4 定义。
  */
 function toIdle(state: ClientState): ClientState {
-  return { ...state, phase: { kind: "idle" }, queue: [], subtitle: null };
+  return {
+    ...state,
+    phase: { kind: "idle" },
+    queue: [],
+    subtitle: null,
+    // S6l-fix2 §3：轮次结束回 idle 时清除表情（不再挂到下一句）。
+    visual: { ...state.visual, accent: null },
+  };
 }
 
 /**

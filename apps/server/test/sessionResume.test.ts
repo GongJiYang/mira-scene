@@ -149,4 +149,22 @@ describe("刷新恢复：session 带 background / transcript（S6l-fix1 §1）",
     expect(transcript[0]?.text).toBe("第 10 条");
     expect(transcript.at(-1)?.text).toBe("第 49 条");
   });
+
+  it("S6l-fix2 §7：transcript 不含 nudge / poke / gift 占位（assistant 照旧）", () => {
+    const history = [
+      { role: "user" as const, text: "（客人安静地坐着，没有说话）", source: "nudge" as const },
+      { role: "assistant" as const, text: "……" },
+      { role: "user" as const, text: "（观众做出了一个动作，没有说话）", source: "poke" as const },
+      { role: "assistant" as const, text: "干嘛戳我。" },
+      { role: "user" as const, text: "你好" },
+      { role: "assistant" as const, text: "嗯。" },
+    ];
+    const { transcript } = resumePayload({ sceneJob: {}, history });
+    expect(transcript).toEqual([
+      { role: "assistant", text: "……" },
+      { role: "assistant", text: "干嘛戳我。" },
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "嗯。" },
+    ]);
+  });
 });

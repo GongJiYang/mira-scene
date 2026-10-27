@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createController, type Intents } from "../src/core/controller";
+import { createController, TAP_LISTEN_GRACE_MS, type Intents } from "../src/core/controller";
 import type { Connection } from "../src/core/connection";
 import type { Recording, Recorder } from "../src/core/recorder";
 import { getStageState, useConnectionStore, useDebugStore, useMicStore, useStageStore } from "../src/core/store";
+import { timeline } from "../src/core/timeline";
 import { initialState } from "../src/state";
 
 function fakeConnection(events: string[], overrides: Partial<Connection> = {}): Connection {
@@ -35,6 +36,7 @@ function resetStores(): void {
   useConnectionStore.setState({ status: "open", sessionId: "session-1" });
   useMicStore.setState({ micError: null });
   useDebugStore.setState({ events: [] });
+  timeline.reset();
 }
 
 /** 记录 dispatch 与发送的相对顺序。 */
@@ -144,5 +146,39 @@ describe("controller：PTT", () => {
     expect(getStageState().phase.kind).toBe("idle");
     expect(useMicStore.getState().micError).toBe("NotAllowedError");
     expect(events).toEqual([]);
+  });
+});
+
+describe("controller：点击打断后的倾听宽限（S6l-fix2 §4）", () => {
+  it("tapInterrupt → listening；推进 TAP_LISTEN_GRACE_MS 无新输入 → 回 idle", () => {
+    const events: string[] = [];
+    const controller = setup(events);
+    useStageStore.setState({ ...initialState, phase: { kind: "speaking", seq: 0 }, currentTurnId: 7 });
+
+    controller.tapInterrupt();
+    expect(getStageState().phase.kind).toBe("listening");
+    const listeningTurn = getStageState().currentTurnId;
+
+    // 5 秒宽限到期：时间线派发 INPUT_CANCELLED 回 idle。
+    timeline.drain(timeline.now() + TAP_LISTEN_GRACE_MS);
+    expect(getStageState().phase.kind).toBe("idle");
+    // turnId 不回退。
+    expect(getStageState().currentTurnId).toBe(listeningTurn);
+  });
+
+  it("宽限内新输入（submitText）→ 正常新轮，到期不会被回退到 idle", () => {
+    const events: string[] = [];
+    const controller = setup(events);
+    useStageStore.setState({ ...initialState, phase: { kind: "speaking", seq: 0 }, currentTurnId: 7 });
+
+    controller.tapInterrupt();
+    // 宽限内用户说话：beginTurn 递增 turnId，旧轮次的 INPUT_CANCELLED 失效。
+    controller.submitText("你好");
+    expect(getStageState().phase.kind).toBe("thinking");
+    const newTurn = getStageState().currentTurnId;
+
+    timeline.drain(timeline.now() + TAP_LISTEN_GRACE_MS);
+    expect(getStageState().phase.kind).toBe("thinking");
+    expect(getStageState().currentTurnId).toBe(newTurn);
   });
 });

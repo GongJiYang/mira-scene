@@ -11,17 +11,22 @@ type Rig = {
   channel: ReturnType<typeof createLocalAudioChannel>;
   live: () => string[];
   overlaps: () => number;
+  /** S6l-fix2 §9：手动触发某段本地语音「自然播完」。 */
+  finish: (url: string) => void;
 };
 
 function makeRig(): Rig {
   const playing = new Set<string>();
+  const ended = new Map<string, () => void>();
   let overlapCount = 0;
   const channel = createLocalAudioChannel({
-    play: (url) => {
+    play: (url, onEnded) => {
       playing.add(url);
+      if (onEnded) ended.set(url, onEnded);
       return {
         stop: () => {
           playing.delete(url);
+          ended.delete(url);
         },
       };
     },
@@ -29,7 +34,19 @@ function makeRig(): Rig {
       overlapCount += 1;
     },
   });
-  return { channel, live: () => [...playing], overlaps: () => overlapCount };
+  return {
+    channel,
+    live: () => [...playing],
+    overlaps: () => overlapCount,
+    finish: (url) => {
+      const callback = ended.get(url);
+      if (callback) {
+        playing.delete(url);
+        ended.delete(url);
+        callback();
+      }
+    },
+  };
 }
 
 describe("本地音频仲裁（S6l-fix1 §6）", () => {
@@ -40,15 +57,34 @@ describe("本地音频仲裁（S6l-fix1 §6）", () => {
     expect(rig.live()).toEqual(["offline.mp3"]);
   });
 
-  it("beat 播放期间 request → 排队，beat 结束后才播", () => {
+  it("beat 播放期间 request → 排队，本轮结束后才播（S6l-fix2 §9）", () => {
     const rig = makeRig();
     rig.channel.beatStarted();
     rig.channel.request("scene_failed.mp3");
     expect(rig.channel.isPlaying()).toBe(false);
     expect(rig.channel.hasQueued()).toBe(true);
 
+    // S6l-fix2 §9：两个 beat 之间的 beatEnded 不再播放排队语音（避免被下一句掐断）。
     rig.channel.beatEnded();
+    expect(rig.channel.isPlaying()).toBe(false);
+    expect(rig.channel.hasQueued()).toBe(true);
+
+    // 回到 idle（本轮结束）才播。
+    rig.channel.turnEnded();
     expect(rig.channel.isPlaying()).toBe(true);
+    expect(rig.live()).toEqual(["scene_failed.mp3"]);
+  });
+
+  it("S6l-fix2 §9：两个 beat 之间有排队语音 → beat 之间不播放", () => {
+    const rig = makeRig();
+    rig.channel.beatStarted(); // beat 0
+    rig.channel.request("scene_failed.mp3"); // 排队
+    rig.channel.beatEnded(); // beat 0 结束
+    expect(rig.channel.isPlaying()).toBe(false); // 空档不播
+    rig.channel.beatStarted(); // beat 1 开始
+    expect(rig.channel.isPlaying()).toBe(false);
+    rig.channel.beatEnded();
+    rig.channel.turnEnded();
     expect(rig.live()).toEqual(["scene_failed.mp3"]);
   });
 
@@ -79,15 +115,29 @@ describe("本地音频仲裁（S6l-fix1 §6）", () => {
     rig.channel.request("b.mp3");
     expect(rig.live()).toEqual(["b.mp3"]);
   });
+
+  it("S6l-fix2 §9：本地语音自然播完后 isPlaying() 为 false（active 清空）", () => {
+    const rig = makeRig();
+    rig.channel.request("offline.mp3");
+    expect(rig.channel.isPlaying()).toBe(true);
+    rig.finish("offline.mp3");
+    expect(rig.channel.isPlaying()).toBe(false);
+  });
 });
 
 describe("属性：任意时刻处于播放状态的本地音源 ≤ 1（S6l-fix1 §6）", () => {
-  type Op = { kind: "request"; url: string } | { kind: "beatStarted" } | { kind: "beatEnded" } | { kind: "stop" };
+  type Op =
+    | { kind: "request"; url: string }
+    | { kind: "beatStarted" }
+    | { kind: "beatEnded" }
+    | { kind: "turnEnded" }
+    | { kind: "stop" };
 
   const opArb: fc.Arbitrary<Op> = fc.oneof(
     fc.record({ kind: fc.constant("request" as const), url: fc.constantFrom("a.mp3", "b.mp3", "c.mp3") }),
     fc.record({ kind: fc.constant("beatStarted" as const) }),
     fc.record({ kind: fc.constant("beatEnded" as const) }),
+    fc.record({ kind: fc.constant("turnEnded" as const) }),
     fc.record({ kind: fc.constant("stop" as const) }),
   );
 
@@ -108,6 +158,10 @@ describe("属性：任意时刻处于播放状态的本地音源 ≤ 1（S6l-fix
             case "beatEnded":
               beatPlaying = false;
               rig.channel.beatEnded();
+              break;
+            case "turnEnded":
+              beatPlaying = false;
+              rig.channel.turnEnded();
               break;
             case "stop":
               beatPlaying = false;
@@ -132,6 +186,7 @@ describe("属性：任意时刻处于播放状态的本地音源 ≤ 1（S6l-fix
           if (op.kind === "request") rig.channel.request(op.url);
           else if (op.kind === "beatStarted") rig.channel.beatStarted();
           else if (op.kind === "beatEnded") rig.channel.beatEnded();
+          else if (op.kind === "turnEnded") rig.channel.turnEnded();
           else rig.channel.stop();
         }
         expect(rig.overlaps()).toBe(0);

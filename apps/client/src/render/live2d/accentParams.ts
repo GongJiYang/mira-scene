@@ -69,3 +69,27 @@ export function accentParams(
 
   return out;
 }
+
+/**
+ * S6l-fix2 §8：一个 accent 的时间状态。
+ * - `sinceSec`：从该 accent 开始到现在的秒数；
+ * - `untilSec`：该 accent「结束」时刻（相对它自己的起点，秒）；未结束则不传。
+ */
+export type AccentTiming = { accent: Accent; sinceSec: number; untilSec?: number };
+
+/**
+ * S6l-fix2 §8：把「正在渐出的上一个 accent」与「当前 accent」合成为一帧参数（逐键取最大值）。
+ *
+ * A 直接切到 B 时，若只渲染 B，A 会瞬间消失；本函数让 A 按 0.4s 渐出、B 按 0.4s 渐入，
+ * 两者同时存在、取最大值。`prev` 为 null 时等价于单一 accent。
+ */
+export function accentBlend(prev: AccentTiming | null, current: AccentTiming | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  const layers = [prev, current].filter((layer): layer is AccentTiming => layer !== null);
+  for (const layer of layers) {
+    for (const [name, value] of Object.entries(accentParams(layer.accent, layer.sinceSec, layer.untilSec))) {
+      out[name] = Math.max(out[name] ?? 0, value);
+    }
+  }
+  return out;
+}

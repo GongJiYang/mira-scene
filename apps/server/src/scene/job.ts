@@ -33,12 +33,18 @@ export type SceneJobState = {
   current: SceneJob | null;
   /** 已发起的任务数（每会话最多 5 次）。 */
   used: number;
-  /** 上一次任务结束（ready / failed）时间（冷却 45 秒）。 */
+  /** S6c §5：上一次任务结束（ready / failed）时间（冷却 45 秒）。 */
   lastFinishedAt: number | null;
-  /** S6c §5：上一次成功换成的场景 label（用于下一轮 scene_notes）。 */
-  lastReadyLabel?: string;
-  /** S6c-fix1 §7：当前正在显示的背景公开 URL（上一次成功的生成图；缺省用角色包默认背景）。 */
-  lastReadyUrls?: { desktop: string; mobile: string };
+  /**
+   * S6l-fix2 §5：一次性提示——「背景已经换成 X」，只在下一轮 `scene_notes` 用一次，用完清空。
+   * 与「当前背景」解耦，避免提示用完把当前背景名一起丢掉。
+   */
+  pendingReadyNote?: string;
+  /**
+   * S6l-fix2 §5：当前正在显示的生成背景（持久，换成功时覆盖）。刷新恢复、参考图、
+   * 扩写器的 `currentScene` 都读这里；没换过为 undefined（用角色包默认背景）。
+   */
+  currentBackground?: { label: string; urls: { desktop: string; mobile: string } };
   /** S6c-fix1 §2：上一次任务失败 / 被拒（用于下一轮 scene_notes 提一句「刚才背景没换成」）。 */
   lastFailed?: boolean;
 };

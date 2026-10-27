@@ -5,3 +5,4 @@ export * from "./lenient";
 export * from "./messages";
 export * from "./manifest";
 export * from "./turn";
+export * from "./throttle";

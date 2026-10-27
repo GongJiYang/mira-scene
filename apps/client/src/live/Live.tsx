@@ -20,6 +20,7 @@ import { useSceneStatusStore } from "./scene/status";
 import { drainRestoredUserLines, useSessionRestoreStore } from "./sessionRestore";
 import { progressDots } from "./storyProgress";
 import { useGuideScheduler, useInteractionCooldowns, resolveTap } from "./interactionHooks";
+import { isStageTapTarget, resolveStageTap } from "./interaction";
 import "./live.css";
 import "../obs/obs.css";
 
@@ -79,6 +80,7 @@ function DanmakuItem({ item, onGuideClick, style }: { item: Danmaku; onGuideClic
         className="live-danmaku live-danmaku-guide"
         data-kind="guide"
         data-testid="guide-danmaku"
+        data-no-stage-tap
         style={style}
         title={UI_TEXT.guideHint}
         onClick={() => onGuideClick?.(item.text)}
@@ -208,10 +210,10 @@ export function Live() {
     gift: () => vm.intents.gift(),
   });
 
-  // ---- S6l §6：点击画面 ----
+  // ---- S6l §6：点击画面（S6l-fix2 §1：只有落在舞台空白处才算） ----
   const onStageTap = useCallback(
-    (hitCharacter: boolean) => {
-      const intent = resolveTap(vm.phase, hitCharacter);
+    (hitCharacter: boolean, target?: unknown) => {
+      const intent = target === undefined ? resolveTap(vm.phase, hitCharacter) : resolveStageTap(vm.phase, target, hitCharacter);
       if (intent === "interrupt") vm.intents.tapInterrupt();
       else if (intent === "poke") cooldowns.poke();
     },
@@ -279,7 +281,7 @@ export function Live() {
               {stage}
               {/* S6c §5：换背景转场状态条（右上角） */}
               <SceneStatusBar />
-              <div className="live-hud">
+              <div className="live-hud" data-no-stage-tap>
                 <span className="live-badge">{UI_TEXT.live}</span>
                 <span className="live-hud-name" data-testid="live-name">
                   {character.displayName}
@@ -293,7 +295,7 @@ export function Live() {
                 <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>
               )}
             </div>
-            <p className="live-subtitle" data-testid="subtitle">
+            <p className="live-subtitle" data-testid="subtitle" data-no-stage-tap>
               {subtitle}
               {/* S6f §2：思考时字幕区出现「……」三点动画（不是聊天气泡，不改字幕区结构）。 */}
               {vm.phase === "thinking" && (
@@ -315,6 +317,7 @@ export function Live() {
             </div>
             <form
               className="live-compose"
+              data-no-stage-tap
               onSubmit={(event) => {
                 event.preventDefault();
                 submit();
@@ -399,6 +402,8 @@ export function Live() {
 function StageTapLayer({ onTap, bboxSelector }: { onTap: (hitCharacter: boolean) => void; bboxSelector?: string }) {
   const handle = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      // S6l-fix2 §1：防御——点击落在交互元素内时忽略（桌面上点击层通常不与它们重叠）。
+      if (isStageTapTarget(event.target)) return;
       const target = event.currentTarget.parentElement;
       let hitCharacter = true;
       // 命中判定：角色画布占舞台中间竖条；用画布矩形近似包围盒（存在透明边，但够用）。
@@ -469,7 +474,7 @@ type MobileProps = {
   stage: React.ReactNode;
   listening: boolean;
   level: number;
-  onStageTap: (hitCharacter: boolean) => void;
+  onStageTap: (hitCharacter: boolean, target?: unknown) => void;
   onGuideClick: (text: string) => void;
   onGift: () => void;
 };
@@ -514,7 +519,8 @@ function MobileLive(props: MobileProps) {
     if (startTap) {
       const moved = Math.abs(point.clientX - startTap.x) + Math.abs(point.clientY - startTap.y);
       if (moved < 12 && performance.now() - startTap.t < 300) {
-        onStageTap(hitCharacterAt(point.clientX, point.clientY));
+        // S6l-fix2 §1：由 resolveStageTap 统一判定——落在交互元素内（输入框 / 引导弹幕 / 字幕 / 菜单 / 卡片按钮）忽略。
+        onStageTap(hitCharacterAt(point.clientX, point.clientY), event.target);
       }
     }
   };
@@ -522,9 +528,10 @@ function MobileLive(props: MobileProps) {
   const visible = visibleDanmaku(danmaku, MAX_MOBILE_DANMAKU);
 
   // S6l §5：手机端命中判定——角色画布中间竖条（近似包围盒）。
+  // S6l-fix2 §1：画布找不到时返回 false（不再当作命中角色，避免误触 poke）。
   const hitCharacterAt = (x: number, y: number): boolean => {
     const canvas = document.querySelector('[data-testid="yuna-canvas"]') as HTMLElement | null;
-    if (!canvas) return true;
+    if (!canvas) return false;
     const rect = canvas.getBoundingClientRect();
     return x >= rect.left + rect.width * 0.2 && x <= rect.left + rect.width * 0.8 && y >= rect.top && y <= rect.bottom;
   };
@@ -556,7 +563,7 @@ function MobileLive(props: MobileProps) {
           <SceneStatusBar />
         </div>
 
-        <div className="live-mobile-top">
+        <div className="live-mobile-top" data-no-stage-tap>
           <div className="live-mobile-avatar">
             <img src={character.avatar} alt="" />
           </div>
@@ -581,13 +588,13 @@ function MobileLive(props: MobileProps) {
           <MobileMenu />
         </div>
 
-        <div className="live-mobile-danmaku" data-testid="danmaku-list">
+        <div className="live-mobile-danmaku" data-testid="danmaku-list" data-no-stage-tap>
           {visible.map((item, index) => (
             <DanmakuItem key={item.id} item={item} onGuideClick={onGuideClick} style={{ opacity: danmakuOpacity(index, visible.length) }} />
           ))}
         </div>
 
-        <p className="live-mobile-subtitle" data-testid="subtitle">
+        <p className="live-mobile-subtitle" data-testid="subtitle" data-no-stage-tap>
           {subtitle}
           {vm.phase === "thinking" && (
             <span className="live-thinking-dots" data-testid="thinking-dots" aria-hidden>
@@ -600,6 +607,7 @@ function MobileLive(props: MobileProps) {
 
         <form
           className="live-mobile-compose"
+          data-no-stage-tap
           onSubmit={(event) => {
             event.preventDefault();
             submit();

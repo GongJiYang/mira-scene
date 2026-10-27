@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   isTurnIdAcceptable,
   parseLlmBeatLenient,
+  throttleEvent,
   type Accent,
   type Action,
   type Beat,
@@ -26,6 +27,7 @@ import { defaultOutDir } from "./adapters/media/imageGen";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
 import type { LLMHistoryEntry, MediaPort, Ports, SceneWriterPort, TTSAudio, TTSPort, TtsOptions } from "./ports";
+import type { HistorySource } from "./ports";
 import { detectSceneRequest } from "./scene/detect";
 import { resolveReferencePath, type ReferenceDirs } from "./scene/referencePath";
 import { runSceneJob, type SceneRunnerDeps } from "./scene/runner";
@@ -71,6 +73,9 @@ type Session = {
   recentAccents: readonly (Accent | null)[];
   /** S6l §5：戳一下的累计次数（用于 poke 的 shy / angry 轮流）。 */
   pokeCount: number;
+  /** S6l-fix2 §6：上一次被接受的 poke / gift 时刻（服务端限流）。 */
+  lastPokeAt: number | null;
+  lastGiftAt: number | null;
   lastTurnId: number;
   /** 已接受的轮数（Q12 会话限额）。 */
   turnsUsed: number;
@@ -162,21 +167,24 @@ export const TRANSCRIPT_LIMIT = 40;
 
 /**
  * S6l-fix1 §1：`session` 消息里除 snapshot 之外的恢复数据（纯函数，便于单测）。
- * - `background`：当前正在显示的生成背景（`sceneJob.lastReadyUrls` + `lastReadyLabel`）；没换过为 null。
+ * - `background`：当前正在显示的生成背景（`sceneJob.currentBackground`）；没换过为 null。
  * - `transcript`：最近最多 `TRANSCRIPT_LIMIT` 条对话（user / assistant 原样，assistant 的多句按换行保留）。
+ *
+ * S6l-fix2 §5：`background` 读持久的 `currentBackground`（不再被一次性的 ready 提示清空）。
  */
 export function resumePayload(session: {
-  sceneJob: Pick<SceneJobState, "lastReadyLabel" | "lastReadyUrls">;
+  sceneJob: Pick<SceneJobState, "currentBackground">;
   history: readonly LLMHistoryEntry[];
 }): {
   background: { label: string; urls: { desktop: string; mobile: string } } | null;
   transcript: Array<{ role: "user" | "assistant"; text: string }>;
 } {
-  const urls = session.sceneJob.lastReadyUrls;
-  const background =
-    urls !== undefined ? { label: session.sceneJob.lastReadyLabel ?? "", urls } : null;
+  const background = session.sceneJob.currentBackground ?? null;
+  // S6l-fix2 §7：transcript 只含真实用户条目（user 来源），nudge / poke / gift 占位不进弹幕区。
   const recent = session.history.slice(-TRANSCRIPT_LIMIT);
-  const transcript = recent.map((entry) => ({ role: entry.role, text: entry.text }));
+  const transcript = recent
+    .filter((entry) => entry.role !== "user" || (entry.source ?? "user") === "user")
+    .map((entry) => ({ role: entry.role, text: entry.text }));
   return { background, transcript };
 }
 
@@ -411,9 +419,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       // S6c §1：弹幕命中「换背景」→ 照常回话，并在后台启动场景任务。
       let sceneNotes: string | undefined;
       // S6c §5：上一轮 ready 后，本轮 scene_notes 加「背景已经换成 {label}」。
-      if (session.sceneJob.lastReadyLabel !== undefined) {
-        sceneNotes = `背景已经换成 ${session.sceneJob.lastReadyLabel}`;
-        session.sceneJob.lastReadyLabel = undefined;
+      // S6l-fix2 §5：这是一次性提示（pendingReadyNote），用完清空；当前背景名（currentBackground）保留。
+      if (session.sceneJob.pendingReadyNote !== undefined) {
+        sceneNotes = session.sceneJob.pendingReadyNote;
+        session.sceneJob.pendingReadyNote = undefined;
       }
       // S6c-fix1 §2：上一轮失败 / 被拒 → 本轮 scene_notes 加一句「刚才背景没换成」。
       if (session.sceneJob.lastFailed === true) {
@@ -461,15 +470,18 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             session.sceneJob = sceneJobReducer(session.sceneJob, { type: "request", jobId, at: clock() });
             // S6c-fix1 §7：参考图 = 当前正在显示的背景（上一次换成功的生成图，否则角色包默认背景）。
             // 生成图 URL 是 `{ desktop, mobile }`，角色包默认背景是 `{ portrait, landscape }`。
-            const currentBg = session.sceneJob.lastReadyUrls
-              ? { desktop: session.sceneJob.lastReadyUrls.desktop, mobile: session.sceneJob.lastReadyUrls.mobile }
+            // S6l-fix2 §5：读持久的 currentBackground（不再被一次性提示清空）。
+            const current = session.sceneJob.currentBackground;
+            const currentBg = current
+              ? { desktop: current.urls.desktop, mobile: current.urls.mobile }
               : { desktop: session.pack.stage.background.landscape, mobile: session.pack.stage.background.portrait };
             const referencePaths = session.sceneReferencePaths ?? {
               desktop: resolveReferencePath(currentBg.desktop, referenceDirs),
               mobile: resolveReferencePath(currentBg.mobile, referenceDirs),
             };
             // S6c-fix1 §7：currentScene 传当前背景的描述（上次成功的 label，否则角色包默认场景描述），不是节点 id。
-            const currentScene = session.sceneJob.lastReadyLabel ?? session.pack.nodes[session.scene.node].label;
+            // S6l-fix2 §5：同样读持久的 currentBackground。
+            const currentScene = current?.label ?? session.pack.nodes[session.scene.node].label;
             const sceneDeps: SceneRunnerDeps = {
               writer,
               image: session.sceneImageGen as SceneRunnerDeps["image"],
@@ -498,8 +510,12 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             };
             void runSceneJob(session.pack, input.text, jobId, sceneDeps, session.sceneController.signal).then((outcome) => {
               if (outcome.kind === "ready") {
-                // ready 后：下一轮 scene_notes 加「背景已经换成 {label}」；并记录当前背景。
-                session.sceneJob = { ...session.sceneJob, lastReadyLabel: outcome.label, lastReadyUrls: outcome.urls };
+                // ready 后：下一轮 scene_notes 加「背景已经换成 {label}」（一次性）；并持久记录当前背景。
+                session.sceneJob = {
+                  ...session.sceneJob,
+                  pendingReadyNote: `背景已经换成 ${outcome.label}`,
+                  currentBackground: { label: outcome.label, urls: outcome.urls },
+                };
               } else {
                 // failed / rejected：下一轮 scene_notes 提一句「刚才背景没换成」。
                 session.sceneJob = { ...session.sceneJob, lastFailed: true };
@@ -645,7 +661,12 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       }
 
       closed = true;
-      session.history.push({ role: "user", text: userText }, { role: "assistant", text: says.join("\n") });
+      // S6l-fix2 §7：记录用户条目的来源（user / nudge / poke / gift），供 userTurns 与刷新恢复过滤。
+      const historySource: HistorySource = isNudge ? "nudge" : inputKind === "poke" || inputKind === "gift" ? inputKind : "user";
+      session.history.push(
+        { role: "user", text: userText, source: historySource },
+        { role: "assistant", text: says.join("\n") },
+      );
       session.scene = { ...session.scene, turnCount: session.scene.turnCount + 1 };
       if (!emitFinal("state_snapshot", { snapshot: session.scene })) return;
       if (!emitFinal("turn_end", { reason: "done" })) return;
@@ -734,6 +755,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         recentActions: [],
         recentAccents: [],
         pokeCount: 0,
+        lastPokeAt: null,
+        lastGiftAt: null,
         lastTurnId: 0,
         turnsUsed: 0,
         controller: null,
@@ -901,7 +924,18 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       });
       return;
     }
-    await handleTurnInput(session, { type: "text_input", turnId: message.turnId, text: message.payload.text, kind: message.payload.kind });
+    // S6l-fix2 §6：服务端限量 poke / gift——冷却内重复请求直接忽略（不起新轮、不扣轮数、记日志）。
+    const kind = message.payload.kind;
+    if (kind === "poke" || kind === "gift") {
+      const lastAt = kind === "poke" ? session.lastPokeAt : session.lastGiftAt;
+      if (!throttleEvent(lastAt, clock(), kind)) {
+        logFor(session, message.turnId, "input_throttled", { kind });
+        return;
+      }
+      if (kind === "poke") session.lastPokeAt = clock();
+      else session.lastGiftAt = clock();
+    }
+    await handleTurnInput(session, { type: "text_input", turnId: message.turnId, text: message.payload.text, kind });
   }
 
   const sweepTimer = setInterval(() => {
