@@ -1,4 +1,4 @@
-# S6l-fix1 任务说明：刷新后恢复生成背景和聊天记录
+# S6l-fix1 任务说明：第二次换背景必失败 + 刷新后恢复生成背景和聊天记录
 
 > 来源：用户 2026-10-28 实测反馈「生成的背景和聊天记录一刷新就没了」。Claude 已核实原因。执行者：Command Code（deepseek-v4-flash）。在合并了 S6l 的 main 上做。
 > 关卡 1–5 结论见末尾（小修，Claude 决定）。
@@ -10,6 +10,13 @@
 - 刷新后客户端用 `sessionStorage` 的 `mira.sessionId` 发 `hello.resumeSessionId`，服务端 `session.ts` 能找回同一个会话（`session_resumed`）。
 - 但服务端回的 `session` 消息只有 `{ snapshot: session.scene }`；会话里其实还留着：生成背景 `session.sceneJob.lastReadyLabel / lastReadyUrls`（图片文件仍在 `var/generated/`）、对话 `session.history`。
 - 客户端背景与弹幕列表只在内存里，所以刷新后回到默认背景、弹幕清空。
+
+## §0 第二次换背景必失败（先修，最高优先）
+- 现象（用户实测，2026-10-28 04:13 / 04:17）：第一次换背景成功后，之后每次换背景都失败，服务端日志只有 `scene_prompt_version`，没有任何失败记录。
+- 根因（Claude 已核实）：S6c-fix1 §7 让参考图 = 当前背景。换成功后当前背景是生成图，URL 形如 `/generated/scene-<id>-desktop.png`，文件实际在 `var/generated/`（`GENERATED_DIR`，见 `adapters/media/imageGen.ts` 的数据目录解析）；但 `session.ts` 用 `resolveClientAssetPath()`（`characters/pack.ts`）把它映射成 `apps/client/public/generated/...`，该文件不存在 → 生图上传参考图失败。
+- 修法：参考图路径解析区分来源——`/generated/` 开头的 URL 解析到生成目录（**复用 imageGen.ts 里已有的生成目录解析函数**，必要时导出，不要另写一份），其余仍走 `resolveClientAssetPath`。写成纯函数 `resolveReferencePath(url, dirs)` 并单测。
+- 可观测：换背景任务失败 / 被拒时，`session.ts` 必须 `logTurn("scene_failed" | "scene_rejected", { error | note })`（不含 Key、不含完整提示词），观测页错误统计能看到。
+- 测试：集成测试——第一次换背景成功后，第二次任务的参考图路径指向 `GENERATED_DIR` 下真实存在的文件且任务成功（用假生图端口，断言收到的 `reference.path` 存在）；失败时日志有 `scene_failed` 及原因。
 
 ## §1 协议与服务端
 - `session` 消息 payload 增加（`packages/protocol/src/messages.ts`，zod 同步）：
