@@ -105,6 +105,17 @@ export const nudgePayloadSchema = z.object({});
 export const pingPayloadSchema = z.object({});
 export const pongPayloadSchema = z.object({});
 
+/**
+ * S6c §5：弹幕换背景的任务状态。
+ * 由服务端在场景任务状态变化时下发；不绑定轮次（与 media_ready 同属剧情层旁路）。
+ */
+export const sceneStatusPayloadSchema = z.object({
+  jobId: z.string(),
+  status: z.enum(["writing", "generating", "ready", "failed", "rejected", "busy"]),
+  label: z.string().optional(),
+  urls: z.object({ desktop: z.string(), mobile: z.string() }).optional(),
+});
+
 export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("hello"), payload: helloPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("text_input"), payload: textInputPayloadSchema }),
@@ -125,6 +136,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ ...envelopeFields, type: z.literal("media_ready"), payload: mediaReadyPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("pong"), payload: pongPayloadSchema }),
   z.object({ ...envelopeFields, type: z.literal("error"), payload: errorPayloadSchema }),
+  z.object({ ...envelopeFields, type: z.literal("scene_status"), payload: sceneStatusPayloadSchema }),
 ]);
 
 export type HelloPayload = z.infer<typeof helloPayloadSchema>;
@@ -143,6 +155,7 @@ export type NudgePayload = z.infer<typeof nudgePayloadSchema>;
 export type PingPayload = z.infer<typeof pingPayloadSchema>;
 export type PongPayload = z.infer<typeof pongPayloadSchema>;
 export type ErrorPayload = z.infer<typeof errorPayloadSchema>;
+export type SceneStatusPayload = z.infer<typeof sceneStatusPayloadSchema>;
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

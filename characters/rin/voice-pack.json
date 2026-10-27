@@ -472,5 +472,26 @@
     "category": "fallback",
     "key": "28c240cbe728ee5a",
     "file": "assets/voice/rin/clips/28c240cbe728ee5a.mp3"
+  },
+  {
+    "text": "好像没换成。这里也挺好的，不是吗。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "4841bec79d5cbc66",
+    "file": "assets/voice/rin/clips/4841bec79d5cbc66.mp3"
+  },
+  {
+    "text": "那个地方……我们换一个吧。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "348f718989c3dcb6",
+    "file": "assets/voice/rin/clips/348f718989c3dcb6.mp3"
+  },
+  {
+    "text": "别急，一个一个来。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "6cabd6a6ee0c375f",
+    "file": "assets/voice/rin/clips/6cabd6a6ee0c375f.mp3"
   }
 ]

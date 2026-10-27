@@ -19,6 +19,11 @@ export type LLMContext = {
    * 会话层同时会禁止本轮推进剧情，因此不计入 trust。
    */
   nudge?: boolean;
+  /**
+   * S6c §1：本轮弹幕命中「换背景」时，追加到 `scene_notes` 的提示
+   * （「对方想换个背景，你这边正在换」）。角色照常回话，扩写与生图在后台进行。
+   */
+  sceneNotes?: string;
 };
 
 /** 音频端口：方法都必须接收 AbortSignal。 */
@@ -84,4 +89,25 @@ export type MediaContext = {
  */
 export type MediaPort = {
   preset(media: Media, ctx: MediaContext, signal: AbortSignal): Promise<PresetMediaResult>;
+};
+
+/**
+ * S6c §2：场景扩写端口。
+ * 把观众在弹幕里「换背景」的请求扩写成结构化场景描述（SceneSpec）或拒绝。
+ * 实现：真实（复用 LLM 适配器，提示词用 `characters/<id>/scene.v1.md`）或 Mock（关键词查表）。
+ */
+export type SceneWriterPort = {
+  write(ctx: SceneWriteContext, signal: AbortSignal): Promise<unknown>;
+};
+
+/** S6c §2：场景扩写的输入。 */
+export type SceneWriteContext = {
+  /** 当前会话的角色包（决定提示词与 Mock 查表）。 */
+  pack: import("./characters/pack").Pack;
+  /** 观众在弹幕里说的原话。 */
+  userText: string;
+  /** 当前剧情阶段 label（如「下播之后」）。 */
+  nodeLabel: string;
+  /** 当前背景描述（如「卧室」「咖啡馆」）。 */
+  currentScene: string;
 };

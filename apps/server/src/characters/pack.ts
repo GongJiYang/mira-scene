@@ -20,8 +20,17 @@ export const INTENT_SLOTS = ["ask_core", "ask_item", "ask_job", "comfort", "gree
 export type IntentSlot = (typeof INTENT_SLOTS)[number];
 export const intentSlotSchema = z.enum(INTENT_SLOTS);
 
-/** 五类兜底（S6b §2）。 */
-export const FALLBACK_CATEGORIES = ["stt_empty", "stt_failed", "llm_timeout", "turn_failed", "offline"] as const;
+/** 五类兜底（S6b §2）+ 换背景三类（S6c §5）。 */
+export const FALLBACK_CATEGORIES = [
+  "stt_empty",
+  "stt_failed",
+  "llm_timeout",
+  "turn_failed",
+  "offline",
+  "scene_failed",
+  "scene_rejected",
+  "scene_busy",
+] as const;
 export type FallbackCategory = (typeof FALLBACK_CATEGORIES)[number];
 
 /* ------------------------------------------------------------------------------------------------
@@ -49,6 +58,12 @@ const stageSchema = z.object({
   tint: z.string().min(1),
 });
 
+/**
+ * S6c §3：构图锁（英文常量，由代码原样追加到生图提示词，LLM 无法修改）。
+ * 写在 pack.json 的 `sceneLock` 字段；缺省按角色给默认（rin 的小桌 / yuna 的软垫）。
+ */
+const sceneLockSchema = z.string().min(1);
+
 export const packFileSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
@@ -64,6 +79,8 @@ export const packFileSchema = z.object({
   revealIntents: z.array(intentSlotSchema).min(1),
   media: mediaSlotsSchema,
   stage: stageSchema,
+  /** S6c §3：构图锁（英文常量）。 */
+  sceneLock: sceneLockSchema,
 });
 
 /* ------------------------------------------------------------------------------------------------
@@ -98,6 +115,11 @@ export const contentFileSchema = z.object({
   fallback: z.record(z.string(), z.string().min(1)),
   /** 生图提示词模板（含 `{{conversation}}`，S6b §5.5）。 */
   imagePrompt: z.string().min(1),
+  /**
+   * S6c §1：换背景触发关键词（正则片段）。
+   * 命中与否都不影响这一轮的正常对话：角色照常回话；命中时额外启动场景任务。
+   */
+  sceneTriggers: z.string().min(1),
 });
 
 /* ------------------------------------------------------------------------------------------------
@@ -131,6 +153,10 @@ export type Pack = {
   /** 意图槽位 → 正则片段（编译后的 RegExp）。 */
   intentPatterns: ReadonlyArray<readonly [IntentSlot, RegExp]>;
   imagePrompt: string;
+  /** S6c §3：构图锁（英文常量，由代码原样追加到生图提示词）。 */
+  sceneLock: string;
+  /** S6c §1：换背景触发关键词（编译后的 RegExp）。 */
+  sceneTriggerPattern: RegExp;
   /** 角色包目录绝对路径（便于记录来源）。 */
   dir: string;
 };
@@ -154,6 +180,12 @@ function crossCheck(content: z.infer<typeof contentFileSchema>, revealIntents: r
     if (!INTENT_SLOTS.includes(slot)) return `revealIntents 含非法意图 ${slot}`;
   }
   if (!content.imagePrompt.includes("{{conversation}}")) return "imagePrompt 缺少 {{conversation}} 占位符";
+  // S6c §1：sceneTriggers 必须是合法正则。
+  try {
+    new RegExp(content.sceneTriggers);
+  } catch {
+    return `sceneTriggers 不是合法正则：${content.sceneTriggers}`;
+  }
   return null;
 }
 
@@ -236,6 +268,8 @@ export function parsePack(input: {
       fallback: contentParsed.data.fallback as Record<FallbackCategory, string>,
       intentPatterns,
       imagePrompt: contentParsed.data.imagePrompt,
+      sceneLock: packParsed.data.sceneLock,
+      sceneTriggerPattern: new RegExp(contentParsed.data.sceneTriggers),
       dir: input.dir,
     },
   };
@@ -258,6 +292,19 @@ function findRepoRoot(start: string): string {
 /** 仓库根下的 `characters/` 目录。 */
 export function charactersRoot(): string {
   return join(findRepoRoot(dirname(fileURLToPath(import.meta.url))), "characters");
+}
+
+/** 仓库根下的客户端静态目录 `apps/client/public/`（背景等舞台资源按 URL 从这里解析）。 */
+export function clientPublicRoot(): string {
+  return join(findRepoRoot(dirname(fileURLToPath(import.meta.url))), "apps", "client", "public");
+}
+
+/**
+ * S6c §4：把舞台背景的公开 URL（如 `/characters/yuna/bg-desktop.jpg`、`/stage/assets/raw/b1_bg_main_h.png`）
+ * 解析成 `apps/client/public/` 下的本地文件路径，作为参考图生图的输入。
+ */
+export function resolveClientAssetPath(publicUrl: string): string {
+  return join(clientPublicRoot(), publicUrl.replace(/^\/+/, ""));
 }
 
 /** 解析提示词文件（与 prompts/loader.ts 同规则：取版本 + STATIC/DYNAMIC 段落）。 */

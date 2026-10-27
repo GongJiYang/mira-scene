@@ -19,6 +19,7 @@ import {
   type ConnectionStatus,
 } from "../core/store";
 import { useStoryMediaStore } from "../core/storyMediaLink";
+import { useSceneStatusStore } from "../live/scene/status";
 import type { ClientState, Phase, Visual } from "../state";
 import {
   initialPerformanceState,
@@ -81,6 +82,10 @@ export type StageView = {
   fallbackSubtitle: string | null;
   /** S6b §2：原始错误信息只在 `?debug=1` 时显示。 */
   debugMode: boolean;
+  /** S6c §5：换背景状态条（writing / generating / ready / failed / rejected / busy）。 */
+  sceneStatus: { kind: string; label?: string };
+  /** S6c §5：当前生效的背景（ready 后换成新背景；null 用角色包默认背景）。 */
+  sceneBackground: { desktop: string; mobile: string } | null;
 };
 
 export type StageViewModel = StageView & { intents: Intents; reports: StageReports };
@@ -97,6 +102,10 @@ export type StageViewInput = {
   characterId?: string;
   fallbackSubtitle?: string | null;
   debugMode?: boolean;
+  /** S6c §5：换背景状态条。 */
+  sceneStatus?: { kind: string; label?: string };
+  /** S6c §5：当前生效的背景。 */
+  sceneBackground?: { desktop: string; mobile: string } | null;
 };
 
 /** S6b §2：`?debug=1` 才显示原始错误信息。 */
@@ -145,6 +154,8 @@ export function toStageView(input: StageViewInput): StageView {
     characterId: input.characterId ?? DEFAULT_CHANNEL_ID,
     fallbackSubtitle: input.fallbackSubtitle ?? null,
     debugMode: input.debugMode ?? false,
+    sceneStatus: input.sceneStatus ?? { kind: "idle" },
+    sceneBackground: input.sceneBackground ?? null,
   };
 }
 
@@ -159,6 +170,8 @@ export function useStageViewModel(): StageViewModel {
   const pendingNudge = useStore(useNudgeStore, (state) => state.pending);
   const characterId = useStore(useChannelStore, (state) => state.characterId);
   const fallbackSubtitle = useStore(useFallbackStore, (state) => state.subtitle);
+  const sceneStatus = useSceneStatusStore((state) => state.display);
+  const sceneBackground = useSceneStatusStore((state) => state.backgroundUrl);
   const debugMode = useDebugMode();
 
   return {
@@ -174,6 +187,8 @@ export function useStageViewModel(): StageViewModel {
       characterId,
       fallbackSubtitle,
       debugMode,
+      sceneStatus,
+      sceneBackground,
     }),
     intents,
     reports,

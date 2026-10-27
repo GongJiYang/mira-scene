@@ -585,3 +585,49 @@ body,
     opacity: 1;
   }
 }
+
+/* S6c §5：换背景转场状态条（右上角） */
+.live-scene-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  background: rgba(15, 10, 20, 0.82);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text);
+  font-size: 12px;
+  font-family: var(--live-pixel-font);
+  z-index: 25;
+  animation: live-scene-status-pulse 1.2s ease-in-out infinite;
+}
+
+.live-scene-status[data-kind="ready"] {
+  border-color: var(--live-accent-2);
+  animation: none;
+}
+
+.live-scene-status[data-kind="failed"],
+.live-scene-status[data-kind="rejected"],
+.live-scene-status[data-kind="busy"] {
+  border-color: var(--live-accent);
+  animation: none;
+}
+
+@keyframes live-scene-status-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* S6c §5：新背景 1.2 秒交叉淡入（.live-bg-crossfade 从 0 淡入到 1，旧图层留在下方） */
+.live-bg[data-bg-layer="top"].live-bg-crossfade {
+  z-index: 1;
+  animation-name: live-bg-fade-in;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes live-bg-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

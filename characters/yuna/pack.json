@@ -21,5 +21,6 @@
       "landscape": "/characters/yuna/clip_offline.webm"
     },
     "tint": "#2a1a2e"
-  }
+  },
+  "sceneLock": "Use the reference image only for camera: keep the exact same low floor-level camera height, lens, perspective and horizon line, and keep a large empty round cushion on the floor at the exact same position and size in the lower center, empty, for a girl to crouch on."
 }

@@ -31,6 +31,12 @@ export const UI_TEXT = {
   micUnavailable: "麦克风不可用",
   /** S6f §2：文字输入时的倾听提示。 */
   listening: "正在听",
+  /** S6c §5：换背景转场状态条（中性占位）。 */
+  sceneTransition: "正在换背景…",
+  /** S6c §5：换背景失败 / 拒绝 / 忙时的状态条文字（保持原背景）。 */
+  sceneFailed: "背景没换成",
+  /** S6c §5：换背景成功后的状态条文字（短暂显示后消失）。 */
+  sceneReady: "背景已换",
 } as const;
 
 export type UiText = typeof UI_TEXT;

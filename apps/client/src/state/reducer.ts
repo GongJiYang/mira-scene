@@ -85,7 +85,8 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
   }
 
   // 剧情层消息（D27）与心跳：不按 turnId 过滤，本批原样忽略；C 状态机与心跳在 G1-c。
-  if (message.type === "media_ready" || message.type === "pong") return state;
+  // S6c §5：scene_status 也是剧情层消息，不经过 A 的 turnId 过滤。
+  if (message.type === "media_ready" || message.type === "pong" || message.type === "scene_status") return state;
 
   // S6b-fix3 §1：只有会话级 error（scope === "session"）跳过 turnId 过滤；
   // 轮次级 error（llm_timeout / turn_failed 等）回到 D3 过滤之后——

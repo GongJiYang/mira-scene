@@ -328,5 +328,26 @@
     "category": "fallback",
     "key": "09deab7a0a8d105c",
     "file": "assets/voice/yuna/clips/09deab7a0a8d105c.mp3"
+  },
+  {
+    "text": "诶，背景卡住了，没换成……先凑合一下吧。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "9f3b6e729336ff88",
+    "file": "assets/voice/yuna/clips/9f3b6e729336ff88.mp3"
+  },
+  {
+    "text": "这个不行哦，换一个别的吧。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "6f71dc9db3703404",
+    "file": "assets/voice/yuna/clips/6f71dc9db3703404.mp3"
+  },
+  {
+    "text": "等等，上一个还没换完呢。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "dc45dcc06e729b4a",
+    "file": "assets/voice/yuna/clips/dc45dcc06e729b4a.mp3"
   }
 ]

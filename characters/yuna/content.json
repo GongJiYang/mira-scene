@@ -164,7 +164,11 @@
     "stt_failed": "啊，卡了卡了，网络又抽风了……你刚说啥？",
     "llm_timeout": "……抱歉，刚刚发呆了。你说到哪了？",
     "turn_failed": "直播间好像卡住了，等我一下……好了，你继续。",
-    "offline": "诶？画面卡住了……还在吗？"
+    "offline": "诶？画面卡住了……还在吗？",
+    "scene_failed": "诶，背景卡住了，没换成……先凑合一下吧。",
+    "scene_rejected": "这个不行哦，换一个别的吧。",
+    "scene_busy": "等等，上一个还没换完呢。"
   },
+  "sceneTriggers": "换背景|换场景|换个地方|换个背景|背景换成|背景改成|场景换成|带我去|想看你在|去.{0,6}(吧|呀|看看)",
   "imagePrompt": "Anime illustration, no people, no readable text, no logos. A slightly blurry, low-resolution old webcam screenshot from a beginner girl streamer's very first stream years ago: the same small bedroom but much plainer and tidier, a single cheap desk lamp, bare walls, one plush bunny, a lavender drink can with a small white heart, soft nostalgic color grading. Details inspired by the recent conversation: {{conversation}}"
 }
