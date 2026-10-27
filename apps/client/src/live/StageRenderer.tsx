@@ -45,27 +45,29 @@ export const SCREENSHOT_FALLBACK_URL = "/characters/yuna/photo_first_stream.png"
 /**
  * S6c §5：背景交叉淡入。背景变化时保留旧图一层，新图在其上从 0 淡入到 1（1.2 秒），
  * 淡入结束后卸掉旧层。URL 不变时只是一层静态背景，不触发动画。
+ *
+ * S6l-fix1 §2：`animate=false`（刷新恢复）时直接换图，不播淡入动画。
  */
-function CrossfadeBackground({ url }: { url: string }) {
-  const [layers, setLayers] = useState<{ base: string; top: string }>({ base: url, top: url });
+function CrossfadeBackground({ url, animate }: { url: string; animate: boolean }) {
+  const [layers, setLayers] = useState<{ base: string; top: string; animate: boolean }>({ base: url, top: url, animate: false });
 
   useEffect(() => {
     setLayers((previous) => {
       if (previous.top === url) return previous;
       // 新图叠在旧图上从 0 淡入；旧图作为底色保留到动画结束。
-      return { base: previous.top, top: url };
+      return { base: previous.top, top: url, animate };
     });
-  }, [url]);
+  }, [url, animate]);
 
   return (
     <>
       <div className="live-bg" data-bg-layer="base" style={{ backgroundImage: `url(${layers.base})` }} />
       <div
         key={layers.top}
-        className="live-bg live-bg-crossfade"
+        className={layers.animate ? "live-bg live-bg-crossfade" : "live-bg"}
         data-bg-layer="top"
         style={{ backgroundImage: `url(${layers.top})`, animationDuration: `${BG_CROSSFADE_MS}ms` }}
-        onAnimationEnd={() => setLayers((previous) => ({ base: previous.top, top: previous.top }))}
+        onAnimationEnd={() => setLayers((previous) => ({ base: previous.top, top: previous.top, animate: false }))}
       />
     </>
   );
@@ -126,6 +128,7 @@ function Live2dStage({
   performance,
   visual,
   background,
+  backgroundAnimate,
   orientation,
 }: {
   phase: StagePhase;
@@ -133,6 +136,7 @@ function Live2dStage({
   performance: StagePerformance;
   visual: Visual;
   background: string;
+  backgroundAnimate: boolean;
   orientation: StageOrientation;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -283,7 +287,7 @@ function Live2dStage({
         transitionDuration: `${CAMERA_EASE_MS}ms`,
       }}
     >
-      <CrossfadeBackground url={background} />
+      <CrossfadeBackground url={background} animate={backgroundAnimate} />
       {/* S6b §3：脚下柔和的椭圆接触阴影（宽约人物宽度 70%，半透明深紫），避免人物悬空。 */}
       <div className="live-contact-shadow" data-testid="contact-shadow" aria-hidden />
       <canvas ref={canvasRef} className="live-live2d-canvas" data-testid="yuna-canvas" />
@@ -359,6 +363,8 @@ export type StageRendererProps = {
   orientation: StageOrientation;
   /** 背景图（来自 pack.stage.background，按方向选）。 */
   backgroundUrl: string;
+  /** S6l-fix1 §2：刷新恢复时 false —— 直接换背景，不播交叉淡入。 */
+  animateBackground: boolean;
   /** 当前轮次（S6g-A §3.4：驱动视频打断）。 */
   turnId: number;
 };
@@ -372,6 +378,7 @@ export function StageRenderer(props: StageRendererProps) {
         performance={props.performance}
         visual={props.visual}
         background={props.backgroundUrl}
+        backgroundAnimate={props.animateBackground}
         orientation={props.orientation}
       />
       <StageStoryMedia storyMedia={props.storyMedia} turnId={props.turnId} />

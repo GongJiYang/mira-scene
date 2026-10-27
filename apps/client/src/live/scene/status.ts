@@ -24,11 +24,17 @@ type SceneStatusSlice = {
   display: SceneStatusDisplay;
   /** 当前生效的背景（初始为角色包默认背景，ready 后换成新背景）。 */
   backgroundUrl: { desktop: string; mobile: string } | null;
+  /**
+   * S6l-fix1 §2：本次背景是「直接切换」（刷新恢复）还是「交叉淡入」（实时换背景成功）。
+   * `true` 时 Live 跳过淡入动画，直接显示。
+   */
+  direct: boolean;
 };
 
 export const useSceneStatusStore = create<SceneStatusSlice>()(() => ({
   display: { kind: "idle" },
   backgroundUrl: null,
+  direct: false,
 }));
 
 /** 处理服务端 scene_status 消息（由 connection 调用）。 */
@@ -45,6 +51,7 @@ export function handleSceneStatus(payload: SceneStatusPayload): void {
         useSceneStatusStore.setState({
           display: { kind: "ready", label: payload.label ?? "", urls: payload.urls },
           backgroundUrl: payload.urls,
+          direct: false,
         });
       }
       break;
@@ -67,7 +74,17 @@ export function handleSceneStatus(payload: SceneStatusPayload): void {
   }
 }
 
+/**
+ * S6l-fix1 §2：刷新恢复——直接切到该背景。
+ * 走 scene_status ready 的同一套「应用背景」逻辑（设置 backgroundUrl），但：
+ * - 不显示「生成中」状态条（display 保持 idle）；
+ * - 标记 `direct: true`，Live 据此跳过交叉淡入动画。
+ */
+export function applyResumeBackground(urls: { desktop: string; mobile: string }): void {
+  useSceneStatusStore.setState({ backgroundUrl: urls, direct: true });
+}
+
 /** 切频道时复位（由 controller 调用）。 */
 export function resetSceneStatus(): void {
-  useSceneStatusStore.setState({ display: { kind: "idle" }, backgroundUrl: null });
+  useSceneStatusStore.setState({ display: { kind: "idle" }, backgroundUrl: null, direct: false });
 }

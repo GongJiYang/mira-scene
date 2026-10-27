@@ -1,5 +1,8 @@
 import type { ServerMessage } from "@mira/protocol";
-import { createReactionSfx, installReactionSfx, reactionSfx, REACTION_SFX_URLS, type ReactionPlayback } from "./reactionSfx";
+import { createReactionSfx, installReactionSfx, reactionSfx, type ReactionPlayback } from "./reactionSfx";
+import { createLocalAudioChannel } from "./localAudio";
+import { reactionSfxUrls } from "../live/characters";
+import { currentChannelId } from "../live/channel";
 import { createAnalyserLevelSource, type AudioLevelSource } from "./audioLevel";
 import { dispatchPerformance } from "./performanceClock";
 import { pickNextPlayable } from "./scheduler";
@@ -289,7 +292,9 @@ function playReaction(url: string): ReactionPlayback | null {
 
 installReactionSfx(
   createReactionSfx({
-    urls: REACTION_SFX_URLS,
+    // S6l-fix1 §5：按当前角色取反应音（`/characters/<id>/sfx/react-*.mp3`）；
+    // 某角色没有反应音时返回空数组 → 不播（不回退到全局文件）。
+    urls: () => reactionSfxUrls(currentChannelId()),
     random: Math.random,
     // D34：反应音的定时器接到统一的时间线，并带上 turnId 以便整轮取消。
     setTimer: (callback, ms, turnId) =>
@@ -298,6 +303,101 @@ installReactionSfx(
     play: playReaction,
   }),
 );
+
+/* ------------------------------------------------------------------------------------------------
+ * S6l-fix1 §6：本地音频（兜底语音）经主通道播放（复用共享 AudioContext），单一音源仲裁。
+ * 原先 fallback.ts 的 playLocalAudio 每次新建 AudioContext 旁路播放、不受打断控制，导致叠加。
+ * ---------------------------------------------------------------------------------------------- */
+
+/** 本地语音的播放句柄（用共享 context 播放，可停止）。 */
+type LocalVoiceHandle = { source: AudioBufferSourceNode | null; gain: GainNode; stopped: boolean; stop(): void };
+let activeLocalVoice: LocalVoiceHandle | null = null;
+
+function teardownLocalVoice(handle: LocalVoiceHandle | null): void {
+  if (!handle || handle.stopped) return;
+  handle.stopped = true;
+  if (handle.source !== null) {
+    handle.source.onended = null;
+    try {
+      handle.source.stop();
+    } catch {
+      // 已结束的 source 调用 stop() 会抛错，忽略。
+    }
+    handle.source.disconnect();
+  }
+  handle.gain.disconnect();
+  if (activeLocalVoice === handle) activeLocalVoice = null;
+}
+
+/** §6：用共享 AudioContext 播放一段本地语音（fetch → decode → 播放）。 */
+function playLocalVoiceAudio(url: string): LocalVoiceHandle | null {
+  const audioContext = ensureContext();
+  if (!audioContext) return null;
+  teardownLocalVoice(activeLocalVoice);
+
+  const gain = audioContext.createGain();
+  gain.connect(audioContext.destination);
+  // 立即登记句柄（source 待解码完成后再填）：stop() 期间置 stopped，解码完成后不再播放。
+  const handle: LocalVoiceHandle = {
+    source: null,
+    gain,
+    stopped: false,
+    stop() {
+      teardownLocalVoice(handle);
+    },
+  };
+  activeLocalVoice = handle;
+
+  void fetch(url)
+    .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error(`本地语音 ${response.status}`))))
+    .then((buffer) => audioContext.decodeAudioData(buffer))
+    .then((decoded) => {
+      if (handle.stopped) return;
+      const source = audioContext.createBufferSource();
+      source.buffer = decoded;
+      source.connect(gain);
+      handle.source = source;
+      source.onended = () => {
+        if (activeLocalVoice === handle) {
+          activeLocalVoice = null;
+          gain.disconnect();
+        }
+      };
+      source.start();
+    })
+    .catch(() => {
+      // 文件不存在 / 解码失败 / 自动播放被拒：静默（只保留字幕）。
+      if (!handle.stopped) {
+        handle.stopped = true;
+        gain.disconnect();
+        if (activeLocalVoice === handle) activeLocalVoice = null;
+      }
+    });
+
+  return handle;
+}
+
+/** §6：本地语音的单一音源仲裁（beat 播放期间排队；打断全停；叠加被记录）。 */
+const localAudio = createLocalAudioChannel({
+  play: playLocalVoiceAudio,
+  onOverlap: () => pushEvent("audio_overlap"),
+});
+
+/** 打断执行器 / 其它模块入口：播放本地兜底语音（经主通道）。 */
+export function playLocalVoice(url: string): void {
+  localAudio.request(url);
+}
+
+/** 打断执行器入口 ③：停止本地兜底语音并清空队列。 */
+export function stopLocalVoice(): void {
+  localAudio.stop();
+  teardownLocalVoice(activeLocalVoice);
+}
+
+/** 打断执行器用：本地语音是否在播。 */
+export function isLocalVoicePlaying(): boolean {
+  return localAudio.isPlaying() || activeLocalVoice !== null;
+}
 
 function schedule(): void {
   const state = getStageState();
@@ -311,6 +411,8 @@ function schedule(): void {
     dispatch({ type: "BEAT_AUDIO_STARTED", turnId, seq: next.seq });
     // §5：本轮开始出真实 beat 了，反应音淡出。
     reactionSfx()?.fadeOut();
+    // S6l-fix1 §6：beat 音频开始 → 停掉正在播的本地兜底语音。
+    localAudio.beatStarted();
     // §1：无声 beat 没有音频，口型保持闭合。
     dispatchMouth("closed", false);
     const seq = next.seq;
@@ -321,6 +423,8 @@ function schedule(): void {
       run: () => {
         silentCommandId = null;
         dispatch({ type: "BEAT_AUDIO_ENDED", turnId, seq });
+        // S6l-fix1 §6：beat 结束 → 播放排队的兜底语音（若有）。
+        localAudio.beatEnded();
         schedule();
       },
     });
@@ -347,6 +451,8 @@ function schedule(): void {
     stopLevelLoop();
     dispatchMouth("closed", false);
     dispatch({ type: "BEAT_AUDIO_ENDED", turnId, seq: next.seq });
+    // S6l-fix1 §6：beat 结束 → 播放排队的兜底语音（若有）。
+    localAudio.beatEnded();
     schedule();
   };
   source = nextSource;
@@ -355,6 +461,8 @@ function schedule(): void {
   dispatch({ type: "BEAT_AUDIO_STARTED", turnId, seq: next.seq });
   // §5：第一个真实 beat 开始播放 → 反应音淡出（80ms）。
   reactionSfx()?.fadeOut();
+  // S6l-fix1 §6：beat 音频开始 → 停掉正在播的本地兜底语音。
+  localAudio.beatStarted();
   // §6：第一个 beat 的音频开始播放 → 上报 playback_started。
   if (!playbackReported) {
     playbackReported = true;
@@ -416,6 +524,8 @@ useStageStore.subscribe((state) => {
     stopPlayback();
     // §5：任何一次打断都让反应音立即停止。
     reactionSfx()?.stop();
+    // S6l-fix1 §6：打断同时停掉本地兜底语音并清空队列。
+    stopLocalVoice();
     turnStartedAt = nowMs();
     playbackReported = false;
     pushEvent(`audio stop t${observedTurnId}`);

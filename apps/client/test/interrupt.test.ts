@@ -39,6 +39,7 @@ describe("interruptViolations：契约后置条件", () => {
   const ok: InterruptSnapshot = {
     audioPlaying: false,
     reactionActive: false,
+    localVoiceActive: false,
     mouth: "closed",
     subtitle: null,
     oldTurnCommands: 0,
@@ -53,6 +54,7 @@ describe("interruptViolations：契约后置条件", () => {
   it("逐条检测", () => {
     expect(interruptViolations({ ...ok, audioPlaying: true })).toContain("音频仍在播放");
     expect(interruptViolations({ ...ok, reactionActive: true })).toContain("反应音未停止");
+    expect(interruptViolations({ ...ok, localVoiceActive: true })).toContain("本地兜底语音未停止");
     expect(interruptViolations({ ...ok, mouth: "open" })).toContain("口型未闭合");
     expect(interruptViolations({ ...ok, subtitle: "还在说" })).toContain("字幕未清空");
     expect(interruptViolations({ ...ok, oldTurnCommands: 3 })).toContain("旧轮次命令残留 3 条");
@@ -63,7 +65,7 @@ describe("interruptViolations：契约后置条件", () => {
 function makeDeps(overrides: Partial<InterruptDeps> = {}) {
   const trace: string[] = [];
   const logs: { t: number; step: string; turnId: number }[] = [];
-  const state = { audioPlaying: true, reactionActive: true, mouth: "open" as const, subtitle: "台词" as string | null };
+  const state = { audioPlaying: true, reactionActive: true, localVoiceActive: true, mouth: "open" as const, subtitle: "台词" as string | null };
   let now = 0;
   const deps: InterruptDeps = {
     now: () => (now += 1),
@@ -71,6 +73,7 @@ function makeDeps(overrides: Partial<InterruptDeps> = {}) {
       trace.push("stopAudio");
       state.audioPlaying = false;
       state.reactionActive = false;
+      state.localVoiceActive = false;
     },
     forceMouthClosed: () => {
       trace.push("forceMouthClosed");
@@ -87,6 +90,7 @@ function makeDeps(overrides: Partial<InterruptDeps> = {}) {
     log: (entry) => logs.push(entry),
     audioPlaying: () => state.audioPlaying,
     reactionActive: () => state.reactionActive,
+    localVoiceActive: () => state.localVoiceActive,
     mouth: () => state.mouth,
     subtitle: () => state.subtitle,
     oldTurnCommandCount: () => 0,

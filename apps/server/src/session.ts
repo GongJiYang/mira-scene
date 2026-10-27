@@ -21,11 +21,13 @@ import {
 } from "@mira/protocol";
 import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, type Fault } from "./adapters/faults";
 import { isAbortError, throwIfAborted } from "./abort";
-import { defaultCharacterId, resolveClientAssetPath, type FallbackCategory, type Pack } from "./characters/pack";
+import { clientPublicRoot, defaultCharacterId, type FallbackCategory, type Pack } from "./characters/pack";
+import { defaultOutDir } from "./adapters/media/imageGen";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
 import type { LLMHistoryEntry, MediaPort, Ports, SceneWriterPort, TTSAudio, TTSPort, TtsOptions } from "./ports";
 import { detectSceneRequest } from "./scene/detect";
+import { resolveReferencePath, type ReferenceDirs } from "./scene/referencePath";
 import { runSceneJob, type SceneRunnerDeps } from "./scene/runner";
 import { initialSceneJobState, admitSceneJob, sceneJobReducer, type SceneJobState } from "./scene/job";
 import { createInitialScene } from "./story";
@@ -137,6 +139,11 @@ export type SessionDeps = Ports & {
   sceneImageGen?: SceneRunnerDeps["image"];
   /** S6c §4：参考图路径（当前背景）。 */
   sceneReferencePaths?: SceneRunnerDeps["referencePaths"];
+  /**
+   * S6l-fix1 §0：参考图路径解析用的目录（`/generated/` → 生成目录；其余 → 客户端静态目录）。
+   * 缺省按当前进程环境解析（index.ts 不需额外注入）。
+   */
+  referenceDirs?: ReferenceDirs;
 };
 
 export type SessionManager = {
@@ -149,6 +156,29 @@ const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 1000;
 const DEFAULT_SESSION_TURN_LIMIT = 30;
 const DEFAULT_DAILY_TURN_LIMIT = 300;
+
+/** S6l-fix1 §1：transcript 只保留最近这么多条对话。 */
+export const TRANSCRIPT_LIMIT = 40;
+
+/**
+ * S6l-fix1 §1：`session` 消息里除 snapshot 之外的恢复数据（纯函数，便于单测）。
+ * - `background`：当前正在显示的生成背景（`sceneJob.lastReadyUrls` + `lastReadyLabel`）；没换过为 null。
+ * - `transcript`：最近最多 `TRANSCRIPT_LIMIT` 条对话（user / assistant 原样，assistant 的多句按换行保留）。
+ */
+export function resumePayload(session: {
+  sceneJob: Pick<SceneJobState, "lastReadyLabel" | "lastReadyUrls">;
+  history: readonly LLMHistoryEntry[];
+}): {
+  background: { label: string; urls: { desktop: string; mobile: string } } | null;
+  transcript: Array<{ role: "user" | "assistant"; text: string }>;
+} {
+  const urls = session.sceneJob.lastReadyUrls;
+  const background =
+    urls !== undefined ? { label: session.sceneJob.lastReadyLabel ?? "", urls } : null;
+  const recent = session.history.slice(-TRANSCRIPT_LIMIT);
+  const transcript = recent.map((entry) => ({ role: entry.role, text: entry.text }));
+  return { background, transcript };
+}
 
 /** 自然日（本地时区）→ 用于每日限额重置。 */
 function localDayKey(ms: number): string {
@@ -208,6 +238,13 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     { preset: (item) => Promise.resolve({ url: `/stage/photos/${item.id}.png`, status: "ready" as const }) };
   // S6b-fix1 §1：音色解析（按角色包）。缺省不解析（mock 旧行为）。
   const resolveVoiceId = deps.resolveVoiceId ?? (() => undefined);
+  // S6l-fix1 §0：参考图路径解析目录。生成目录优先用生图配置里的 outDir（与落盘位置一致），
+  // 否则按进程环境解析；客户端静态根固定。
+  const referenceDirs: ReferenceDirs =
+    deps.referenceDirs ?? {
+      generatedDir: deps.sceneImageGen?.outDir ?? defaultOutDir(),
+      clientPublicRoot: clientPublicRoot(),
+    };
   // 全站每日计数：内存保存，跨自然日重置。
   const daily = { day: localDayKey(clock()), count: 0 };
 
@@ -428,8 +465,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
               ? { desktop: session.sceneJob.lastReadyUrls.desktop, mobile: session.sceneJob.lastReadyUrls.mobile }
               : { desktop: session.pack.stage.background.landscape, mobile: session.pack.stage.background.portrait };
             const referencePaths = session.sceneReferencePaths ?? {
-              desktop: resolveClientAssetPath(currentBg.desktop),
-              mobile: resolveClientAssetPath(currentBg.mobile),
+              desktop: resolveReferencePath(currentBg.desktop, referenceDirs),
+              mobile: resolveReferencePath(currentBg.mobile, referenceDirs),
             };
             // S6c-fix1 §7：currentScene 传当前背景的描述（上次成功的 label，否则角色包默认场景描述），不是节点 id。
             const currentScene = session.sceneJob.lastReadyLabel ?? session.pack.nodes[session.scene.node].label;
@@ -466,6 +503,12 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
               } else {
                 // failed / rejected：下一轮 scene_notes 提一句「刚才背景没换成」。
                 session.sceneJob = { ...session.sceneJob, lastFailed: true };
+                // S6l-fix1 §0：换背景失败 / 被拒写进错误统计（不含 Key、不含完整提示词）。
+                if (outcome.kind === "failed") {
+                  logTurn("scene_failed", { error: outcome.error });
+                } else {
+                  logTurn("scene_rejected", { note: outcome.note });
+                }
               }
             }).catch(() => undefined);
           }
@@ -721,7 +764,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     session.send = send;
     session.lastActiveAt = clock();
 
-    send(buildEnvelope(session, session.lastTurnId, "session", { snapshot: session.scene }));
+    send(buildEnvelope(session, session.lastTurnId, "session", { snapshot: session.scene, ...resumePayload(session) }));
   }
 
   function handleInterrupt(session: Session, message: Extract<ClientMessage, { type: "interrupt" }>): void {

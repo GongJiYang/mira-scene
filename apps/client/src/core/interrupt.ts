@@ -57,6 +57,8 @@ export function interruptPlan(input: InterruptPlanInput): InterruptStep[] {
 export type InterruptSnapshot = {
   audioPlaying: boolean;
   reactionActive: boolean;
+  /** S6l-fix1 §6：本地兜底语音是否还在响。 */
+  localVoiceActive: boolean;
   mouth: MouthShape;
   subtitle: string | null;
   /** 旧 turnId 在时间线里剩余的命令数。 */
@@ -71,6 +73,7 @@ export function interruptViolations(snapshot: InterruptSnapshot): string[] {
   const violations: string[] = [];
   if (snapshot.audioPlaying) violations.push("音频仍在播放");
   if (snapshot.reactionActive) violations.push("反应音未停止");
+  if (snapshot.localVoiceActive) violations.push("本地兜底语音未停止");
   if (snapshot.mouth !== "closed") violations.push("口型未闭合");
   if (snapshot.subtitle !== null) violations.push("字幕未清空");
   if (snapshot.oldTurnCommands !== 0) violations.push(`旧轮次命令残留 ${snapshot.oldTurnCommands} 条`);
@@ -101,6 +104,8 @@ export type InterruptDeps = {
   log: (entry: { t: number; step: string; turnId: number }) => void;
   audioPlaying: () => boolean;
   reactionActive: () => boolean;
+  /** S6l-fix1 §6：本地兜底语音是否在响。 */
+  localVoiceActive: () => boolean;
   mouth: () => MouthShape;
   subtitle: () => string | null;
   oldTurnCommandCount: (turnId: number) => number;
@@ -152,6 +157,7 @@ export function createInterruptExecutor(deps: InterruptDeps): PerformInterrupt {
     const snapshot: InterruptSnapshot = {
       audioPlaying: deps.audioPlaying(),
       reactionActive: deps.reactionActive(),
+      localVoiceActive: deps.localVoiceActive(),
       mouth: deps.mouth(),
       subtitle: deps.subtitle(),
       oldTurnCommands: deps.oldTurnCommandCount(turnId),

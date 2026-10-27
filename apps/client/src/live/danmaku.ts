@@ -35,7 +35,12 @@ export type DanmakuAction =
   | { type: "APPEND"; kind: DanmakuKind; text: string; max?: number; nickname?: string | null }
   | { type: "CLEAR" }
   /** S6l §3：切节点时移除旧节点的观众引导弹幕（保留用户自己的弹幕）。 */
-  | { type: "PRUNE_GUIDES" };
+  | { type: "PRUNE_GUIDES" }
+  /**
+   * S6l-fix1 §2：刷新恢复——把历史里 `role:"user"` 的条目按顺序恢复进弹幕列表。
+   * 已存在的同文本用户弹幕不重复添加。
+   */
+  | { type: "RESTORE_USER"; texts: readonly string[] };
 
 /**
  * 追加一条弹幕；超过 `max` 时从**最旧**的一端丢弃（新的在下、旧的向上淡出）。
@@ -58,6 +63,21 @@ export function danmakuReducer(state: DanmakuState, action: DanmakuAction): Danm
       return { items: [], nextId: state.nextId };
     case "PRUNE_GUIDES":
       return { ...state, items: state.items.filter((item) => item.kind !== "guide") };
+    case "RESTORE_USER": {
+      // 只恢复用户自己的弹幕；与已有同文本用户弹幕去重（避免刷新 / 重连后重复）。
+      const seen = new Set(state.items.filter((item) => item.kind === "user").map((item) => item.text));
+      const restored: Danmaku[] = [];
+      let nextId = state.nextId;
+      for (const raw of action.texts) {
+        const text = raw.trim();
+        if (text === "" || seen.has(text)) continue;
+        seen.add(text);
+        restored.push({ id: nextId, kind: "user", text, nickname: null });
+        nextId += 1;
+      }
+      if (restored.length === 0) return state;
+      return { items: [...state.items, ...restored], nextId };
+    }
   }
 }
 

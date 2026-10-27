@@ -13,6 +13,7 @@
  * 纯函数 `offlineDecision` 负责「这次状态变化要不要播」，便于单测；播放外壳在 `installOfflineFallback`。
  */
 import { create } from "zustand";
+import { playLocalVoice } from "./audio";
 import { pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 
 /** 兜底字幕（客户端本地显示，与服务端 beat 无关）。 */
@@ -95,25 +96,14 @@ export function installOfflineFallback(deps: OfflineFallbackDeps): () => void {
   return store.subscribe((slice) => apply(slice.status));
 }
 
-/** 播放一段本地音频；失败（404 / 解码失败 / 无 AudioContext）静默忽略。 */
+/**
+ * 播放一段本地音频。
+ *
+ * S6l-fix1 §6：改为经主通道（`audio.ts` 的共享 AudioContext）播放——不再新建 AudioContext 旁路，
+ * 于是受打断控制、且与 beat 音频互斥（beat 播放期间排队）。失败（404 / 解码失败 / 无 AudioContext）静默忽略。
+ */
 export function playLocalAudio(url: string): void {
-  if (typeof AudioContext === "undefined") return;
-  try {
-    const context = new AudioContext();
-    void fetch(url)
-      .then((response) => (response.ok ? response.arrayBuffer() : null))
-      .then((buffer) => (buffer === null ? null : context.decodeAudioData(buffer)))
-      .then((decoded) => {
-        if (decoded === null) return;
-        const source = context.createBufferSource();
-        source.buffer = decoded;
-        source.connect(context.destination);
-        source.start();
-      })
-      .catch(() => undefined);
-  } catch {
-    // 文件不存在或浏览器不允许：只保留字幕（S6b §2）。
-  }
+  playLocalVoice(url);
 }
 
 /** 把 offline 兜底接到全局 store（由 controller 的 bootstrap 调用）。 */

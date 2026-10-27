@@ -59,7 +59,7 @@ function makeRig(randomValue = 0, urls: string[] = ["a.mp3", "b.mp3"]): Rig {
     },
   };
   const sfx = createReactionSfx({
-    urls,
+    urls: () => urls,
     random: () => randomValue,
     setTimer: scheduler.setTimer,
     clearTimer: scheduler.clearTimer,
@@ -130,11 +130,11 @@ describe("reactionSfx（§5）", () => {
 
 describe("reactionSfx 单例注册", () => {
   beforeEach(() => {
-    installReactionSfx(createReactionSfx({ urls: [], random: () => 0, setTimer: () => 0, clearTimer: () => {}, play: () => null }));
+    installReactionSfx(createReactionSfx({ urls: () => [], random: () => 0, setTimer: () => 0, clearTimer: () => {}, play: () => null }));
   });
 
   it("install / getter", () => {
-    const custom = createReactionSfx({ urls: [], random: () => 0, setTimer: () => 0, clearTimer: () => {}, play: () => null });
+    const custom = createReactionSfx({ urls: () => [], random: () => 0, setTimer: () => 0, clearTimer: () => {}, play: () => null });
     installReactionSfx(custom);
     expect(reactionSfx()).toBe(custom);
   });

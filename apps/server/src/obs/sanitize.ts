@@ -18,6 +18,9 @@ const DETAIL_WHITELIST = new Set([
   "scope",
   "category",
   "input",
+  // S6l-fix1 §0：换背景失败 / 被拒的短原因（已截断到 40；不含 Key 与完整提示词）。
+  "error",
+  "note",
   // 数值
   "bytes",
   "limit",

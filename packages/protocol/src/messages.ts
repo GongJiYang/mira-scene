@@ -54,8 +54,23 @@ export const playbackStartedPayloadSchema = z.object({
   clientMs: z.number().nonnegative(),
 });
 
+/**
+ * S6l-fix1 §1：恢复会话时随 `session` 下发的背景与对话记录。
+ * - `background`：当前正在显示的生成背景（`sceneJob.lastReadyUrls`）；没换过背景为 null。
+ * - `transcript`：最近最多 40 条对话（user / assistant），用于刷新后恢复用户弹幕。
+ * 新会话为 `background: null, transcript: []`；对旧客户端是新增可选字段，不破坏解析。
+ */
+export const sessionTranscriptEntrySchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  text: z.string(),
+});
+
 export const sessionPayloadSchema = z.object({
   snapshot: sceneStateSchema,
+  background: z
+    .object({ label: z.string(), urls: z.object({ desktop: z.string(), mobile: z.string() }) })
+    .nullish(),
+  transcript: z.array(sessionTranscriptEntrySchema).optional(),
 });
 
 export const transcriptPayloadSchema = z.object({
@@ -154,6 +169,7 @@ export type AudioInputPayload = z.infer<typeof audioInputPayloadSchema>;
 export type InterruptPayload = z.infer<typeof interruptPayloadSchema>;
 export type PlaybackStartedPayload = z.infer<typeof playbackStartedPayloadSchema>;
 export type SessionPayload = z.infer<typeof sessionPayloadSchema>;
+export type SessionTranscriptEntry = z.infer<typeof sessionTranscriptEntrySchema>;
 export type TranscriptPayload = z.infer<typeof transcriptPayloadSchema>;
 export type BeatPayload = z.infer<typeof beatPayloadSchema>;
 export type TtsAudioPayload = z.infer<typeof ttsAudioPayloadSchema>;

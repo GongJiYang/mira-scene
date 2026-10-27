@@ -39,6 +39,11 @@ export type ClientCharacter = {
    * S6l §5：戳一下 / 送礼物时 Mock 的情景回应台词（来自 content.json 的 events，原样）。
    */
   eventLines: { poke: readonly string[]; gift: readonly string[] };
+  /**
+   * S6l-fix1 §5：思考时的反应音文件名（放在 `/characters/<id>/sfx/` 下）。
+   * 空数组表示该角色没有反应音 → 不播（不回退到全局文件）。
+   */
+  reactionSfxFiles: readonly string[];
 };
 
 /** D43：只剩忧奈一个角色（Live2D）。 */
@@ -74,6 +79,7 @@ export const CLIENT_CHARACTERS: readonly ClientCharacter[] = [
       poke: ["干嘛戳我。", "再戳要收费了哦。"],
       gift: ["诶，谢谢你的礼物！", "下播了还送，你人也太好了吧。"],
     },
+    reactionSfxFiles: ["react-hmm.mp3", "react-mm.mp3", "react-ah.mp3"],
   },
 ];
 
@@ -88,4 +94,17 @@ export function findCharacter(id: string): ClientCharacter | undefined {
 
 export function characterOrDefault(id: string): ClientCharacter {
   return findCharacter(id) ?? (VISIBLE_CHARACTERS[0] as ClientCharacter);
+}
+
+/** S6l-fix1 §5：反应音文件名清单（供测试 / 文档引用；实际 URL 由 `reactionSfxUrls` 拼）。 */
+export const REACTION_SFX_FILES = ["react-hmm.mp3", "react-mm.mp3", "react-ah.mp3"] as const;
+
+/**
+ * S6l-fix1 §5：按角色取反应音 URL（`/characters/<id>/sfx/react-*.mp3`）。
+ * 某角色没有反应音（未声明或声明为空）→ 返回空数组（不播，不回退到全局文件）。
+ */
+export function reactionSfxUrls(id: string): string[] {
+  const character = findCharacter(id);
+  if (!character) return [];
+  return character.reactionSfxFiles.map((file) => `/characters/${character.id}/sfx/${file}`);
 }

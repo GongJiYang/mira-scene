@@ -1,6 +1,6 @@
 import type { Media } from "@mira/protocol";
 import { create } from "zustand";
-import { forceMouthClosed, isAudioPlaying, isReactionActive, stopPlaybackNow } from "./audio";
+import { forceMouthClosed, isAudioPlaying, isLocalVoicePlaying, isReactionActive, stopLocalVoice, stopPlaybackNow } from "./audio";
 import { createConnection, type Connection } from "./connection";
 import { installOfflineFallbackFor, useFallbackStore } from "./fallback";
 import { createInterruptExecutor, type InterruptReason } from "./interrupt";
@@ -75,6 +75,8 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
     stopAudio: () => {
       stopPlaybackNow();
       reactionSfx()?.stop();
+      // S6l-fix1 §6：打断同时停掉本地兜底语音（不再旁路播放）。
+      stopLocalVoice();
     },
     forceMouthClosed,
     cancelTurn: (turnId) => timeline.cancelTurn(turnId),
@@ -87,6 +89,7 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
     log: (entry) => pushTimelineLog({ t: entry.t, kind: "interrupt", key: entry.step, turnId: entry.turnId }),
     audioPlaying: () => isAudioPlaying(),
     reactionActive: () => isReactionActive(),
+    localVoiceActive: () => isLocalVoicePlaying(),
     mouth: () => usePerformanceStore.getState().mouth,
     subtitle: () => getStageState().subtitle,
     oldTurnCommandCount: (turnId) => timelineCountForTurn(timeline.state(), turnId),
