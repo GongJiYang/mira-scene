@@ -4,9 +4,9 @@ import { createDeepSeekLlm } from "../src/adapters/deepseek/deepseekLlm";
 import { createFishTts } from "../src/adapters/fish/fishTts";
 import { createMockStt } from "../src/adapters/mock/mockStt";
 import type { LogRecord } from "../src/log";
-import { loadPromptTemplate } from "../src/prompts/loader";
 import { withPaceCheck } from "../src/quality/paceGuard";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
+import { testPacks } from "./helpers/pack";
 
 /** 1 秒 128kbps 的音频字节数：5 个字的句子 ≈ 5 字/秒，落在正常范围。 */
 const ONE_SECOND_BYTES = 16_000;
@@ -63,7 +63,6 @@ afterEach(() => {
 function setup(logs: LogRecord[]): Harness {
   const sent: ServerMessage[] = [];
   const send: SendFn = (message) => void sent.push(message);
-  const prompt = loadPromptTemplate();
   const fetchImpl = makeFetch();
   const manager = createSessionManager({
     stt: createMockStt({ delayMs: 0 }),
@@ -71,7 +70,6 @@ function setup(logs: LogRecord[]): Harness {
       baseUrl: "https://api.deepseek.com/v1",
       apiKey: "test-key",
       model: "deepseek-chat",
-      prompt,
       fetch: fetchImpl,
       log: (record) => logs.push(record),
     }),
@@ -79,6 +77,7 @@ function setup(logs: LogRecord[]): Harness {
       createFishTts({ baseUrl: "https://api.fish.audio/v1", apiKey: "k", voiceId: "voice-1", model: "s2.1-pro-free", fetch: fetchImpl }),
       { log: (record) => logs.push(record) },
     ),
+    packs: testPacks(),
     log: (record) => logs.push(record),
   });
   activeManager = manager;

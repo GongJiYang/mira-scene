@@ -35,4 +35,6 @@ export type ClientAction =
   | { type: "BEAT_AUDIO_STARTED"; turnId: number; seq: number }
   | { type: "BEAT_AUDIO_ENDED"; turnId: number; seq: number }
   | { type: "INPUT_CANCELLED"; turnId: number }
-  | { type: "RETRY" };
+  | { type: "RETRY" }
+  /** S6b §4：切换频道 —— 整台状态机回到初始值（不保留聊天记录）。 */
+  | { type: "RESET" };

@@ -88,7 +88,7 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   // 规则 1：emotion 透传（reveal 的 neutral → sad 在后面处理）。
   let emotion: Emotion = llmBeat.emotion;
 
-  // 规则 2：动作冷却按「最近 3 个 beat」；glance_window 保持手部状态。
+  // 规则 2：动作冷却按「最近 3 个 beat」；glance 保持手部状态。
   let action: Action | null = null;
   let hands: Hands = scene.hands;
   if (llmBeat.suggest !== null && !recentActions.includes(llmBeat.suggest)) {
@@ -111,7 +111,7 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
     camera = "close_up";
     fx = "rain_stop";
     media = { type: "photo", id: "photo_letters" };
-    action = "show_polaroid";
+    action = "show_item";
     hands = "polaroid";
     if (emotion === "neutral") emotion = "sad";
   } else if (advancedTo === "ending") {

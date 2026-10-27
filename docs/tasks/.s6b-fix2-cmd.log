@@ -1,0 +1,15 @@
+报告已追加。三个问题全部完成，最终验收通过。
+
+完成总结：
+
+**§1 等待新会话丢 error/pong**：`shouldAcceptMessage` 等待期间接受 pong 与 error（其余仍 drop），`handleMessage` 收到 error 时结束等待；reducer 把 error 移到 turnId 过滤之前（否则 `unknown_character` 的 error 因 turnId 不一致被丢、客户端卡死）。补了 connectionFilter 与 reducer 单测。
+
+**§2 手机夏凛桌下露下半身**：新增纯函数 `charClip.ts`，按两图层 contain 矩形算裁切量（实测 155px），`LayeredStage` 手机竖屏对 `char:` 图层应用 `clip-path`，桌面不受影响。6 例单测 + e2e 裁切断言（读 bounding rect 与 clip 值，不看图）。
+
+**§3 棋盘格**：写了可重复运行的 `tools/asset-fix/checker.py`（检测+修图，区域外逐字节断言，备份到 `assets/raw/_backup/` 已入 .gitignore）。清除 `fg_table_v.png` 杯柄附近棋盘格 142 像素；横版 `b4_fg_table_h.png` 检测无棋盘格未改。
+
+**验收**：`pnpm test` 651/651、`pnpm typecheck` 通过、`pnpm e2e` 22 通过/14 跳过/0 失败。报告已追加「fix2」一节。
+
+一处铁律停下项（已写入报告「fix2 歧义与处理」§2）：`b4_fg_table_v_checker.png` 整幅是棋盘格，但它是 `spike-align/align.py` 抠图的输入素材，改透明会破坏该 pipeline，未处理——需先与 spike-align 流程负责人确认。
+
+另一处需注意：§1 的改法改变了 D3 语义（error 不再按 turnId 过滤），这是任务明确要求，已同步修改既有断言并在报告中说明。

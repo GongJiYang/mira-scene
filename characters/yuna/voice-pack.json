@@ -1,0 +1,332 @@
+[
+  {
+    "text": "嗯哼。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "633a0a73fc5047b6",
+    "file": "assets/voice/yuna/clips/633a0a73fc5047b6.mp3"
+  },
+  {
+    "text": "这位观众，下播时间不营业哦。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "d6e41345d4b04c45",
+    "file": "assets/voice/yuna/clips/d6e41345d4b04c45.mp3"
+  },
+  {
+    "text": "截图？什么截图。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "572c1dca8ca87da9",
+    "file": "assets/voice/yuna/clips/572c1dca8ca87da9.mp3"
+  },
+  {
+    "text": "我没截过图啊，你记错了吧。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "6ae6a81d500e962a",
+    "file": "assets/voice/yuna/clips/6ae6a81d500e962a.mp3"
+  },
+  {
+    "text": "谢谢……突然这么温柔干嘛。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "comfort",
+    "category": "script",
+    "key": "2c2fc785bfde13f3",
+    "file": "assets/voice/yuna/clips/2c2fc785bfde13f3.mp3"
+  },
+  {
+    "text": "我没事，就是有点累。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "comfort",
+    "category": "script",
+    "key": "c8c01d8a9d859b4b",
+    "file": "assets/voice/yuna/clips/c8c01d8a9d859b4b.mp3"
+  },
+  {
+    "text": "……诶？还有人？",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "greeting",
+    "category": "script",
+    "key": "620555977687ccac",
+    "file": "assets/voice/yuna/clips/620555977687ccac.mp3"
+  },
+  {
+    "text": "我以为大家都走了，推流忘关了。",
+    "emotion": "calm",
+    "node": "arrive",
+    "intent": "greeting",
+    "category": "script",
+    "key": "f6b2ee35d445a88e",
+    "file": "assets/voice/yuna/clips/f6b2ee35d445a88e.mp3"
+  },
+  {
+    "text": "我在听。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "afbef065f90cf1c4",
+    "file": "assets/voice/yuna/clips/afbef065f90cf1c4.mp3"
+  },
+  {
+    "text": "弹幕就剩你一条了，挺清楚的。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "072cf21dcb677888",
+    "file": "assets/voice/yuna/clips/072cf21dcb677888.mp3"
+  },
+  {
+    "text": "你说老截图？",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "0836a020535dfef3",
+    "file": "assets/voice/yuna/clips/0836a020535dfef3.mp3"
+  },
+  {
+    "text": "……我手机里倒是存着一张。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "08ed9de7bacfd338",
+    "file": "assets/voice/yuna/clips/08ed9de7bacfd338.mp3"
+  },
+  {
+    "text": "别这样，我会当真的。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "comfort",
+    "category": "script",
+    "key": "f00885d3dd5d4505",
+    "file": "assets/voice/yuna/clips/f00885d3dd5d4505.mp3"
+  },
+  {
+    "text": "……不过，有人在，确实好一点。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "comfort",
+    "category": "script",
+    "key": "1a757f88bcd2487c",
+    "file": "assets/voice/yuna/clips/1a757f88bcd2487c.mp3"
+  },
+  {
+    "text": "你还没走啊。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "greeting",
+    "category": "script",
+    "key": "4ace908a0191b32c",
+    "file": "assets/voice/yuna/clips/4ace908a0191b32c.mp3"
+  },
+  {
+    "text": "明天不用上班吗你。",
+    "emotion": "guarded",
+    "node": "probe",
+    "intent": "greeting",
+    "category": "script",
+    "key": "4c2bc07e4d1d84a3",
+    "file": "assets/voice/yuna/clips/4c2bc07e4d1d84a3.mp3"
+  },
+  {
+    "text": "让我缓一下。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "90aed4ddd9fcd8ca",
+    "file": "assets/voice/yuna/clips/90aed4ddd9fcd8ca.mp3"
+  },
+  {
+    "text": "……抱歉，刚才发呆了。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "be9802619adb0c8f",
+    "file": "assets/voice/yuna/clips/be9802619adb0c8f.mp3"
+  },
+  {
+    "text": "这是我第一次开播。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "a0f2919c52cd5801",
+    "file": "assets/voice/yuna/clips/a0f2919c52cd5801.mp3"
+  },
+  {
+    "text": "三个观众，我紧张到一直在喝水。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "f87da68723d493d2",
+    "file": "assets/voice/yuna/clips/f87da68723d493d2.mp3"
+  },
+  {
+    "text": "我没事，真的。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "comfort",
+    "category": "script",
+    "key": "6dd2dd4fcfe00770",
+    "file": "assets/voice/yuna/clips/6dd2dd4fcfe00770.mp3"
+  },
+  {
+    "text": "就是说出来，好像轻一点了。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "comfort",
+    "category": "script",
+    "key": "df329193cb6c08b9",
+    "file": "assets/voice/yuna/clips/df329193cb6c08b9.mp3"
+  },
+  {
+    "text": "你还在。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "greeting",
+    "category": "script",
+    "key": "c77d76b8bc493018",
+    "file": "assets/voice/yuna/clips/c77d76b8bc493018.mp3"
+  },
+  {
+    "text": "那我就……跟你说点真话吧。",
+    "emotion": "sad",
+    "node": "reveal",
+    "intent": "greeting",
+    "category": "script",
+    "key": "4fa106fb718cc518",
+    "file": "assets/voice/yuna/clips/4fa106fb718cc518.mp3"
+  },
+  {
+    "text": "晚安，最后一位观众。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "ad847bf1748fcbcf",
+    "file": "assets/voice/yuna/clips/ad847bf1748fcbcf.mp3"
+  },
+  {
+    "text": "这次真的下播啦。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "ask_core",
+    "category": "script",
+    "key": "ed5d8e53bd9b1dbc",
+    "file": "assets/voice/yuna/clips/ed5d8e53bd9b1dbc.mp3"
+  },
+  {
+    "text": "截图我会留着的。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "585b3b6c70b7f784",
+    "file": "assets/voice/yuna/clips/585b3b6c70b7f784.mp3"
+  },
+  {
+    "text": "那三个人里，说不定也有你。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "ask_item",
+    "category": "script",
+    "key": "c454a587e9955b6e",
+    "file": "assets/voice/yuna/clips/c454a587e9955b6e.mp3"
+  },
+  {
+    "text": "我知道。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "comfort",
+    "category": "script",
+    "key": "99f55b25ce317ec5",
+    "file": "assets/voice/yuna/clips/99f55b25ce317ec5.mp3"
+  },
+  {
+    "text": "谢谢你没劝我别走。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "comfort",
+    "category": "script",
+    "key": "f5414c26df7a231a",
+    "file": "assets/voice/yuna/clips/f5414c26df7a231a.mp3"
+  },
+  {
+    "text": "谢谢你今晚没退出。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "greeting",
+    "category": "script",
+    "key": "d9bb13529b36d75b",
+    "file": "assets/voice/yuna/clips/d9bb13529b36d75b.mp3"
+  },
+  {
+    "text": "我要关推流了哦。",
+    "emotion": "warm",
+    "node": "ending",
+    "intent": "greeting",
+    "category": "script",
+    "key": "1477892832d7f7b0",
+    "file": "assets/voice/yuna/clips/1477892832d7f7b0.mp3"
+  },
+  {
+    "text": "……还在吗？弹幕好安静。",
+    "emotion": "calm",
+    "category": "nudge",
+    "key": "c34ddb0ccbd03a29",
+    "file": "assets/voice/yuna/clips/c34ddb0ccbd03a29.mp3"
+  },
+  {
+    "text": "你那边声音糊了，没听清，再说一次？",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "6524e9a76832cc3a",
+    "file": "assets/voice/yuna/clips/6524e9a76832cc3a.mp3"
+  },
+  {
+    "text": "啊，卡了卡了，网络又抽风了……你刚说啥？",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "19c882b08c777f8f",
+    "file": "assets/voice/yuna/clips/19c882b08c777f8f.mp3"
+  },
+  {
+    "text": "……抱歉，刚刚发呆了。你说到哪了？",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "4b4fc7cd1a397bea",
+    "file": "assets/voice/yuna/clips/4b4fc7cd1a397bea.mp3"
+  },
+  {
+    "text": "直播间好像卡住了，等我一下……好了，你继续。",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "45436f812286ae6e",
+    "file": "assets/voice/yuna/clips/45436f812286ae6e.mp3"
+  },
+  {
+    "text": "诶？画面卡住了……还在吗？",
+    "emotion": "guarded",
+    "category": "fallback",
+    "key": "09deab7a0a8d105c",
+    "file": "assets/voice/yuna/clips/09deab7a0a8d105c.mp3"
+  }
+]

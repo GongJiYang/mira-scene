@@ -33,7 +33,7 @@ const anyLlmInput = fc.oneof(
         fc.array(fc.constantFrom("\"", "\\", "{", "}", "[", "]", "：", "，", "😀"), { maxLength: 40 }).map((parts) => parts.join("")),
       ),
       emotion: fc.oneof(fc.anything(), fc.constantFrom("neutral", "sad", "angry", "", 42)),
-      suggest: fc.oneof(fc.anything(), fc.constantFrom("sip_coffee", "show_polaroid", "wave", null)),
+      suggest: fc.oneof(fc.anything(), fc.constantFrom("drink", "show_item", "wave", null)),
       advance: fc.oneof(fc.anything(), fc.constantFrom("arrive", "reveal", "climax", null)),
     },
     { requiredKeys: [] },
@@ -132,7 +132,7 @@ describe("属性：direct 的契约后置条件与不变量", () => {
                 expect(ttsText).toBe(tag === null ? beat.say : `${tag} ${beat.say}`);
               }
 
-              // 冷却：除剧情强制的 show_polaroid 外，同一 action 在任意连续 3 个 beat 内最多一次。
+              // 冷却：除剧情强制的 show_item 外，同一 action 在任意连续 3 个 beat 内最多一次。
               if (beat.action !== null && beat.story?.advance !== "reveal") {
                 expect(emitted.slice(-2).map((previous) => previous.action)).not.toContain(beat.action);
               }
@@ -171,10 +171,10 @@ describe("属性：direct 的契约后置条件与不变量", () => {
                 expect(beat.emotion).toBe(llmBeat.emotion);
               }
               if (beat.story?.advance === "reveal") {
-                expect(beat.action).toBe("show_polaroid");
+                expect(beat.action).toBe("show_item");
                 expect(beat.hands).toBe("polaroid");
                 expectedHands = "polaroid";
-              } else if (beat.action === null || beat.action === "glance_window") {
+              } else if (beat.action === null || beat.action === "glance") {
                 expect(beat.hands).toBe(expectedHands);
               } else {
                 expect(beat.hands).toBe(ACTION_HANDS[beat.action]);

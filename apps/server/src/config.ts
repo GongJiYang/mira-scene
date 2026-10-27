@@ -25,6 +25,15 @@ export type FishCredentials = {
 export type ProviderCredentials = {
   deepseek: DeepSeekCredentials;
   fish: FishCredentials;
+  /** S6b §5.5：真实生图（OpenAI 兼容 images API）。apiKey 为空 = 用 presetMedia（配置选择，非降级）。 */
+  image: ImageCredentials;
+};
+
+export type ImageCredentials = {
+  apiKey: string;
+  /** 统一成以 `/v1` 结尾。 */
+  baseUrl: string;
+  model: string;
 };
 
 export type ServerConfig = {
@@ -61,12 +70,16 @@ export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 export const DEFAULT_FISH_BASE_URL = "https://api.fish.audio";
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 export const DEFAULT_FISH_TTS_MODEL = "s2.1-pro-free";
+/** S6b §5.5：真实生图默认模型与端点（`IMAGE_MODEL` / `IMAGE_BASE_URL` 覆盖）。 */
+export const DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst";
+export const DEFAULT_IMAGE_BASE_URL = "https://api.openai.com";
 /** S6a §2：commandcode 适配器默认模型。 */
 export const DEFAULT_COMMANDCODE_MODEL = "deepseek/deepseek-v4-flash";
 
 const EMPTY_PROVIDERS: ProviderCredentials = {
   deepseek: { apiKey: "", baseUrl: "", model: "" },
   fish: { apiKey: "", baseUrl: "", voiceId: "", ttsModel: "" },
+  image: { apiKey: "", baseUrl: "", model: "" },
 };
 
 function isProviderMode(value: string): value is ProviderMode {
@@ -106,6 +119,11 @@ function readCredentials(env: NodeJS.ProcessEnv): ProviderCredentials {
       baseUrl: normalizeV1(text("FISH_BASE_URL") || DEFAULT_FISH_BASE_URL),
       voiceId: text("FISH_VOICE_ID"),
       ttsModel: text("FISH_TTS_MODEL") || DEFAULT_FISH_TTS_MODEL,
+    },
+    image: {
+      apiKey: text("IMAGE_API_KEY"),
+      baseUrl: normalizeV1(text("IMAGE_BASE_URL") || DEFAULT_IMAGE_BASE_URL),
+      model: text("IMAGE_MODEL") || DEFAULT_IMAGE_MODEL,
     },
   };
 }

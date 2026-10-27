@@ -1,0 +1,25 @@
+{
+  "$comment": "夏凛角色包（S6b §1）。文字内容在 content.json，提示词在 prompt.v1.md；本文件只描述渲染 / 语音 / 媒体 / 舞台配置。",
+  "id": "rin",
+  "displayName": "夏凛",
+  "renderer": { "kind": "layered" },
+  "voice": { "fishVoiceIdEnv": "FISH_VOICE_ID" },
+  "prompt": "prompt.v1.md",
+  "content": "content.json",
+  "revealIntents": ["ask_core", "comfort"],
+  "media": {
+    "reveal": { "type": "photo", "id": "photo_letters" },
+    "ending": { "type": "video", "id": "clip_ending" }
+  },
+  "stage": {
+    "background": {
+      "portrait": "/stage/assets/raw/b1_bg_main_v.png",
+      "landscape": "/stage/assets/raw/b1_bg_main_h.png"
+    },
+    "backgroundClips": {
+      "portrait": "/stage/videos/clip_ending.webm",
+      "landscape": "/stage/videos/clip_ending.webm"
+    },
+    "tint": "#1a1526"
+  }
+}

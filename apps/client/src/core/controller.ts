@@ -2,6 +2,7 @@ import type { Media } from "@mira/protocol";
 import { create } from "zustand";
 import { forceMouthClosed, isAudioPlaying, isReactionActive, stopPlaybackNow } from "./audio";
 import { createConnection, type Connection } from "./connection";
+import { installOfflineFallbackFor, useFallbackStore } from "./fallback";
 import { createInterruptExecutor, type InterruptReason } from "./interrupt";
 import { installPerformanceClock, usePerformanceStore } from "./performanceClock";
 import { blobToBase64, createRecorder, type Recorder } from "./recorder";
@@ -10,12 +11,20 @@ import { dispatch, getStageState, pushEvent, useConnectionStore } from "./store"
 import { dispatchStoryMedia, installStoryMediaLink } from "./storyMediaLink";
 import { timeline, pushTimelineLog, timelineCountForTurn, timelineStoryCount } from "./timeline";
 import { initialNudgeLimitState, nudgeLimit, type NudgeLimitState } from "../state/nudge";
+import { characterOrDefault } from "../live/characters";
+import { setChannel, useChannelStore } from "../live/channel";
+import { initialPerformanceState } from "../state/performance";
 
 export type Intents = {
   pttDown(): void;
   pttUp(): void;
   submitText(text: string): void;
   retry(): void;
+  /**
+   * S6b §4：切换频道。进行中的一轮按打断处理（D34），以新 characterId 重新 hello，
+   * **不保留**聊天记录。
+   */
+  switchChannel(characterId: string): void;
 };
 
 export type ControllerDeps = { connection: Connection; recorder: Recorder };
@@ -135,6 +144,20 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       pushEvent("retry");
       dispatch({ type: "RETRY" });
     },
+
+    switchChannel(characterId) {
+      const { currentTurnId, phase } = getStageState();
+      pushEvent(`switch channel → ${characterId}`);
+      // 进行中的一轮按打断处理（D34）：停音频、闭嘴、清时间线、发 interrupt。
+      if (phase.kind !== "idle") performInterrupt("text", currentTurnId);
+      // 不保留聊天记录：A 回到初始值；B / C 与兜底字幕一并复位。
+      dispatch({ type: "RESET" });
+      usePerformanceStore.setState(initialPerformanceState);
+      dispatchStoryMedia({ type: "PHASE", phase: "idle" });
+      useFallbackStore.setState({ subtitle: null });
+      setChannel(characterId);
+      connection.switchCharacter?.(characterId);
+    },
   };
 }
 
@@ -170,5 +193,10 @@ export function bootstrapConnection(): void {
   // 表演时钟（B）与剧情媒体（C）的接线都在这里启动：UI 只经由视图模型读状态。
   installPerformanceClock({ onNudge: recordNudge });
   installStoryMediaLink();
+  // S6b §2：断线时由客户端本地播 offline 兜底（服务端此时发不出消息）。
+  installOfflineFallbackFor(
+    () => characterOrDefault(useChannelStore.getState().characterId).id,
+    () => characterOrDefault(useChannelStore.getState().characterId).offlineLine,
+  );
   connection.connect();
 }

@@ -16,13 +16,13 @@ export const FISH_EMOTION_TAGS: Record<Emotion, string | null> = {
 
 /**
  * D29 §2.1：动作 → 手部状态。
- * `null` 表示保持当前手部状态（glance_window 只转视线）。
+ * `null` 表示保持当前手部状态（glance 只转视线）。
  */
 export const ACTION_HANDS: Record<Action, Hands | null> = {
-  sip_coffee: "cup",
-  show_polaroid: "polaroid",
-  check_phone: "phone",
-  glance_window: null,
+  drink: "cup",
+  show_item: "polaroid",
+  phone: "phone",
+  glance: null,
 };
 
 /** TTS 文本 = Fish 标签 + 台词；台词为空时也为空。 */

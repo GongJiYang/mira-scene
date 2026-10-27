@@ -15,7 +15,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:5273",
+    baseURL: "http://localhost:5274",
     permissions: ["microphone"],
     launchOptions: {
       args: [
@@ -32,8 +32,8 @@ export default defineConfig({
   webServer: {
     // 强制 Mock：不读取任何 Key，也不发起真实网络请求（Q10）。
     // 用独立端口，避免与开发者本机已在运行的 5173 / 8787 冲突。
-    command: "PROVIDER_MODE=mock PORT=8887 MIRA_CLIENT_PORT=5273 MIRA_SERVER_PORT=8887 pnpm dev",
-    url: "http://localhost:5273",
+    command: "PROVIDER_MODE=mock PORT=8887 MIRA_CLIENT_PORT=5274 MIRA_SERVER_PORT=8887 pnpm dev",
+    url: "http://localhost:5274",
     timeout: 120_000,
     reuseExistingServer: false,
     stdout: "pipe",

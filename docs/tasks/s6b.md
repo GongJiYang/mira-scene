@@ -23,7 +23,7 @@
   - 意图：`ask_waiting→ask_core`、`ask_photo→ask_item`、`ask_radio→ask_job`、`comfort`、`greeting`、`other`。每个角色在 content.json 里给自己的关键词。
   - 动作：`sip_coffee→drink`、`glance_window→glance`、`check_phone→phone`、`show_polaroid→show_item`。提示词里各自解释含义。
   - 夏凛的 `prompts`/示例里的动作名同步改成新槽位名，其他文字不动。
-- pack.json 至少包含：`id`、`displayName`、`renderer`（`{kind:"layered", …}` 或 `{kind:"live2d", model:"/models/yuna/yuna.model3.json"}`）、`voice`（`fishVoiceIdEnv`：夏凛 `FISH_VOICE_ID`，忧奈 `FISH_VOICE_ID_YUNA`；未设置时真实模式启动报错，提示要配哪个变量）、`prompt`、`content`、`media`（reveal 图、ending 视频）、`revealIntents`（probe→reveal 的触发意图；夏凛沿用现有 `ask_core|comfort`，忧奈同）、`stage`（背景、色调等渲染配置）。
+- pack.json 至少包含：`id`、`displayName`、`renderer`（`{kind:"layered", …}` 或 `{kind:"live2d", model:"/models/yuna/yuna.model3.json"}`）、`voice`（`fishVoiceIdEnv`：夏凛 `FISH_VOICE_ID`，忧奈 `FISH_VOICE_ID_YUNA`；未设置时真实模式启动报错，提示要配哪个变量；`FISH_VOICE_ID_YUNA` 用户已在 .env 配好）、`prompt`、`content`、`media`（reveal 图、ending 视频）、`revealIntents`（probe→reveal 的触发意图；夏凛沿用现有 `ask_core|comfort`，忧奈同）、`stage`（背景、色调等渲染配置）。
 - 纯函数 `parsePack(json) → Pack | Error`：zod 校验 + 交叉校验（所有节点 × 所有意图都有两句台词；fallback 五类齐全；动作只用通用槽位）。fast-check 属性测试：任意删掉一个必需字段都会被拒绝。
 - 服务端启动时加载 `characters/*/pack.json`，任何一个不合法 → **启动报错退出**。
 - 协议：客户端 `hello` 增加可选 `characterId`。缺省 → `rin`（兼容旧客户端和既有测试）；不存在的 id → 返回 `error{code:"unknown_character"}` 并关闭会话，**不回退夏凛**。

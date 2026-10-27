@@ -6,6 +6,7 @@ import { createMockTts } from "../src/adapters/mock/mockTts";
 import { silentLogger } from "../src/log";
 import type { LLMContext, LLMPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
+import { testPacks } from "./helpers/pack";
 
 type Harness = {
   manager: SessionManager;
@@ -43,6 +44,7 @@ function setup(options: {
     stt: createMockStt({ delayMs: 0 }),
     llm,
     tts: createMockTts({ delayMs: 0 }),
+    packs: testPacks(),
     log: silentLogger,
     sessionTurnLimit: options.sessionTurnLimit,
     dailyTurnLimit: options.dailyTurnLimit,

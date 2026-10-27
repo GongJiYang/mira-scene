@@ -1,23 +1,25 @@
 /**
- * 关键词意图识别（s3-fix §4）：从 `adapters/mock/mockLlm.ts` 挪到这里，
- * 因为核心模块（提示词渲染、剧情推进判定）不能依赖 Mock 适配器。
+ * 关键词意图识别（s3-fix §4；S6b §1 改成按角色关键词表）。
  *
- * Mock 剧本与提示词都从这里 import；规则本身未变（沿用 mock 的关键词表）。
+ * 每个角色在 `characters/<id>/content.json` 的 `intents` 里给自己的关键词；
+ * 本模块只提供纯函数 `classifyIntent(text, patterns)`，不依赖任何具体角色。
+ *
+ * 意图槽位（S6b §1）：`ask_core` / `ask_item` / `ask_job` / `comfort` / `greeting` / `other`。
  */
+import type { IntentSlot } from "./characters/pack";
 
-export type Intent = "ask_waiting" | "ask_photo" | "ask_radio" | "comfort" | "greeting" | "other";
+export type Intent = IntentSlot;
 
-const INTENT_PATTERNS: ReadonlyArray<readonly [Intent, RegExp]> = [
-  ["ask_waiting", /等|谁|为什么|约/],
-  ["ask_photo", /照片|拍立得|相机|拍/],
-  ["ask_radio", /电台|节目|主持|声音/],
-  ["comfort", /没事|陪|别担心/],
-  ["greeting", /你好|嗨/],
-];
+/** 「其他」兜底槽位。 */
+export const OTHER_INTENT: Intent = "other";
 
-export function classifyIntent(text: string): Intent {
-  for (const [intent, pattern] of INTENT_PATTERNS) {
+/**
+ * 按顺序匹配关键词表，第一个命中的意图胜出；都不中则 `other`。
+ * 纯函数：同样的文本与关键词表必得同样结果。
+ */
+export function classifyIntent(text: string, patterns: ReadonlyArray<readonly [Intent, RegExp]>): Intent {
+  for (const [intent, pattern] of patterns) {
     if (pattern.test(text)) return intent;
   }
-  return "other";
+  return OTHER_INTENT;
 }

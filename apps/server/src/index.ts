@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
@@ -13,11 +15,13 @@ import { parseFaults, readFirstTokenTimeoutMs, withFaults } from "./adapters/fau
 import { createMockLlm } from "./adapters/mock/mockLlm";
 import { createMockStt } from "./adapters/mock/mockStt";
 import { createMockTts } from "./adapters/mock/mockTts";
+import { createImageGenMedia, defaultOutDir } from "./adapters/media/imageGen";
+import { generatedFileFor } from "./adapters/media/generatedRoute";
 import { createPresetMedia } from "./adapters/media/presetMedia";
+import { loadPacks } from "./characters/pack";
 import { applyRepoEnv, loadConfig } from "./config";
 import { consoleLogger, type Logger } from "./log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "./ports";
-import { loadPromptTemplate } from "./prompts/loader";
 import { withPaceCheck } from "./quality/paceGuard";
 import { createSessionManager, type SendFn } from "./session";
 import { createTokenStore } from "./tokens";
@@ -58,6 +62,24 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   const tokens = createTokenStore();
   const { providers } = config;
 
+  // S6b §1：启动时加载所有角色包；任何一个不合法 → 抛错，服务端启动失败（不静默降级）。
+  const packs = loadPacks();
+  logger({ ts: Date.now(), event: "packs_loaded", detail: { ids: [...packs.keys()] } });
+
+  // S6b-fix1 §1：启动时按每个角色包的 `fishVoiceIdEnv` 读环境变量。
+  // 真实模式下任一角色缺失对应环境变量 → 启动报错（s6b §1 原要求）；Mock 模式全部为空（不读 Key）。
+  const voiceIds = new Map<string, string>();
+  if (config.providerMode === "real") {
+    for (const pack of packs.values()) {
+      const envName = pack.voice.fishVoiceIdEnv;
+      const value = (options.env?.[envName] ?? process.env[envName] ?? "").trim();
+      if (value === "") {
+        throw new Error(`真实模式缺少 TTS 音色环境变量 ${envName}（角色 ${pack.id} 需要，请在 .env 配置）`);
+      }
+      voiceIds.set(pack.id, value);
+    }
+  }
+
   // S6a §2 契约：real + commandcode 时，启动检查 cmd 可执行且已登录；不满足直接报错退出，不降级。
   if (config.providerMode === "real" && config.llmProvider === "commandcode") {
     await assertCommandCodeReady();
@@ -83,11 +105,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     }
 
     let llm: LLMPort;
+    // S6b §1：提示词改由角色包提供，LLM 适配器不再持有单一提示词（每轮从 ctx.pack 渲染）。
     if (wantReal && config.llmProvider === "commandcode") {
       // D39 / S6a §2：走 Command Code 的额度。启动契约已在 startServer 里检查过。
       llm = createCommandCodeLlm({
         model: config.commandCodeModel,
-        prompt: loadPromptTemplate(),
         log: logger,
       });
     } else if (wantReal && providers.deepseek.apiKey !== "") {
@@ -95,7 +117,6 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         baseUrl: providers.deepseek.baseUrl,
         apiKey: providers.deepseek.apiKey,
         model: providers.deepseek.model,
-        prompt: loadPromptTemplate(),
         log: logger,
       });
     } else {
@@ -109,7 +130,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         createFishTts({
           baseUrl: providers.fish.baseUrl,
           apiKey: providers.fish.apiKey,
-          voiceId: providers.fish.voiceId,
+          // S6b-fix1 §1：默认音色置空 —— 真实音色由会话层按角色包经 TtsOptions.voiceId 注入。
+          voiceId: "",
           model: providers.fish.ttsModel,
           log: logger,
         }),
@@ -128,6 +150,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   const basePorts = buildPorts();
   // sessionId → 连接：`ws_drop` 需要服务端主动关闭会话所在的连接。
   const sessionSockets = new Map<string, WebSocket>();
+  // send 回调 → 连接：S6b §1 未知 characterId 时关闭对应连接。
+  const socketSendMap = new Map<SendFn, WebSocket>();
   const sessions = createSessionManager({
     ...basePorts,
     createPorts: (faults) =>
@@ -140,18 +164,41 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
           },
     defaultFaults: parseFaults(process.env.FAULTS),
     firstTokenTimeoutMs: readFirstTokenTimeoutMs(),
-    // D27：预置照片媒体；等待 config.mediaPresetDelayMs 后发送 media_ready。
-    media: createPresetMedia({ delayMs: config.mediaPresetDelayMs }),
+    // D27 / S6b §5.5：媒体端口。`IMAGE_API_KEY` 配置时用真实生图（配置选择，非余额降级）；
+    // 未配置时沿用预置照片适配器（等待 config.mediaPresetDelayMs 后发送 media_ready）。
+    // 提示词按 media.id 反查所属角色包的 imagePrompt 模板（{{conversation}} 由 buildImagePrompt 填）。
+    media:
+      config.providerMode === "real" && providers.image.apiKey !== ""
+        ? createImageGenMedia({
+            baseUrl: providers.image.baseUrl,
+            apiKey: providers.image.apiKey,
+            model: providers.image.model,
+            // S6b-fix1 §5：写到服务端数据目录 var/generated/（GENERATED_DIR 可覆盖）。
+            outDir: defaultOutDir(options.env ?? process.env),
+            log: (event, detail) => logger({ ts: Date.now(), event, detail }),
+          })
+        : createPresetMedia({ delayMs: config.mediaPresetDelayMs }),
     dropConnection: (sessionId) => {
       const socket = sessionSockets.get(sessionId);
       if (!socket) return;
       sessionSockets.delete(sessionId);
       socket.close(1011, "fault:ws_drop");
     },
+    // S6b §1：未知 characterId → 发完 error 后关闭连接。
+    closeConnection: (send) => {
+      const socket = socketSendMap.get(send);
+      if (socket) socket.close(1008, "unknown_character");
+    },
+    packs,
+    // S6b-fix1 §1：按角色包解析启动时读到的音色。
+    resolveVoiceId: (pack) => voiceIds.get(pack.id),
     log: logger,
     sessionTurnLimit: config.sessionTurnLimit,
     dailyTurnLimit: config.dailyTurnLimit,
   });
+
+  // S6b-fix1 §5：真实生图输出目录（服务端数据目录），HTTP 路由 GET /generated/<file> 从这里读。
+  const generatedDir = defaultOutDir(options.env ?? process.env);
 
   const httpServer = createServer((request, response) => {
     if (request.method === "GET" && request.url === "/health") {
@@ -163,6 +210,22 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       response.end(JSON.stringify(tokens.issue()));
       return;
+    }
+    // S6b-fix1 §5：GET /generated/<file>。文件名只允许 ^[a-z0-9_-]+\.png$，其它一律 404（防路径穿越）。
+    if (request.method === "GET" && request.url !== undefined) {
+      const path = new URL(request.url, "http://localhost").pathname;
+      const file = generatedFileFor(path);
+      if (file !== null) {
+        const full = join(generatedDir, file);
+        if (!existsSync(full)) {
+          response.writeHead(404, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "not_found" }));
+          return;
+        }
+        response.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" });
+        response.end(readFileSync(full));
+        return;
+      }
     }
     response.writeHead(404, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: "not_found" }));
@@ -194,6 +257,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       if (message.type === "session") sessionSockets.set(message.sessionId, ws);
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
     };
+    // send → ws：S6b §1 未知 characterId 时按 send 找到连接并关闭。
+    socketSendMap.set(send, ws);
 
     ws.on("message", (raw) => {
       if (tooLarge) return;
@@ -251,6 +316,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     ws.on("close", () => {
       for (const [sessionId, socket] of sessionSockets) {
         if (socket === ws) sessionSockets.delete(sessionId);
+      }
+      for (const [fn, socket] of socketSendMap) {
+        if (socket === ws) socketSendMap.delete(fn);
       }
     });
   });

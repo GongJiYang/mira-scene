@@ -3,12 +3,13 @@ import { handleTtsAudio, setPlaybackStartedReporter } from "./audio";
 import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./heartbeat";
 import { handleMediaReady, handleMediaRequest } from "./storyMediaLink";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
+import { currentChannelId } from "../live/channel";
 
 const SESSION_STORAGE_KEY = "mira.sessionId";
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000] as const;
 
 type ClientPayloads = {
-  hello: { resumeSessionId?: string; faults?: string[] };
+  hello: { resumeSessionId?: string; characterId?: string; faults?: string[] };
   text_input: { text: string };
   audio_input: { mime: string; dataBase64: string };
   interrupt: { interruptedTurnId: number };
@@ -28,6 +29,11 @@ export type Connection = {
    * 可选，便于既有测试里的假连接不必补齐。
    */
   sendNudge?(): void;
+  /**
+   * S6b §4：切换频道。结束当前会话（不保留聊天记录），以新 characterId 重新 hello。
+   * 复用同一条连接：服务端按新的 characterId 建新会话。
+   */
+  switchCharacter?(characterId: string): void;
 };
 
 function readStoredSessionId(): string | undefined {
@@ -46,6 +52,15 @@ function storeSessionId(sessionId: string): void {
   }
 }
 
+/** S6b §4：切频道不保留聊天记录 —— 丢掉旧会话 id，下次 hello 会新建会话。 */
+function clearStoredSessionId(): void {
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // 隐私模式下 sessionStorage 可能不可用：忽略。
+  }
+}
+
 /** Q11：`?fail=tts,slow` → hello.payload.faults；空/非法值按未配置处理。 */
 export function readUrlFaults(search: string): string[] | undefined {
   const raw = new URLSearchParams(search).get("fail");
@@ -61,6 +76,30 @@ function setStatus(status: ConnectionStatus): void {
   useConnectionStore.setState({ status });
 }
 
+/**
+ * S6b-fix1 §3：切频道后的消息过滤（纯函数，便于单测）。
+ * - `awaitingSession`：等待新会话的 session 消息。期间 session 锁定新 id；
+ *   S6b-fix2 §1：pong（传输层心跳）一律接受，error（如 unknown_character）接受并结束等待，
+ *   其余带旧 sessionId 的消息仍丢弃。
+ * - S6b-fix3 §1：等待期间放行的 error 只对会话级（scope === "session"）生效；
+ *   轮次级 error 与本轮无关，不能让客户端卡住或误入错误态，仍按旧消息丢弃。
+ * - 已锁定 sessionId 后：sessionId 不一致的消息一律丢弃（pong 是传输层心跳，不过滤）。
+ */
+export function shouldAcceptMessage(
+  awaitingSession: boolean,
+  knownSessionId: string | null,
+  message: { type: string; sessionId: string; scope?: string },
+): "accept" | "lock" | "drop" {
+  if (awaitingSession) {
+    if (message.type === "session") return "lock";
+    if (message.type === "pong") return "accept";
+    if (message.type === "error" && message.scope === "session") return "accept";
+    return "drop";
+  }
+  if (knownSessionId !== null && message.type !== "pong" && message.sessionId !== knownSessionId) return "drop";
+  return "accept";
+}
+
 export function createConnection(): Connection {
   let socket: WebSocket | null = null;
   let seq = 0;
@@ -70,6 +109,9 @@ export function createConnection(): Connection {
   let lastPongAt = 0;
   let requestingToken = false;
   let closed = false;
+  // S6b-fix1 §3：切频道后「等待新会话」——收到新 hello 的 session 消息前，
+  // 任何带旧 sessionId 的消息都丢弃（不再 storeSessionId，也不进 reducer）。
+  let awaitingSession = false;
 
   function stopHeartbeat(): void {
     if (heartbeatTimer !== null) {
@@ -149,6 +191,35 @@ export function createConnection(): Connection {
     }
 
     const message = parsed.data;
+
+    // S6b-fix1 §3：切频道等待新会话期间，session 消息锁定新 sessionId；
+    // 之后任何 sessionId 不一致的消息一律丢弃（记调试事件），不再 storeSessionId。
+    // S6b-fix2 §1：等待期间 pong 一律接受（不断线）；error 接受并结束等待——
+    // 服务端拒绝本次 hello（如 unknown_character）时客户端进入错误态而不是卡住。
+    // S6b-fix3 §1：放行的 error 只对会话级生效（scope === "session"），
+    // 轮次级 error 与本次 hello 无关，不能结束等待。
+    if (awaitingSession && message.type === "error" && message.payload.scope === "session") {
+      awaitingSession = false;
+    }
+    const scope = message.type === "error" ? message.payload.scope : undefined;
+    const verdict = shouldAcceptMessage(awaitingSession, useConnectionStore.getState().sessionId, {
+      type: message.type,
+      sessionId: message.sessionId,
+      scope,
+    });
+    if (verdict === "drop") {
+      pushEvent(`drop stale message ${message.type}`);
+      return;
+    }
+    if (verdict === "lock") {
+      awaitingSession = false;
+      useConnectionStore.setState({ sessionId: message.sessionId });
+      storeSessionId(message.sessionId);
+      dispatch({ type: "SERVER_MESSAGE", message });
+      pushEvent(`recv ${message.type} t${message.turnId}`);
+      return;
+    }
+
     dispatch({ type: "SERVER_MESSAGE", message });
 
     if (message.type === "session") {
@@ -209,10 +280,13 @@ export function createConnection(): Connection {
         pushEvent("ws open");
         startHeartbeat(nextSocket);
         const faults = readUrlFaults(location.search);
-        sendEnvelope(
-          "hello",
-          faults ? { resumeSessionId: readStoredSessionId(), faults } : { resumeSessionId: readStoredSessionId() },
-        );
+        // S6b §1：hello 带上当前频道；缺省时服务端按 rin 处理。
+        const payload: ClientPayloads["hello"] = {
+          resumeSessionId: readStoredSessionId(),
+          characterId: currentChannelId(),
+        };
+        if (faults) payload.faults = faults;
+        sendEnvelope("hello", payload);
       });
       nextSocket.addEventListener("message", (event) => {
         if (typeof event.data === "string") handleMessage(event.data);
@@ -253,6 +327,18 @@ export function createConnection(): Connection {
     },
     sendNudge() {
       sendEnvelope("nudge", {});
+    },
+    switchCharacter(characterId) {
+      // S6b §4：结束当前会话（不保留聊天记录），以新角色重新 hello。
+      // 复用同一条连接：服务端按新的 characterId 建新会话；旧会话由服务端空闲回收。
+      // S6b-fix1 §3：标记「等待新会话」，收到新 session 前丢弃所有旧会话消息。
+      clearStoredSessionId();
+      useConnectionStore.setState({ sessionId: null });
+      awaitingSession = true;
+      const faults = readUrlFaults(location.search);
+      const payload: ClientPayloads["hello"] = { characterId };
+      if (faults) payload.faults = faults;
+      sendEnvelope("hello", payload);
     },
   };
 }

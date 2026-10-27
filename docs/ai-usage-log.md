@@ -90,3 +90,9 @@
 - DeepSeek 自己发现并停下报告：官方 CDN 的 Cubism Core 是 5.1.0，与「最新框架 5-r.5」不兼容，只能配 5-r.4——Claude 裁定接受。还指出任务说明把 `MOUTH_OPEN` 的位置写错了（实际在 `params.ts`）。
 - Claude 验收（用户要求改为「审核心逻辑 + 架构合规」，不全量重跑）：读 `yunaParams` / 渲染外壳 / 适配器后发现 4 个 DeepSeek 自测没抓到的问题——切换情绪后旧参数残留、自动眨眼每帧被常量覆盖、`approach()` 写了没用、口型常量重复定义；另外报告里写「warm/sad 实测生效」，但截图对比 sad 几乎看不出——派 fix1 修。用户看预览后反馈人物偏小、显示不全——派 fix2（纯函数 `fitModel` + 可见包围盒 + e2e 四边无像素断言）。
 - 其它：DeepSeek 余额为 0 时用户决定 LLM 先走 cmd 额度；Claude 实测 Fish 免费 TTS/STT 可用，确认 402 只来自 DeepSeek。忧奈背景由 Claude 用生图中转生成（首版画出了真实饮料品牌，重生成无品牌版；用户提议「让背景适应角色」后改为低机位地面 + 软垫，适配模型固定的半蹲姿势）。
+
+## S6b · 2026-10-27/28（Command Code · Systalyze DeepSeek → Kimi-K3；含 fix1–fix3）
+- 交付：数据驱动角色包（`characters/rin|yuna`，意图/动作改通用槽位）、五类情景化兜底、忧奈 Live2D 接入正式舞台（全身 + 低机位卧室背景 + 接触阴影）、直播间 UI v1（桌面仿 Twitch / 手机仿 TikTok，上下滑切主播）、语音包清单 `pnpm voices:list`、真实生图适配器。655 个单测、22 个 e2e。
+- 过程：Command Code 先撞 5 小时额度、再撞周额度；改用 BYOK Systalyze。Systalyze 的 DeepSeek 不能看图（cmd 读截图即失败），且频繁报 `Failed to process successful response`，换 Kimi-K3 后稳定。Kimi 会在 shell 默认 30 秒超时上反复重试同一条 e2e，需在任务里写明「显式 timeout、超时两次就停」。
+- Claude 验收（核心逐行、其余看测试）抓到 DeepSeek/Kimi 自测没抓到的问题：TTS 音色全局（忧奈会用夏凛的声音）、两角色 Mock 语音同目录撞键、同一连接切频道后旧会话的后台媒体和迟到消息串进新频道、生图没用到对话（不满足题目）、生成图写进客户端 public（生产不可用）、e2e 截图全黑仍通过（断言不检查画面）、手机夏凛桌下露出下半身、素材里烧进假透明棋盘格（杯柄封闭区域，边界 flood fill 抠不到）。fix2 为修一个会话级错误把**所有** error 移出 turnId 过滤，破坏 D3/Q1 打断语义——Claude 否决，改为 error 带 `scope`。
+- Claude 用 Playwright 自己等 10 秒截图，确认「全黑」只是截图过早；杯柄修复前后铺深色底放大对比确认。

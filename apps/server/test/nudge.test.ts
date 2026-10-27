@@ -5,10 +5,10 @@ import { createMockStt } from "../src/adapters/mock/mockStt";
 import { createMockTts } from "../src/adapters/mock/mockTts";
 import { silentLogger } from "../src/log";
 import type { LLMContext, LLMPort } from "../src/ports";
-import { loadPromptTemplate } from "../src/prompts/loader";
 import { renderPrompt, NUDGE_SCENE_NOTE } from "../src/prompts/renderPrompt";
 import { createSessionManager, NUDGE_USER_TEXT, type SendFn, type SessionManager } from "../src/session";
 import { createInitialScene } from "../src/story";
+import { testPack, testPacks } from "./helpers/pack";
 
 type Harness = {
   manager: SessionManager;
@@ -28,6 +28,7 @@ function setup(options: { llm?: LLMPort; sessionTurnLimit?: number; dailyTurnLim
     llm: options.llm ?? createMockLlm({ beatDelayMs: 0 }),
     tts: createMockTts({ delayMs: 0 }),
     log: silentLogger,
+    packs: testPacks(),
     sessionTurnLimit: options.sessionTurnLimit,
     dailyTurnLimit: options.dailyTurnLimit,
     idleTimeoutMs: 24 * 60 * 60 * 1000,
@@ -60,7 +61,7 @@ afterEach(() => {
 
 describe("mockLlm：主动开口脚本（D32）", () => {
   it("nudge 时返回一句主动台词 + 一个无声动作，且不推进剧情", () => {
-    const beats = composeBeats({ history: [], scene: createInitialScene(), userText: NUDGE_USER_TEXT, nudge: true });
+    const beats = composeBeats({ history: [], scene: createInitialScene(), userText: NUDGE_USER_TEXT, pack: testPack("rin"), nudge: true }, testPack("rin"));
     expect(beats.length).toBeGreaterThanOrEqual(2);
     expect(beats.some((beat) => beat.say !== "")).toBe(true);
     expect(beats.some((beat) => beat.say === "" && beat.suggest !== null)).toBe(true);
@@ -89,7 +90,7 @@ describe("服务端 nudge：不推进剧情、不计入限额（§7）", () => {
   it("主动开口轮即使 LLM 提议推进剧情也不生效（trust 不变）", async () => {
     const llm: LLMPort = {
       async *streamBeats() {
-        yield { say: "……", emotion: "calm", suggest: "sip_coffee", advance: "probe" };
+        yield { say: "……", emotion: "calm", suggest: "drink", advance: "probe" };
       },
     };
     const harness = setup({ llm });
@@ -131,9 +132,9 @@ describe("服务端 nudge：不推进剧情、不计入限额（§7）", () => {
 
 describe("提示词：主动开口的动态后缀（§7）", () => {
   it("nudge 时给动态后缀追加沉默提示，普通轮不加", () => {
-    const prompt = loadPromptTemplate();
+    const prompt = testPack("rin");
     const scene = createInitialScene();
-    const nudge = renderPrompt(prompt.staticText, prompt.dynamicTemplate, {
+    const nudge = renderPrompt(prompt, {
       scene,
       history: [],
       userText: NUDGE_USER_TEXT,
@@ -141,7 +142,7 @@ describe("提示词：主动开口的动态后缀（§7）", () => {
     });
     expect(nudge[1]?.content).toContain(NUDGE_SCENE_NOTE);
 
-    const normal = renderPrompt(prompt.staticText, prompt.dynamicTemplate, {
+    const normal = renderPrompt(prompt, {
       scene,
       history: [],
       userText: "你好",

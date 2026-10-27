@@ -65,6 +65,29 @@ export const FIT_PRESETS: Record<"desktop" | "mobile", FitPreset> = {
   mobile: { heightRatio: 0.92, offsetXRatio: 0, offsetYRatio: 0 },
 };
 
+/**
+ * S6b §3：直播间构图（用户 2026-10-27 确认）。
+ *
+ * 忧奈模型是固定半蹲姿势（没有腿部/姿势参数），直播间做**全身展示**，
+ * 让背景适应角色：低机位卧室地面 + 空的大软垫，她蹲在软垫前。
+ *
+ * - `liveDesktop`：人物高约画面 80%，中心在 56% 高处（0.56 - 0.5 = +0.06 向上）。
+ * - `liveMobile`：人物高约 62%，中心在 66% 高处（0.66 - 0.5 = +0.16 向上）。
+ *
+ * 垂直偏移用 `offsetYRatio`（+ 向上）表达「中心在画面 N% 高处」。
+ */
+export const LIVE_FIT_PRESETS: Record<"liveDesktop" | "liveMobile", FitPreset> = {
+  liveDesktop: { heightRatio: 0.8, offsetXRatio: 0, offsetYRatio: 0.56 - 0.5 },
+  liveMobile: { heightRatio: 0.62, offsetXRatio: 0, offsetYRatio: 0.66 - 0.5 },
+};
+
+/** 直播间画布宽度 → 预设名（与 §4 的 900px 断点一致）。 */
+export const LIVE_MOBILE_MAX_WIDTH = 900;
+
+export function livePresetFor(canvasW: number): "liveDesktop" | "liveMobile" {
+  return canvasW < LIVE_MOBILE_MAX_WIDTH ? "liveMobile" : "liveDesktop";
+}
+
 /** 按画布宽度选择预设名（小于 `MOBILE_MAX_WIDTH` 视为移动端，与预览页 CSS 断点一致）。 */
 export const MOBILE_MAX_WIDTH = 720;
 

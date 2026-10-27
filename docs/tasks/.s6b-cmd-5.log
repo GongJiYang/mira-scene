@@ -1,0 +1,11 @@
+完成。已从中断处继续，未重做、未回滚。
+
+**各节状态**：
+- §1 角色包 / §2 兜底 / §3 忧奈舞台：前序会话已完成，本次验证通过（626 单测、typecheck、smoke 全绿）。
+- **§4 直播间 UI（本次收尾）**：补 `e2e/live.spec.ts`（桌面+手机：发弹幕收回复、切频道含手机滑动、截图 `e2e/out/live-*.png` ×4）；旧 `stage/mobile.spec.ts` 改走 `?legacy=1`（只改 URL 字面值）。
+- **§5 语音包清单（本次）**：`pnpm voices:list` → `characters/rin|yuna/voice-pack.json`（92 条）+ `docs/voice-pack.md`，不调 Fish。
+- **§5.5 真实生图（本次）**：`imageGen.ts`（OpenAI 兼容接口取 `b64_json` 落盘）+ `imagePrompt.ts`（`buildImagePrompt` 纯函数）；config 加 `IMAGE_*` 凭据；未配置 Key 时用 `presetMedia`（配置选择非降级）。7 个新测试。
+
+**验证**：单测 626 通过、typecheck 通过、smoke OK、e2e 19 通过 / 13 跳过 / 0 失败。
+
+**已写 `docs/tasks/s6b-report.md`**，含每节完成情况、改动文件、protocol 改名清单、pack schema、测试数、截图路径、歧义（e2e 端口 5273→5274 避开本机占用；旧用例走 legacy；property 测试偶发超时与改动无关；生图 history 因 MediaPort 接口暂用空历史占位）。未 commit，Key 未打印。

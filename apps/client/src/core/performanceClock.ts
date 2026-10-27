@@ -79,7 +79,7 @@ export function createPerformanceClock(deps: PerformanceClockDeps): PerformanceC
         }
         if (!performance.idleActionDone && at - idleSince >= IDLE_ACTION_AFTER_MS) {
           const index = Math.floor(deps.rng() * IDLE_ACTIONS.length);
-          deps.emit({ type: "IDLE_ACTION", action: IDLE_ACTIONS[index] ?? "glance_window", at });
+          deps.emit({ type: "IDLE_ACTION", action: IDLE_ACTIONS[index] ?? "glance", at });
         }
         if (nudgeForIdleSince !== idleSince && at - idleSince >= NUDGE_AFTER_MS) {
           nudgeForIdleSince = idleSince;

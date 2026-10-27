@@ -378,7 +378,7 @@ export function Stage() {
       </div>
 
       <p className="stage-subtitle" data-testid="subtitle">
-        {vm.subtitle ?? ""}
+        {vm.subtitle ?? vm.fallbackSubtitle ?? ""}
       </p>
       {vm.pendingNudge && <p className="stage-hint">（她似乎想说点什么）</p>}
       {videoState.notice !== null && (
@@ -420,9 +420,10 @@ export function Stage() {
         <p className="stage-hint" data-testid="status">
           {`connection=${vm.connection}${vm.micError ? ` · 麦克风不可用：${vm.micError}` : ""}`}
         </p>
+        {/* S6b §2：原始错误信息只在 ?debug=1 显示；否则只保留重试入口。 */}
         {vm.error && (
           <p>
-            {`error ${vm.error.code}: ${vm.error.message} `}
+            {vm.debugMode ? `${`error ${vm.error.code}: ${vm.error.message}`} ` : null}
             <button type="button" onClick={vm.intents.retry}>
               重试
             </button>

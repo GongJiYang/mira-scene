@@ -12,7 +12,6 @@ import type { Logger } from "../../log";
 import type { LLMContext, LLMPort } from "../../ports";
 import { isAbortError } from "../../abort";
 import { renderPrompt, type ChatMessage } from "../../prompts/renderPrompt";
-import type { PromptTemplate } from "../../prompts/loader";
 import { parseBeatLines } from "./parseBeatLines";
 
 export type DeepSeekLlmOptions = {
@@ -20,7 +19,6 @@ export type DeepSeekLlmOptions = {
   baseUrl: string;
   apiKey: string;
   model: string;
-  prompt: PromptTemplate;
   fetch?: typeof fetch;
   log?: Logger;
   temperature?: number;
@@ -50,12 +48,12 @@ export function createDeepSeekLlm(options: DeepSeekLlmOptions): LLMPort {
 
   return {
     async *streamBeats(ctx: LLMContext, signal): AsyncIterable<unknown> {
-      const messages: ChatMessage[] = renderPrompt(options.prompt.staticText, options.prompt.dynamicTemplate, ctx);
+      const messages: ChatMessage[] = renderPrompt(ctx.pack, ctx);
 
       options.log?.({
         ts: Date.now(),
         event: "prompt_version",
-        detail: { prompt_version: options.prompt.version },
+        detail: { prompt_version: ctx.pack.promptVersion },
       });
 
       let response: Response;

@@ -57,18 +57,18 @@ describe("B：idle", () => {
 
   it("待机小动作只执行一次，并把 hands 切到动作对应的图层", () => {
     let state = run(initialPerformanceState, { type: "PHASE", phase: "idle", at: 0 });
-    state = run(state, { type: "IDLE_ACTION", action: "check_phone", at: 8_000 });
-    expect(state.activeAction).toEqual({ action: "check_phone", startedAt: 8_000 });
+    state = run(state, { type: "IDLE_ACTION", action: "phone", at: 8_000 });
+    expect(state.activeAction).toEqual({ action: "phone", startedAt: 8_000 });
     expect(state.hands).toBe("phone");
     expect(state.idleActionDone).toBe(true);
 
-    const second = performanceReducer(state, { type: "IDLE_ACTION", action: "sip_coffee", at: 9_000 });
+    const second = performanceReducer(state, { type: "IDLE_ACTION", action: "drink", at: 9_000 });
     expect(second).toBe(state);
   });
 
-  it("glance_window 不改手部", () => {
+  it("glance 不改手部", () => {
     let state = run(initialPerformanceState, { type: "PHASE", phase: "idle", at: 0 });
-    state = run(state, { type: "IDLE_ACTION", action: "glance_window", at: 8_000 });
+    state = run(state, { type: "IDLE_ACTION", action: "glance", at: 8_000 });
     expect(state.hands).toBe("cup");
   });
 
@@ -82,7 +82,7 @@ describe("B：listening", () => {
   it("面部立即切到看镜头、嘴闭合、清空动作", () => {
     let state = run(speaking(0), {
       type: "BEAT_STARTED",
-      look: beatLook({ emotion: "surprised", action: "show_polaroid" }),
+      look: beatLook({ emotion: "surprised", action: "show_item" }),
       at: 100,
     });
     expect(state.face).toEqual(faceForEmotion("surprised"));
@@ -97,7 +97,7 @@ describe("B：listening", () => {
   it("手部 200ms 平滑收回 cup：进度随 TICK 推进，完成后落位", () => {
     let state = run(speaking(0), {
       type: "BEAT_STARTED",
-      look: beatLook({ hands: "phone", action: "check_phone" }),
+      look: beatLook({ hands: "phone", action: "phone" }),
       at: 0,
     });
     // 先让 phone 的过渡完成，hand 真正落在 phone。
@@ -132,17 +132,17 @@ describe("B：thinking", () => {
     expect(state.mouth).toBe("closed");
   });
 
-  it("持续超过 2s 补一次 sip_coffee，只补一次", () => {
+  it("持续超过 2s 补一次 drink，只补一次", () => {
     let state = run(initialPerformanceState, { type: "PHASE", phase: "thinking", at: 1_000 });
     state = performanceReducer(state, { type: "TICK", at: 1_000 + THINKING_SIP_AFTER_MS - 1 });
     expect(state.activeAction).toBeNull();
 
     state = performanceReducer(state, { type: "TICK", at: 1_000 + THINKING_SIP_AFTER_MS });
-    expect(state.activeAction).toEqual({ action: "sip_coffee", startedAt: 3_000 });
+    expect(state.activeAction).toEqual({ action: "drink", startedAt: 3_000 });
     expect(state.hands).toBe("cup");
 
     const later = performanceReducer(state, { type: "TICK", at: 9_000 });
-    expect(later.activeAction).toEqual({ action: "sip_coffee", startedAt: 3_000 });
+    expect(later.activeAction).toEqual({ action: "drink", startedAt: 3_000 });
   });
 
   it("重新进入 thinking 时重置 sip 标记", () => {
@@ -173,10 +173,10 @@ describe("B：speaking", () => {
   it("beat.action 决定手部与 activeAction", () => {
     const state = run(speaking(0), {
       type: "BEAT_STARTED",
-      look: beatLook({ hands: "cup", action: "show_polaroid" }),
+      look: beatLook({ hands: "cup", action: "show_item" }),
       at: 500,
     });
-    expect(state.activeAction).toEqual({ action: "show_polaroid", startedAt: 500 });
+    expect(state.activeAction).toEqual({ action: "show_item", startedAt: 500 });
     expect(state.handsTransition?.to).toBe("polaroid");
   });
 

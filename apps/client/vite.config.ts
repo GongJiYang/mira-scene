@@ -26,6 +26,10 @@ export default defineConfig({
       "/session-token": {
         target: `http://localhost:${serverPort}`,
       },
+      // S6b-fix1 §5：真实生图由服务端 HTTP 提供（var/generated/）。
+      "/generated": {
+        target: `http://localhost:${serverPort}`,
+      },
     },
   },
 });

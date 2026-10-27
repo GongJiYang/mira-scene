@@ -33,7 +33,7 @@ export function advanceRule(scene: SceneState, intent: Intent, turnCount: number
     return turnCount - revealTurn >= REVEAL_TO_ENDING_AFTER_TURNS ? ADVANCE_ALLOW_ENDING : ADVANCE_HOLD;
   }
   // arrive / probe：trust≥2、被温和地直接问起，或聊够 8 轮 → 允许 reveal。
-  const asksDirectly = intent === "ask_waiting";
+  const asksDirectly = intent === "ask_core";
   if (scene.trust >= REVEAL_AFTER_TRUST || asksDirectly || turnCount >= REVEAL_AFTER_TURNS) {
     return ADVANCE_ALLOW_REVEAL;
   }

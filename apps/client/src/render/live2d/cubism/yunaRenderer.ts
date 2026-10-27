@@ -23,7 +23,27 @@ import {
   EMOTION_KEYS,
   type YunaEmotion,
 } from "../yunaParams";
-import { fitModel, FIT_PRESETS, MODEL_BOUNDS, presetFor } from "./fit";
+import {
+  fitModel,
+  FIT_PRESETS,
+  LIVE_FIT_PRESETS,
+  livePresetFor,
+  MODEL_BOUNDS,
+  presetFor,
+  type FitPreset,
+} from "./fit";
+
+/**
+ * S6b §3：构图预设的选择方式。
+ * - `preview`（默认）：预览页构图（人物尽量大，S6a-fix2）。
+ * - `live`：直播间构图（全身展示，桌面 80% / 手机 62%，见 `LIVE_FIT_PRESETS`）。
+ */
+export type FitMode = "preview" | "live";
+
+function presetForMode(mode: FitMode, viewportW: number): FitPreset {
+  if (mode === "live") return LIVE_FIT_PRESETS[livePresetFor(viewportW)];
+  return FIT_PRESETS[presetFor(viewportW)];
+}
 
 export const YUNA_MODEL_URL = "/models/yuna/yuna.model3.json";
 
@@ -50,13 +70,19 @@ class YunaModel extends CubismUserModel {
     private canvasHeight: number,
     private viewportWidth: number = canvasWidth,
     private viewportHeight: number = canvasHeight,
+    /** S6b §3：预览页 / 直播间两套构图。 */
+    private readonly fitMode: FitMode = "preview",
   ) {
     super();
   }
 
-  static async create(gl: WebGLRenderingContext, settings: CubismModelSettingJson): Promise<YunaModel> {
+  static async create(
+    gl: WebGLRenderingContext,
+    settings: CubismModelSettingJson,
+    fitMode: FitMode = "preview",
+  ): Promise<YunaModel> {
     const canvas = gl.canvas as HTMLCanvasElement;
-    const model = new YunaModel(gl, canvas.width, canvas.height, canvas.clientWidth, canvas.clientHeight);
+    const model = new YunaModel(gl, canvas.width, canvas.height, canvas.clientWidth, canvas.clientHeight, fitMode);
     const mocUrl = `/models/yuna/${settings.getModelFileName()}`;
     const moc = await fetchArrayBuffer(mocUrl);
     model.loadModel(moc);
@@ -152,7 +178,7 @@ class YunaModel extends CubismUserModel {
     // S6a-fix2 §3：构图（缩放 + 居中）由纯函数 `fitModel` 算出，外壳只负责写进矩阵。
     const viewportW = this.viewportWidth;
     const viewportH = this.viewportHeight;
-    const preset = FIT_PRESETS[presetFor(viewportW)];
+    const preset = presetForMode(this.fitMode, viewportW);
     const fit = fitModel(viewportW, viewportH, MODEL_BOUNDS, preset);
 
     // 模型矩阵：把可见区域中心放到画布中心，再按 fit.scale 等比缩放。
@@ -268,6 +294,8 @@ export type CreateYunaRendererOptions = {
   canvas: HTMLCanvasElement;
   /** 参数提供者：每帧由外壳调用，返回目标参数 + 情绪 + 手动眨眼值（来源是纯函数 `yunaParams`）。 */
   frame: () => YunaFrame;
+  /** S6b §3：构图模式，默认 `preview`（预览页）；直播间传 `live`。 */
+  fitMode?: FitMode;
 };
 
 /** 情绪键平滑到位所需时间（S6a-fix1 §3：约 0.25 秒）。 */
@@ -292,7 +320,7 @@ export async function createYunaRenderer(
   const settings = new CubismModelSettingJson(settingsBuffer, settingsBuffer.byteLength);
   if (settings.getModelFileName() === "") throw new YunaLoadError("model3.json 缺少 Moc 字段");
 
-  const model = await YunaModel.create(gl, settings);
+  const model = await YunaModel.create(gl, settings, options.fitMode ?? "preview");
 
   let running = true;
   let lastTime = performance.now();

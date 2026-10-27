@@ -24,7 +24,10 @@ const VIEWPORTS = [
 ] as const;
 
 async function openStage(page: Page, query = ""): Promise<void> {
-  await page.goto(`/${query}`);
+  // S6b §4：默认渲染新直播间 UI；本文件测旧 Stage 行为，统一追加 legacy=1。
+  const qs = query.startsWith("?") ? query.slice(1) : query;
+  const params = qs === "" ? "legacy=1" : `${qs}&legacy=1`;
+  await page.goto(`/?${params}`);
   await page.mouse.click(4, 4); // 首次手势：解锁 AudioContext
   await expect(page.getByTestId("stage")).toHaveAttribute("data-connection", "open", { timeout: 20_000 });
 }

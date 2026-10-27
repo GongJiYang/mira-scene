@@ -55,8 +55,8 @@ export const BLINK_FRAME_MS = 60;
 export const HANDS_TRANSITION_MS = 200;
 export const THINKING_SIP_AFTER_MS = 2_000;
 export const IDLE_ACTION_AFTER_MS = 8_000;
-/** 待机小动作候选（D28：看窗外 / 喝咖啡 / 看手机）。 */
-export const IDLE_ACTIONS: readonly Action[] = ["glance_window", "sip_coffee", "check_phone"];
+/** 待机小动作候选（D28：瞟一眼 / 喝一口 / 看手机）。 */
+export const IDLE_ACTIONS: readonly Action[] = ["glance", "drink", "phone"];
 
 /** idle 时第一次眨眼的窗口（含两端）。 */
 export const BLINK_MIN_MS = 2_000;
@@ -64,12 +64,12 @@ export const BLINK_MAX_MS = 6_000;
 
 const BLINK_SEQUENCE: readonly Blink[] = ["half", "closed", "half", "open"];
 
-/** 动作 → 手部图层；glance_window 不改手部。 */
+/** 动作 → 手部图层；glance 不改手部。 */
 const ACTION_HANDS: Record<Action, Hands | null> = {
-  sip_coffee: "cup",
-  glance_window: null,
-  check_phone: "phone",
-  show_polaroid: "polaroid",
+  drink: "cup",
+  glance: null,
+  phone: "phone",
+  show_item: "polaroid",
 };
 
 /** 返回副本：B 的 face 只在 reducer 里整体替换，避免和 manifest 共享可变数组。 */
@@ -240,7 +240,7 @@ function applyTick(state: PerformanceState, at: number): PerformanceState {
     next = {
       ...next,
       thinkingSipDone: true,
-      activeAction: { action: "sip_coffee", startedAt: at },
+      activeAction: { action: "drink", startedAt: at },
       hands: "cup",
     };
   }

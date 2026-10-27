@@ -13,7 +13,7 @@ export type FishTtsOptions = {
   /** 例如 `https://api.fish.audio/v1`。 */
   baseUrl: string;
   apiKey: string;
-  /** 为空则不传 `reference_id`。 */
+  /** 默认音色（S6b-fix1 §1：会话层会按角色包经 `TtsOptions.voiceId` 覆盖）。为空则不传 `reference_id`。 */
   voiceId: string;
   model: string;
   fetch?: typeof fetch;
@@ -42,18 +42,21 @@ export function createFishTts(options: FishTtsOptions): TTSPort {
   let creditExhaustedUntil = 0;
 
   return {
-    async synthesize(text, _opts, signal): Promise<TTSAudio> {
+    async synthesize(text, opts, signal): Promise<TTSAudio> {
       if (creditExhaustedUntil !== 0 && clock() < creditExhaustedUntil) {
         throw new FishApiError("fish_credit", "Fish 余额不足，已跳过后续 TTS 请求");
       }
 
+      // S6b-fix1 §1：音色按会话角色包决定（会话层经 TtsOptions.voiceId 传入）；
+      // 缺省回落到构造时的默认 voiceId（兼容既有直接构造用法）。
+      const voiceId = opts.voiceId ?? options.voiceId;
       const body: Record<string, unknown> = {
         text,
         format: "mp3",
         mp3_bitrate: mp3Bitrate,
         latency: "balanced",
       };
-      if (options.voiceId !== "") body.reference_id = options.voiceId;
+      if (voiceId !== "") body.reference_id = voiceId;
 
       options.log?.({ ts: Date.now(), event: "fish_call", detail: { port: "tts" } });
       const response = await doFetch(`${options.baseUrl}/tts`, {

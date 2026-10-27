@@ -105,4 +105,32 @@ describe("createMockTts：预录片段查表（S5 §1）", () => {
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("S6b-fix1 §2：同一台词同一情绪，两个角色各自取到自己目录的文件", async () => {
+    // 根目录 assets/voice/ 下放 rin/ 与 yuna/ 两个角色目录，各一份 manifest + clips。
+    const { manifestPath } = makeVoiceDir();
+    const root = join(manifestPath, "..");
+    const text = "[calm] 同一句台词。";
+    const key = voiceKey(text, "calm");
+    const rinBytes = Buffer.from([0x52, 0x49, 0x4e]); // "RIN"
+    const yunaBytes = Buffer.from([0x59, 0x55, 0x4e, 0x41]); // "YUNA"
+    for (const [id, bytes] of [["rin", rinBytes], ["yuna", yunaBytes]] as const) {
+      const dir = join(root, id);
+      const clipsDir = join(dir, "clips");
+      mkdirSync(clipsDir, { recursive: true });
+      writeFileSync(join(clipsDir, `${key}.mp3`), bytes);
+      writeFileSync(
+        join(dir, "manifest.json"),
+        JSON.stringify({ version: VOICE_MANIFEST_VERSION, clips: { [key]: { file: `${key}.mp3`, text, emotion: "calm", durationMs: 100 } } }),
+      );
+    }
+
+    const tts = createMockTts({ delayMs: 0, manifestPath });
+    const rin = await tts.synthesize(text, { emotion: "calm", characterId: "rin" }, new AbortController().signal);
+    const yuna = await tts.synthesize(text, { emotion: "calm", characterId: "yuna" }, new AbortController().signal);
+    expect(rin.mime).toBe(MP3_MIME);
+    expect(yuna.mime).toBe(MP3_MIME);
+    expect(rin.data.equals(rinBytes)).toBe(true);
+    expect(yuna.data.equals(yunaBytes)).toBe(true);
+  });
 });

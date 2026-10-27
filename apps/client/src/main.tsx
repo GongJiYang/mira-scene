@@ -3,14 +3,17 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { installAudioUnlock } from "./core/audio";
 import { bootstrapConnection } from "./core/controller";
+import { Live } from "./live/Live";
 import { YunaPreview } from "./preview/YunaPreview";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("缺少 #root 容器");
 
-// S6a §1.4：URL 带 `?preview=yuna` 时渲染忧奈 Live2D 预览页，否则照旧渲染现有 App。
-const preview = new URLSearchParams(window.location.search).get("preview");
-if (preview === "yuna") {
+const params = new URLSearchParams(window.location.search);
+
+// S6a §1.4：`?preview=yuna` → 忧奈 Live2D 预览页（调试用，不连服务端）。
+// S6b §4：默认渲染新直播间 UI；`?legacy=1` 保留旧的 Stage 视图。
+if (params.get("preview") === "yuna") {
   createRoot(container).render(
     <StrictMode>
       <YunaPreview />
@@ -20,9 +23,6 @@ if (preview === "yuna") {
   installAudioUnlock();
   bootstrapConnection();
 
-  createRoot(container).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
+  const legacy = params.get("legacy") === "1";
+  createRoot(container).render(<StrictMode>{legacy ? <App /> : <Live />}</StrictMode>);
 }

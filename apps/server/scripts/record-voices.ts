@@ -26,12 +26,13 @@ import { applyRepoEnv, loadConfig, resolveVoiceManifestPath } from "../src/confi
 import { buildTtsText } from "../src/director/vocab";
 import type { Intent } from "../src/intent";
 import { createInitialScene } from "../src/story";
+import { DEFAULT_CHARACTER_ID, loadPacks, type Pack } from "../src/characters/pack";
 
-/** 能稳定命中每种意图的代表文本（与 `classifyIntent` 的关键词表一致）。 */
+/** 能稳定命中每种意图的代表文本（与各角色 content.json 的关键词表一致）。 */
 const TEXT_BY_INTENT: ReadonlyArray<[Intent, string]> = [
-  ["ask_waiting", "你在等谁？"],
-  ["ask_photo", "能看看照片吗"],
-  ["ask_radio", "你的节目几点开始"],
+  ["ask_core", "你在等谁？"],
+  ["ask_item", "能看看照片吗"],
+  ["ask_job", "你的节目几点开始"],
   ["comfort", "我陪你坐一会儿"],
   ["greeting", "你好"],
   ["other", "今天店里很安静"],
@@ -42,8 +43,8 @@ const NODES: readonly StoryNode[] = ["arrive", "probe", "reveal", "ending"];
 /** 一句「台词 + 情绪」：录制的最小单位。 */
 type Line = { say: string; emotion: Emotion };
 
-/** 遍历 Mock 剧本，收集所有需要录制的台词（去重）。 */
-export function collectLines(): Line[] {
+/** 遍历某个角色包的 Mock 剧本，收集所有需要录制的台词（去重）。 */
+export function collectLines(pack: Pack): Line[] {
   const seen = new Set<string>();
   const lines: Line[] = [];
   const push = (say: string, emotion: Emotion): void => {
@@ -57,13 +58,13 @@ export function collectLines(): Line[] {
   for (const node of NODES) {
     for (const [, userText] of TEXT_BY_INTENT) {
       const scene = { ...createInitialScene(), node };
-      for (const beat of composeBeats({ history: [], scene, userText })) {
+      for (const beat of composeBeats({ history: [], scene, userText, pack }, pack)) {
         push(beat.say, beat.emotion);
       }
     }
   }
   // D32 主动开口轮的两句。
-  for (const beat of composeBeats({ history: [], scene: createInitialScene(), userText: "", nudge: true })) {
+  for (const beat of composeBeats({ history: [], scene: createInitialScene(), userText: "", pack, nudge: true }, pack)) {
     push(beat.say, beat.emotion);
   }
   return lines;
@@ -95,7 +96,12 @@ async function main(): Promise<void> {
     log: (record) => console.log(JSON.stringify(record)),
   });
 
-  const lines = collectLines();
+  // S6b §1：台词按角色包取；本脚本只录缺省角色（多角色录制留到需要时再扩展）。
+  const packs = loadPacks();
+  const pack = packs.get(DEFAULT_CHARACTER_ID);
+  if (!pack) throw new Error(`找不到缺省角色包：${DEFAULT_CHARACTER_ID}`);
+
+  const lines = collectLines(pack);
   let recorded = 0;
   let skipped = 0;
 

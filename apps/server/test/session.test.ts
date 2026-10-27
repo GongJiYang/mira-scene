@@ -7,6 +7,7 @@ import { createMockTts } from "../src/adapters/mock/mockTts";
 import { silentLogger, type LogRecord } from "../src/log";
 import type { LLMPort, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
+import { testPacks } from "./helpers/pack";
 
 type LlmBeatFixture = {
   say: string;
@@ -93,6 +94,7 @@ function setup(ports: { llm?: LLMPort; stt?: STTPort; tts?: TTSPort; log?: (reco
     stt: ports.stt ?? createMockStt({ delayMs: 0 }),
     llm: ports.llm ?? createMockLlm({ beatDelayMs: 0 }),
     tts: ports.tts ?? createMockTts({ delayMs: 0 }),
+    packs: testPacks(),
     log: ports.log ?? silentLogger,
   });
   activeManager = manager;
@@ -395,7 +397,7 @@ describe("session：beats、剧情与错误", () => {
   it("导演层：日志记录 suggest / advance 的采纳结果", async () => {
     const records: LogRecord[] = [];
     const harness = setup({
-      llm: scriptedLlm([[llmBeat("嗯。", { suggest: "sip_coffee", advance: "probe" })]]),
+      llm: scriptedLlm([[llmBeat("嗯。", { suggest: "drink", advance: "probe" })]]),
       log: (record) => records.push(record),
     });
     await harness.hello();
@@ -403,7 +405,7 @@ describe("session：beats、剧情与错误", () => {
 
     const decision = records.find((record) => record.event === "director_decision");
     expect(decision?.detail).toMatchObject({
-      suggest: "sip_coffee",
+      suggest: "drink",
       suggestAccepted: true,
       advance: "probe",
       advanceAccepted: true,

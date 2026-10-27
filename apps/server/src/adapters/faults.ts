@@ -11,6 +11,7 @@ export const FAULT_VALUES = [
   "tts",
   "tts_once",
   "stt",
+  "stt_error",
   "slow",
   "ws_drop",
 ] as const;
@@ -27,16 +28,6 @@ export const WS_DROP_AFTER_BEAT = 2;
 /** LLM 首 token 超时默认值（D10）。 */
 export const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 10_000;
 export const FIRST_TOKEN_TIMEOUT_ENV = "LLM_FIRST_TOKEN_TIMEOUT_MS";
-
-/**
- * 降级兜底台词（角色为 Mock 剧本里的夏凛）。
- * 授权范围不含 `adapters/mock/mockLlm.ts`，故与 Mock 剧本同源的角色台词集中放在本模块，
- * 由会话层在降级路径下发（emotion 固定 guarded）。
- */
-export const FALLBACK_LINES = {
-  llm_timeout: "……抱歉，刚才走神了。你刚才说到哪了？",
-  stt_empty: "刚才没听清，你再说一遍好吗？",
-} as const;
 
 export function isFault(value: string): value is Fault {
   return (FAULT_VALUES as readonly string[]).includes(value);
@@ -86,6 +77,8 @@ export function withFaults(port: object, kind: PortKind, faults: readonly string
       async transcribe(audio, signal) {
         throwIfAborted(signal);
         if (slow) await sleep(SLOW_DELAY_MS, signal);
+        // S6b §2：`stt_error` 模拟 STT 抛错（网络 / 超时 / 5xx），走角色化的 stt_failed 兜底。
+        if (active.has("stt_error")) throw new Error("fault:stt_error");
         if (active.has("stt")) return "";
         return stt.transcribe(audio, signal);
       },

@@ -7,7 +7,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
  */
 
 async function openStage(page: Page): Promise<void> {
-  await page.goto("/");
+  // S6b §4：默认渲染新直播间 UI；本文件测旧 Stage 行为，走 ?legacy=1。
+  await page.goto("/?legacy=1");
   // 首次用户手势：解锁 AudioContext（iOS 要求）。
   await page.mouse.click(4, 4);
   await expect(page.getByTestId("stage")).toHaveAttribute("data-connection", "open", { timeout: 20_000 });

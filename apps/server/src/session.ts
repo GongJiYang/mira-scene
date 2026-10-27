@@ -17,8 +17,9 @@ import {
   type StateSnapshotPayload,
   type ErrorPayload,
 } from "@mira/protocol";
-import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, FALLBACK_LINES, WS_DROP_AFTER_BEAT, parseFaults, type Fault } from "./adapters/faults";
+import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, type Fault } from "./adapters/faults";
 import { isAbortError, throwIfAborted } from "./abort";
+import { DEFAULT_CHARACTER_ID, type FallbackCategory, type Pack } from "./characters/pack";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
 import type { LLMHistoryEntry, MediaPort, Ports, TTSAudio, TTSPort, TtsOptions } from "./ports";
@@ -43,6 +44,8 @@ type TurnPayloads = {
 type Session = {
   id: string;
   send: SendFn | null;
+  /** S6b §1：本会话激活的角色包。 */
+  pack: Pack;
   history: LLMHistoryEntry[];
   scene: SceneState;
   recentActions: readonly (Action | null)[];
@@ -62,6 +65,8 @@ type Session = {
   mediaSent: Set<string>;
   /** D27：剧情媒体任务独立于轮次取消；dispose 时统一中止。 */
   mediaController: AbortController;
+  /** S6b-fix1 §1：本会话角色的 TTS 音色（从 pack.voice.fishVoiceIdEnv 对应的环境变量解析）。 */
+  voiceId?: string;
 };
 
 /** 一轮输入的规范化形式：文字 / 语音 / 主动开口（D32）。 */
@@ -87,8 +92,17 @@ export type SessionDeps = Ports & {
   firstTokenTimeoutMs?: number;
   /** `ws_drop`：由传输层关闭该会话的连接。 */
   dropConnection?: (sessionId: string) => void;
+  /** S6b §1：hello 的 `characterId` 不合法时，由传输层关闭该连接（发完 error 后调用）。 */
+  closeConnection?: (send: SendFn) => void;
   /** D27：媒体端口；缺省时用一个立即就绪的兜底实现（真实运行由 index.ts 注入预置照片适配器）。 */
   media?: MediaPort;
+  /** S6b §1：角色包注册表（id → Pack）；由 index.ts 在启动时加载。 */
+  packs?: Map<string, Pack>;
+  /**
+   * S6b-fix1 §1：按角色包解析 TTS 音色（从 pack.voice.fishVoiceIdEnv 对应环境变量取值）。
+   * 由 index.ts 在启动时注入；真实模式下缺失会在启动时报错。Mock 模式返回 undefined。
+   */
+  resolveVoiceId?: (pack: Pack) => string | undefined;
 };
 
 export type SessionManager = {
@@ -129,11 +143,14 @@ async function synthesizeWithRetry(
   return { ok: false, error: lastError };
 }
 
-/** 降级兜底 beat：只带台词与情绪，视觉沿用当前场景（D10 角色化兜底）。 */
-function fallbackBeat(session: Session, say: string): Beat {
+/**
+ * 降级兜底 beat（D10 / S6b §2）：只带台词与情绪，视觉沿用当前场景。
+ * 台词从角色包的 fallback 表按类别取，不在此处硬编码（铁律 6）。
+ */
+function fallbackBeat(session: Session, category: FallbackCategory): Beat {
   return {
     seq: 0,
-    say,
+    say: session.pack.fallback[category],
     emotion: "guarded",
     hands: session.scene.hands,
     action: null,
@@ -154,6 +171,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
   const media: MediaPort =
     deps.media ??
     { preset: (item) => Promise.resolve({ url: `/stage/photos/${item.id}.png`, status: "ready" as const }) };
+  // S6b-fix1 §1：音色解析（按角色包）。缺省不解析（mock 旧行为）。
+  const resolveVoiceId = deps.resolveVoiceId ?? (() => undefined);
   // 全站每日计数：内存保存，跨自然日重置。
   const daily = { day: localDayKey(clock()), count: 0 };
 
@@ -189,9 +208,12 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     if (session.mediaSent.has(storyEventId)) return;
     session.mediaSent.add(storyEventId);
     logFor(session, turnId, "media_scheduled", { storyEventId });
+    // S6b-fix1 §4：传入当前角色包与最近对话，让生图提示词用到本轮之前的对话内容。
+    // 快照 history：后台任务异步完成时本轮历史已追加，快照保证「本轮之前」的语义。
+    const ctx = { pack: session.pack, history: [...session.history] };
     void (async () => {
       try {
-        const result = await media.preset(media_, session.mediaController.signal);
+        const result = await media.preset(media_, ctx, session.mediaController.signal);
         if (session.mediaController.signal.aborted) return;
         session.send?.(
           buildEnvelope(session, turnId, "media_ready", {
@@ -255,13 +277,25 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       let userText: string;
       if (input.type === "audio_input") {
         const data = Buffer.from(input.dataBase64, "base64");
-        userText = await session.ports.stt.transcribe({ mime: input.mime, data }, signal);
+        try {
+          userText = await session.ports.stt.transcribe({ mime: input.mime, data }, signal);
+        } catch (error) {
+          if (signal.aborted || isAbortError(error)) throw error;
+          // S6b §2：STT 抛其它错误（网络 / 超时 / 5xx）→ 说角色化的「信号断了一下」台词后正常结束本轮，
+          // 不再走 turn_failed（不显示技术报错）。
+          logTurn("fallback_used", { category: "stt_failed" });
+          if (!emitFinal("beat", { beat: fallbackBeat(session, "stt_failed") })) return;
+          closed = true;
+          if (!emitFinal("turn_end", { reason: "done" })) return;
+          logTurn("turn_end", { reason: "done" });
+          return;
+        }
         throwIfAborted(signal);
         logTurn("stt_done", { chars: [...userText].length });
         if (userText.trim() === "") {
           // STT 空结果：不跑 LLM，给一句「没听清」后正常结束本轮。
-          logTurn("fallback_used", { category: "stt" });
-          if (!emit("beat", { beat: fallbackBeat(session, FALLBACK_LINES.stt_empty) })) return;
+          logTurn("fallback_used", { category: "stt_empty" });
+          if (!emit("beat", { beat: fallbackBeat(session, "stt_empty") })) return;
           closed = true;
           if (!emitFinal("turn_end", { reason: "done" })) return;
           logTurn("turn_end", { reason: "done" });
@@ -294,7 +328,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
       try {
         for await (const raw of session.ports.llm.streamBeats(
-          { history: session.history, scene: session.scene, userText, nudge: isNudge },
+          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge },
           llmSignal,
         )) {
           // 收到第一个 token 即撤销超时；后续不确定性交给现有取消语义。
@@ -354,7 +388,18 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             if (outBeat.say !== "") {
               says.push(outBeat.say);
               const beatSeq = outBeat.seq;
-              const audio = synthesizeWithRetry(session.ports.tts, ttsText, { emotion: outBeat.emotion, beatSeq: outBeat.seq }, signal);
+              // S6b-fix1 §1/§2：音色与 Mock 目录都按会话角色包决定。
+              const audio = synthesizeWithRetry(
+                session.ports.tts,
+                ttsText,
+                {
+                  emotion: outBeat.emotion,
+                  beatSeq: outBeat.seq,
+                  voiceId: session.voiceId,
+                  characterId: session.pack.id,
+                },
+                signal,
+              );
               ttsChain = ttsChain.then(async () => {
                 const result = await audio;
                 if (!result.ok) {
@@ -411,7 +456,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       if (llmTimedOut) {
         // LLM 首 token 超时（D10）：兜底台词 → error{llm_timeout} → turn_end{error}。
         logTurn("fallback_used", { category: "llm_timeout" });
-        if (!emitFinal("beat", { beat: fallbackBeat(session, FALLBACK_LINES.llm_timeout) })) return;
+        if (!emitFinal("beat", { beat: fallbackBeat(session, "llm_timeout") })) return;
         if (!emitFinal("error", { code: "llm_timeout", message: "LLM 首 token 超时，已使用兜底台词", retryable: true })) return;
         if (!emitFinal("turn_end", { reason: "error" })) return;
         logTurn("turn_end", { reason: "error" });
@@ -422,7 +467,11 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
+      // S6b §2：其余未预期错误 —— 服务端照常记录错误日志；客户端改播 pack 的 turn_failed 兜底台词，
+      // 不再显示原始 error code/message（原始信息只在 ?debug=1 面板显示）。retryable 语义不变。
       logTurn("turn_failed", { message });
+      logTurn("fallback_used", { category: "turn_failed" });
+      if (!emitFinal("beat", { beat: fallbackBeat(session, "turn_failed") })) return;
       if (!emitFinal("error", { code: "turn_failed", message, retryable: true })) return;
       if (!emitFinal("turn_end", { reason: "error" })) return;
       logTurn("turn_end", { reason: "error" });
@@ -430,6 +479,19 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
   }
 
   function handleHello(send: SendFn, message: Extract<ClientMessage, { type: "hello" }>): void {
+    // S6b-fix1 §3：同一连接上建立新会话时，解绑该连接上的其它会话——
+    // 中止轮次与后台媒体任务、断开 send（会话本身留给空闲回收）。
+    // 否则旧会话的后台媒体任务完成后会把 media_ready 发进新频道。
+    for (const other of sessions.values()) {
+      if (other.send !== null && other.send === send) {
+        other.controller?.abort();
+        other.controller = null;
+        other.mediaController.abort();
+        other.send = null;
+        logFor(other, other.lastTurnId, "session_unbound", { reason: "new_hello" });
+      }
+    }
+
     const resumedId = message.payload.resumeSessionId;
     const existing = resumedId ? sessions.get(resumedId) : undefined;
     let session: Session;
@@ -437,11 +499,29 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       session = existing;
       logFor(session, session.lastTurnId, "session_resumed");
     } else {
+      // S6b §1：缺省角色 rin（兼容旧客户端与既有测试）；未知 id → error{unknown_character} 并关闭会话，不回退。
+      const characterId = message.payload.characterId ?? DEFAULT_CHARACTER_ID;
+      const pack = deps.packs?.get(characterId);
+      if (!pack) {
+        deps.log({ ts: clock(), sessionId: message.sessionId, turnId: message.turnId, event: "unknown_character", detail: { characterId } });
+        send({
+          v: 1,
+          sessionId: message.sessionId,
+          turnId: message.turnId,
+          seq: 0,
+          ts: clock(),
+          type: "error",
+          payload: { code: "unknown_character", message: `未知角色：${characterId}`, retryable: false, scope: "session" },
+        });
+        deps.closeConnection?.(send);
+        return;
+      }
       const faults = parseFaults(message.payload.faults ?? deps.defaultFaults);
       const ports = deps.createPorts ? deps.createPorts(faults) : { stt: deps.stt, llm: deps.llm, tts: deps.tts };
       session = {
         id: randomUUID(),
         send: null,
+        pack,
         history: [],
         scene: createInitialScene(),
         recentActions: [],
@@ -455,9 +535,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         turnStartedAt: null,
         mediaSent: new Set(),
         mediaController: new AbortController(),
+        voiceId: resolveVoiceId(pack),
       };
       sessions.set(session.id, session);
-      logFor(session, 0, "session_created", { faults });
+      logFor(session, 0, "session_created", { faults, characterId: pack.id });
     }
 
     // 重连/重绑连接：旧连接上仍在跑的一轮没有意义，直接中止。
@@ -530,6 +611,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
             code: "quota_exceeded",
             message: scope === "session" ? `本次会话最多 ${limit} 轮` : `今天的体验额度已用完（${limit} 轮）`,
             retryable: false,
+            // S6b-fix3 §1：额度上限与具体轮次无关，按会话级处理（跳过客户端 D3 过滤）。
+            scope: "session",
           }),
         );
         return;
@@ -573,7 +656,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         seq: 0,
         ts: clock(),
         type: "error",
-        payload: { code: "unknown_session", message: "会话不存在，请重新 hello", retryable: true },
+        payload: { code: "unknown_session", message: "会话不存在，请重新 hello", retryable: true, scope: "session" },
       });
       return;
     }

@@ -62,7 +62,7 @@ describe("parseBeatLenient", () => {
   it("合法的 media / story / action / camera / fx 被保留", () => {
     const full: Beat = {
       ...baseBeat,
-      action: "sip_coffee",
+      action: "drink",
       camera: "close_up",
       fx: "warm_glow",
       media: { type: "video", id: "photo_letters" },

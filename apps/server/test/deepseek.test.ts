@@ -2,18 +2,19 @@ import { describe, expect, it } from "vitest";
 import { createDeepSeekLlm } from "../src/adapters/deepseek/deepseekLlm";
 import type { LogRecord } from "../src/log";
 import type { LLMContext } from "../src/ports";
-import type { PromptTemplate } from "../src/prompts/loader";
+import type { PromptPack } from "../src/prompts/renderPrompt";
 import { createInitialScene } from "../src/story";
+import { testPack } from "./helpers/pack";
 
-const PROMPT: PromptTemplate = {
-  version: "rin.test",
+const PROMPT: PromptPack = {
+  ...testPack("rin"),
+  promptVersion: "rin.test",
   staticText: "静态前缀",
   dynamicTemplate: "动态 {{user_text}}",
-  source: "mem",
 };
 
 function context(userText = "你好"): LLMContext {
-  return { history: [], scene: createInitialScene(), userText };
+  return { history: [], scene: createInitialScene(), userText, pack: PROMPT };
 }
 
 function dataChunk(content: string): string {
@@ -68,7 +69,6 @@ function makeLlm(fetchImpl: typeof fetch, logs: LogRecord[] = []) {
     baseUrl: "https://api.deepseek.com/v1",
     apiKey: "test-key",
     model: "deepseek-chat",
-    prompt: PROMPT,
     fetch: fetchImpl,
     log: (record) => logs.push(record),
   });

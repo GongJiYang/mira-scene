@@ -10,3 +10,6 @@ e2e/out/
 e2e/.artifacts/
 test-results/
 playwright-report/
+var/generated/
+apps/client/public/generated/
+assets/raw/_backup/

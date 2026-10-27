@@ -15,6 +15,11 @@ const envelopeFields = {
 export const helloPayloadSchema = z.object({
   resumeSessionId: z.string().optional(),
   /**
+   * S6b §1：客户端选定的角色包 id。缺省 → `rin`（兼容旧客户端与既有测试）；
+   * 不存在的 id → 服务端返回 `error{code:"unknown_character"}` 并关闭会话，不回退。
+   */
+  characterId: z.string().optional(),
+  /**
    * S5 故障注入（Q11）：客户端把 URL 的 `?fail=` 解析后随 hello 下发，
    * 服务端按会话生效；缺省时使用环境变量 FAULTS 的全局默认值。
    */
@@ -74,6 +79,13 @@ export const errorPayloadSchema = z.object({
   code: z.string(),
   message: z.string(),
   retryable: z.boolean(),
+  /**
+   * S6b-fix3 §1：错误范围。`"session"` 级（unknown_character / unknown_session /
+   * quota_exceeded 等与具体轮次无关）跳过客户端 D3 的 turnId 过滤；`"turn"` 级
+   * （llm_timeout / turn_failed / stale_turn / tts_degraded 等）回到过滤之后。
+   * 缺省视为 `"turn"`（向后兼容）。
+   */
+  scope: z.enum(["session", "turn"]).optional(),
 });
 
 /** D27：剧情层媒体就绪事件，只与 storyEventId 绑定，不跟 turnId 作废。 */

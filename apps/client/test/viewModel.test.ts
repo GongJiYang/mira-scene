@@ -15,7 +15,7 @@ function richState(): ClientState {
     ...initialState,
     currentTurnId: 4,
     subtitle: "信到了，人没来。",
-    visual: { emotion: "sad", hands: "phone", action: "check_phone", camera: "close_up", fx: "rain_stop" },
+    visual: { emotion: "sad", hands: "phone", action: "phone", camera: "close_up", fx: "rain_stop" },
     media: { type: "video", id: "letter_reveal" },
   };
 }

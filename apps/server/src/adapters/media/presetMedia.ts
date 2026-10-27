@@ -32,7 +32,8 @@ export function createPresetMedia(options: PresetMediaOptions = {}): MediaPort {
   const videoBasePath = options.videoBasePath ?? "/stage/videos";
 
   return {
-    preset(media: Media, signal: AbortSignal): Promise<PresetMediaResult> {
+    // S6b-fix1 §4：presetMedia 忽略 ctx（上下文只给真实生图用）。
+    preset(media: Media, _ctx: unknown, signal: AbortSignal): Promise<PresetMediaResult> {
       return new Promise<PresetMediaResult>((resolve, reject) => {
         if (signal.aborted) {
           reject(createAbortError());

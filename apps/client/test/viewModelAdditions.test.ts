@@ -42,7 +42,7 @@ describe("toStageView：G1-c 新增字段", () => {
         mouth: "open",
         hands: "phone",
         handsTransition: { from: "phone", to: "cup", startedAt: 100, progress: 0.5 },
-        activeAction: { action: "sip_coffee", startedAt: 200 },
+        activeAction: { action: "drink", startedAt: 200 },
         idleSince: 50,
       },
       storyMedia: {
@@ -57,7 +57,7 @@ describe("toStageView：G1-c 新增字段", () => {
     expect(view.performance.blink).toBe("closed");
     expect(view.performance.mouth).toBe("open");
     expect(view.performance.handsTransition).toEqual({ from: "phone", to: "cup", startedAt: 100, progress: 0.5 });
-    expect(view.performance.activeAction).toEqual({ action: "sip_coffee", startedAt: 200 });
+    expect(view.performance.activeAction).toEqual({ action: "drink", startedAt: 200 });
     expect(view.performance.idleSince).toBe(50);
     expect(view.storyMedia).toEqual({
       status: "shown",

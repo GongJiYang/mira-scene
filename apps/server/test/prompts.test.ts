@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { LLMHistoryEntry } from "../src/ports";
 import { ADVANCE_ALLOW_ENDING, ADVANCE_ALLOW_REVEAL, ADVANCE_HOLD, advanceRule } from "../src/prompts/advanceRule";
 import { loadPromptTemplate, parsePromptFile, PROMPT_FILE } from "../src/prompts/loader";
-import { renderPrompt, sanitizeUserText } from "../src/prompts/renderPrompt";
+import { renderPrompt, sanitizeUserText, type PromptPack } from "../src/prompts/renderPrompt";
 import { createInitialScene } from "../src/story";
+import { testPack } from "./helpers/pack";
 
 const STATIC = "静态前缀·逐字不变";
 const DYNAMIC = [
@@ -15,6 +16,10 @@ const DYNAMIC = [
   "{{history}}",
   "<用户>{{user_text}}</用户>",
 ].join("\n");
+
+/** 用一个轻量 pack（复用真实 rin 的节点/意图，替换静态与动态模板）。 */
+const rin = testPack("rin");
+const pack: PromptPack = { ...rin, staticText: STATIC, dynamicTemplate: DYNAMIC };
 
 function ctx(overrides: Partial<{ scene: ReturnType<typeof createInitialScene>; history: LLMHistoryEntry[]; userText: string }> = {}) {
   return {
@@ -34,7 +39,7 @@ describe("advanceRule（§2 的三种条件）", () => {
   });
 
   it("用户温和地直接问起 → 允许进入 reveal", () => {
-    expect(advanceRule(arrive, "ask_waiting", 0)).toBe(ADVANCE_ALLOW_REVEAL);
+    expect(advanceRule(arrive, "ask_core", 0)).toBe(ADVANCE_ALLOW_REVEAL);
   });
 
   it("turn_count≥8 → 允许进入 reveal；其余情况不要推进", () => {
@@ -46,7 +51,7 @@ describe("advanceRule（§2 的三种条件）", () => {
     expect(advanceRule({ ...arrive, node: "reveal", revealTurn: 2 }, "other", 4)).toBe(ADVANCE_ALLOW_ENDING);
     expect(advanceRule({ ...arrive, node: "reveal", revealTurn: 2 }, "other", 3)).toBe(ADVANCE_HOLD);
     expect(advanceRule({ ...arrive, node: "reveal" }, "other", 99)).toBe(ADVANCE_HOLD);
-    expect(advanceRule({ ...arrive, node: "ending" }, "ask_waiting", 12)).toBe(ADVANCE_HOLD);
+    expect(advanceRule({ ...arrive, node: "ending" }, "ask_core", 12)).toBe(ADVANCE_HOLD);
   });
 
   it("s3-fix §2：第 8 轮进入 reveal → 第 9 轮不允许、第 10 轮允许", () => {
@@ -58,15 +63,15 @@ describe("advanceRule（§2 的三种条件）", () => {
 
 describe("renderPrompt", () => {
   it("STATIC 逐字不变作为 system；跨轮完全相同", () => {
-    const first = renderPrompt(STATIC, DYNAMIC, ctx({ userText: "你好" }));
-    const second = renderPrompt(STATIC, DYNAMIC, ctx({ userText: "你在等谁？" }));
+    const first = renderPrompt(pack, ctx({ userText: "你好" }));
+    const second = renderPrompt(pack, ctx({ userText: "你在等谁？" }));
     expect(first[0]).toEqual({ role: "system", content: STATIC });
     expect(second[0]).toEqual(first[0]);
     expect(first[1]?.role).toBe("user");
   });
 
   it("user_text 去掉尖括号", () => {
-    const messages = renderPrompt(STATIC, DYNAMIC, ctx({ userText: "<script>你好</script>" }));
+    const messages = renderPrompt(pack, ctx({ userText: "<script>你好</script>" }));
     const user = messages[1]?.content ?? "";
     expect(user).toContain("script你好/script");
     expect(user).not.toContain("<script>");
@@ -77,8 +82,8 @@ describe("renderPrompt", () => {
   });
 
   it("node_label / node_guidance 按剧情节点切换", () => {
-    const arrive = renderPrompt(STATIC, DYNAMIC, ctx());
-    const reveal = renderPrompt(STATIC, DYNAMIC, ctx({ scene: { ...createInitialScene(), node: "reveal" } }));
+    const arrive = renderPrompt(pack, ctx());
+    const reveal = renderPrompt(pack, ctx({ scene: { ...createInitialScene(), node: "reveal" } }));
     expect(arrive[1]?.content).toContain("初遇");
     expect(arrive[1]?.content).toContain("那杯咖啡");
     expect(reveal[1]?.content).toContain("坦白");
@@ -90,7 +95,7 @@ describe("renderPrompt", () => {
       role: index % 2 === 0 ? "user" : "assistant",
       text: `第${index}句`,
     }));
-    const messages = renderPrompt(STATIC, DYNAMIC, ctx({ history }));
+    const messages = renderPrompt(pack, ctx({ history }));
     const user = messages[1]?.content ?? "";
     expect(user).toContain("客人：第8句");
     expect(user).toContain("凛：第9句");
@@ -103,14 +108,14 @@ describe("renderPrompt", () => {
       { role: "assistant", text: "谢谢" },
       { role: "user", text: "别担心" },
     ];
-    const messages = renderPrompt(STATIC, DYNAMIC, ctx({ history }));
+    const messages = renderPrompt(pack, ctx({ history }));
     const user = messages[1]?.content ?? "";
     expect(user).toContain("关心=2");
     expect(user).toContain(ADVANCE_ALLOW_REVEAL);
   });
 
   it("问那杯咖啡也算温和地直接问起", () => {
-    const messages = renderPrompt(STATIC, DYNAMIC, ctx({ userText: "那杯咖啡，是给他点的吧？" }));
+    const messages = renderPrompt(pack, ctx({ userText: "那杯咖啡，是给他点的吧？" }));
     expect(messages[1]?.content).toContain(ADVANCE_ALLOW_REVEAL);
   });
 });

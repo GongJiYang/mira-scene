@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Beat, SceneState, ServerMessage } from "@mira/protocol";
 import { initialState, nextBeatToPlay, reducer, type ClientAction, type ClientState } from "../src/state";
@@ -33,12 +34,12 @@ const turnEndMsg = (turnId: number): ServerMessage => ({
   payload: { reason: "done" },
 });
 
-const errorMsg = (turnId: number): ServerMessage => ({
+const errorMsg = (turnId: number, scope?: "session" | "turn"): ServerMessage => ({
   ...envelope,
   type: "error",
   turnId,
   seq: 0,
-  payload: { code: "llm_timeout", message: "超时", retryable: true },
+  payload: { code: "llm_timeout", message: "超时", retryable: true, ...(scope ? { scope } : {}) },
 });
 
 const makeSnapshot = (overrides: Partial<SceneState> = {}): SceneState => ({
@@ -101,7 +102,7 @@ describe("turnId 过滤（D3）", () => {
     ["speaking", speakingWithTurn],
   ];
 
-  it.each(phases)("%s 状态下丢弃旧轮次的 beat / turn_end / error", (label, build) => {
+  it.each(phases)("%s 状态下丢弃旧轮次的 beat / turn_end", (label, build) => {
     const state = build();
     expect(state.phase.kind).toBe(label);
     expect(state.currentTurnId).toBe(1);
@@ -114,6 +115,51 @@ describe("turnId 过滤（D3）", () => {
     for (const message of staleMessages) {
       expect(reducer(state, { type: "SERVER_MESSAGE", message })).toBe(state);
     }
+  });
+
+  it("旧轮次的轮次级 error 被丢弃（D3 / Q1 打断语义）", () => {
+    const state = thinkingWithTurn();
+    expect(state.currentTurnId).toBe(1);
+    // 轮次级 error（llm_timeout / turn_failed 等）在打断后迟到，不得改变状态。
+    expect(reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(0) })).toBe(state);
+    expect(reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(999) })).toBe(state);
+  });
+
+  it("会话级 error 不按 turnId 过滤：必须进入错误态", () => {
+    const state = thinkingWithTurn();
+    expect(state.currentTurnId).toBe(1);
+    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(0, "session") });
+    expect(next.phase).toEqual({
+      kind: "error",
+      code: "llm_timeout",
+      message: "超时",
+      retryable: true,
+    });
+  });
+
+  it("当前轮的轮次级 error 进入错误态", () => {
+    const state = thinkingWithTurn();
+    expect(state.currentTurnId).toBe(1);
+    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(1) });
+    expect(next.phase).toEqual({
+      kind: "error",
+      code: "llm_timeout",
+      message: "超时",
+      retryable: true,
+    });
+  });
+
+  it("fast-check：任意非当前轮的轮次级 error 都不改变状态", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 1_000_000 }).filter((t) => t !== 1),
+        (staleTurn) => {
+          const state = thinkingWithTurn();
+          expect(reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(staleTurn) })).toBe(state);
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 
   it("打断后迟到的上一轮 turn_end 不会把 phase 改为 idle", () => {
@@ -237,7 +283,7 @@ describe("beat 与视觉/字幕", () => {
       say: "雨停了吗？",
       emotion: "sad",
       hands: "phone",
-      action: "glance_window",
+      action: "glance",
       camera: "close_up",
       fx: "rain_stop",
     });
@@ -251,7 +297,7 @@ describe("beat 与视觉/字幕", () => {
     expect(state.visual).toEqual({
       emotion: "sad",
       hands: "phone",
-      action: "glance_window",
+      action: "glance",
       camera: "close_up",
       fx: "rain_stop",
     });
@@ -268,7 +314,7 @@ describe("beat 与视觉/字幕", () => {
           makeBeat(0, {
             emotion: "sad",
             hands: "phone",
-            action: "glance_window",
+            action: "glance",
             camera: "close_up",
             fx: "rain_stop",
             media: { type: "photo", id: "photo" },
@@ -285,7 +331,7 @@ describe("beat 与视觉/字幕", () => {
     expect(state.visual).toEqual({
       emotion: "warm",
       hands: "cup",
-      action: "glance_window",
+      action: "glance",
       camera: "close_up",
       fx: "rain_stop",
     });

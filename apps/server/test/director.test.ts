@@ -8,6 +8,7 @@ import {
 import { direct, type DirectorContext } from "../src/director/director";
 import { composeBeats } from "../src/adapters/mock/mockLlm";
 import { createInitialScene } from "../src/story";
+import { testPack } from "./helpers/pack";
 
 function llmBeat(overrides: Partial<NormalizedLlmBeat> = {}): NormalizedLlmBeat {
   return { say: "雨还在下。", emotion: "calm", suggest: null, advance: null, ...overrides };
@@ -57,10 +58,10 @@ describe("导演层：情绪与 TTS 文本", () => {
 describe("导演层：动作与冷却", () => {
   it("采纳 suggest 并按 §2.1 设置手部；glance_window 保持当前手部", () => {
     const cases = [
-      { suggest: "sip_coffee", hands: "phone", expectedHands: "cup" },
-      { suggest: "show_polaroid", hands: "cup", expectedHands: "polaroid" },
-      { suggest: "check_phone", hands: "cup", expectedHands: "phone" },
-      { suggest: "glance_window", hands: "camera", expectedHands: "camera" },
+      { suggest: "drink", hands: "phone", expectedHands: "cup" },
+      { suggest: "show_item", hands: "cup", expectedHands: "polaroid" },
+      { suggest: "phone", hands: "cup", expectedHands: "phone" },
+      { suggest: "glance", hands: "camera", expectedHands: "camera" },
     ] as const;
 
     for (const { suggest, hands, expectedHands } of cases) {
@@ -79,17 +80,17 @@ describe("导演层：动作与冷却", () => {
     let ctx = context();
     const actions: Array<string | null> = [];
     for (let index = 0; index < 5; index += 1) {
-      const result = direct(llmBeat({ suggest: "sip_coffee" }), ctx);
+      const result = direct(llmBeat({ suggest: "drink" }), ctx);
       ctx = result.ctx;
       actions.push(result.beats[0]?.beat.action ?? null);
     }
-    expect(actions).toEqual(["sip_coffee", null, null, null, "sip_coffee"]);
+    expect(actions).toEqual(["drink", null, null, null, "drink"]);
   });
 
   it("拒绝 suggest 时 action=null 且 hands 保持", () => {
     const result = direct(
-      llmBeat({ suggest: "check_phone" }),
-      context({ scene: sceneAt("arrive", { hands: "polaroid" }), recentActions: [null, "check_phone", null] }),
+      llmBeat({ suggest: "phone" }),
+      context({ scene: sceneAt("arrive", { hands: "polaroid" }), recentActions: [null, "phone", null] }),
     );
     expect(result.beats[0]?.beat.action).toBeNull();
     expect(result.beats[0]?.beat.hands).toBe("polaroid");
@@ -97,7 +98,7 @@ describe("导演层：动作与冷却", () => {
 });
 
 describe("导演层：剧情与视觉", () => {
-  it("进入 reveal：photo_letters / close_up / rain_stop / show_polaroid / polaroid，neutral 改 sad", () => {
+  it("进入 reveal：photo_letters / close_up / rain_stop / show_item / polaroid，neutral 改 sad", () => {
     const result = direct(
       llmBeat({ emotion: "neutral", advance: "reveal", say: "他第一封信里说，不敢打电话。" }),
       context({ scene: sceneAt("probe") }),
@@ -107,7 +108,7 @@ describe("导演层：剧情与视觉", () => {
       camera: "close_up",
       fx: "rain_stop",
       media: { type: "photo", id: "photo_letters" },
-      action: "show_polaroid",
+      action: "show_item",
       hands: "polaroid",
       emotion: "sad",
       story: { advance: "reveal" },
@@ -195,7 +196,7 @@ describe("导演层：第一句限长", () => {
       camera: "close_up",
       fx: "rain_stop",
       media: { type: "photo", id: "photo_letters" },
-      action: "show_polaroid",
+      action: "show_item",
       hands: "polaroid",
       story: { advance: "reveal" },
     });
@@ -233,9 +234,10 @@ describe("导演层：第一句限长", () => {
 });
 
 describe("导演层：迁移自 mockLlm 的 reveal 验收", () => {
-  it("进入 reveal 的那一轮出现 photo_letters / close_up / rain_stop / show_polaroid / polaroid", () => {
+  it("进入 reveal 的那一轮出现 photo_letters / close_up / rain_stop / show_item / polaroid", () => {
     let ctx = context({ scene: sceneAt("probe") });
-    const directed = composeBeats({ history: [], scene: ctx.scene, userText: "你在等谁？" }).flatMap((beat) => {
+    const pack = testPack("rin");
+    const directed = composeBeats({ history: [], scene: ctx.scene, userText: "你在等谁？", pack }, pack).flatMap((beat) => {
       const result = direct({ ...beat, suggest: beat.suggest ?? null, advance: beat.advance ?? null }, ctx);
       ctx = result.ctx;
       return result.beats.map(({ beat: directedBeat }) => directedBeat);
@@ -246,7 +248,7 @@ describe("导演层：迁移自 mockLlm 的 reveal 验收", () => {
       media: { type: "photo", id: "photo_letters" },
       camera: "close_up",
       fx: "rain_stop",
-      action: "show_polaroid",
+      action: "show_item",
       hands: "polaroid",
     });
     expect(directed.some((beat) => beat.story?.advance === "reveal")).toBe(true);

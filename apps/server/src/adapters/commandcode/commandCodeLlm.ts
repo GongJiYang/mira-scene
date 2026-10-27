@@ -19,7 +19,6 @@ import { isAbortError } from "../../abort";
 import type { Logger } from "../../log";
 import type { LLMContext, LLMPort } from "../../ports";
 import { renderPrompt, type ChatMessage } from "../../prompts/renderPrompt";
-import type { PromptTemplate } from "../../prompts/loader";
 import { parseBeatLines } from "../deepseek/parseBeatLines";
 import { flattenMessages } from "./flattenMessages";
 import { parseCmdNdjson } from "./parseCmdNdjson";
@@ -55,7 +54,6 @@ export type SpawnLike = {
 
 export type CommandCodeLlmOptions = {
   model?: string;
-  prompt: PromptTemplate;
   spawn?: SpawnFn;
   log?: Logger;
   /** `cmd` 二进制名，默认 `cmd`。 */
@@ -79,10 +77,10 @@ export function createCommandCodeLlm(options: CommandCodeLlmOptions): LLMPort {
 
   return {
     async *streamBeats(ctx: LLMContext, signal): AsyncIterable<unknown> {
-      const messages: ChatMessage[] = renderPrompt(options.prompt.staticText, options.prompt.dynamicTemplate, ctx);
+      const messages: ChatMessage[] = renderPrompt(ctx.pack, ctx);
       const prompt = flattenMessages(messages);
 
-      options.log?.({ ts: Date.now(), event: "prompt_version", detail: { prompt_version: options.prompt.version } });
+      options.log?.({ ts: Date.now(), event: "prompt_version", detail: { prompt_version: ctx.pack.promptVersion } });
 
       const startedMs = Date.now();
       const cwd = await makeCwd();

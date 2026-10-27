@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { sleep, throwIfAborted } from "../../abort";
 import type { Logger } from "../../log";
 import type { TTSAudio, TTSPort } from "../../ports";
@@ -56,6 +56,10 @@ export type MockTtsOptions = {
    * - 命中 `voiceKey(text, emotion)` → 返回预录 mp3；
    * - 未命中 → 退回占位音，并写一条 `voice_fallback` 日志（契约式降级，不算错误）。
    * manifest 不存在视为空表；存在但非法则**创建时**直接抛错（服务端启动即失败）。
+   *
+   * S6b-fix1 §2：这是按角色分目录后的「根」清单路径（例如 `assets/voice/manifest.json`）。
+   * 实际查表按 `opts.characterId` 取 `<根目录>/<characterId>/manifest.json`
+   * （即 `assets/voice/<characterId>/clips/<key>.mp3`）。
    */
   manifestPath?: string;
   /** 记录 `voice_fallback`（缺省静默）。 */
@@ -66,12 +70,28 @@ export function createMockTts(options: MockTtsOptions = {}): TTSPort {
   const delayMs = options.delayMs ?? 200;
   const log = options.log;
   const manifestPath = options.manifestPath;
-  const manifest: VoiceManifest | null = manifestPath ? loadVoiceManifest(manifestPath) : null;
-  const clipsDir = manifestPath ? clipsDirFor(manifestPath) : null;
+  // 按角色缓存 manifest：characterId → { manifest, clipsDir }。null 表示无清单（全部走占位音）。
+  const perCharacter = new Map<string, { manifest: VoiceManifest; clipsDir: string } | null>();
+  // 保持 S5 §1 契约：创建时立即加载根 manifest —— 存在但非法直接抛错（服务端启动即失败）。
+  if (manifestPath !== undefined) {
+    perCharacter.set("", { manifest: loadVoiceManifest(manifestPath), clipsDir: clipsDirFor(manifestPath) });
+  }
+
+  /** S6b-fix1 §2：按角色加载清单。缺省（无 characterId）保持旧行为：直接用根 manifest。 */
+  function manifestFor(characterId: string | undefined): { manifest: VoiceManifest; clipsDir: string } | null {
+    if (manifestPath === undefined) return null;
+    const id = characterId ?? "";
+    if (perCharacter.has(id)) return perCharacter.get(id) ?? null;
+    // 有 characterId → 角色目录下的 manifest；无 → 根 manifest（旧行为）。
+    const path = id === "" ? manifestPath : join(dirname(manifestPath), id, "manifest.json");
+    const loaded = loadVoiceManifest(path);
+    const entry = { manifest: loaded, clipsDir: clipsDirFor(path) };
+    perCharacter.set(id, entry);
+    return entry;
+  }
 
   /** 命中预录片段时读取 mp3；文件缺失视为未命中。 */
-  function readClip(file: string): Buffer | null {
-    if (clipsDir === null) return null;
+  function readClip(clipsDir: string, file: string): Buffer | null {
     const path = join(clipsDir, file);
     if (!existsSync(path)) return null;
     return readFileSync(path);
@@ -83,12 +103,13 @@ export function createMockTts(options: MockTtsOptions = {}): TTSPort {
       throwIfAborted(signal);
 
       const key = voiceKey(text, opts.emotion);
-      const clip = manifest?.clips[key];
-      const data = clip ? readClip(clip.file) : null;
+      const source = manifestFor(opts.characterId);
+      const clip = source?.manifest.clips[key];
+      const data = clip && source ? readClip(source.clipsDir, clip.file) : null;
       if (data !== null) return { mime: MP3_MIME, data };
 
       // 契约（S5 §1）：查不到预录片段 → 降级为占位音 + 一条 voice_fallback 日志。
-      log?.({ ts: Date.now(), event: "voice_fallback", detail: { voiceKey: key, emotion: opts.emotion } });
+      log?.({ ts: Date.now(), event: "voice_fallback", detail: { voiceKey: key, emotion: opts.emotion, characterId: opts.characterId } });
       return { mime: WAV_MIME, data: synthesizeWav(text) };
     },
   };

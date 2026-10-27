@@ -87,6 +87,22 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
   // 剧情层消息（D27）与心跳：不按 turnId 过滤，本批原样忽略；C 状态机与心跳在 G1-c。
   if (message.type === "media_ready" || message.type === "pong") return state;
 
+  // S6b-fix3 §1：只有会话级 error（scope === "session"）跳过 turnId 过滤；
+  // 轮次级 error（llm_timeout / turn_failed 等）回到 D3 过滤之后——
+  // 打断一轮后旧轮次迟到的 error 不得把界面切进错误态（D3 / Q1 打断语义）。
+  if (message.type === "error" && message.payload.scope === "session") {
+    return {
+      ...toIdle(state),
+      phase: {
+        kind: "error",
+        code: message.payload.code,
+        message: message.payload.message,
+        retryable: message.payload.retryable,
+      },
+      audioStopToken: state.audioStopToken + 1,
+    };
+  }
+
   // D3：客户端按 turnId 过滤是唯一正确性保证；不属于本轮的消息一律丢弃。
   if (message.turnId !== state.currentTurnId) return state;
 
@@ -172,6 +188,9 @@ export function reducer(state: ClientState, action: ClientAction): ClientState {
         : state;
     case "RETRY":
       return state.phase.kind === "error" ? toIdle(state) : state;
+    case "RESET":
+      // S6b §4：切频道不保留聊天记录 —— 整台状态机回到初始值。
+      return initialState;
   }
 }
 

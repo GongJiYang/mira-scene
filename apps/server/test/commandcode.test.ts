@@ -4,18 +4,19 @@ import { describe, expect, it } from "vitest";
 import { CMD_ARGS, createCommandCodeLlm, type SpawnFn, type SpawnLike } from "../src/adapters/commandcode/commandCodeLlm";
 import type { LogRecord } from "../src/log";
 import type { LLMContext } from "../src/ports";
-import type { PromptTemplate } from "../src/prompts/loader";
+import type { PromptPack } from "../src/prompts/renderPrompt";
 import { createInitialScene } from "../src/story";
+import { testPack } from "./helpers/pack";
 
-const PROMPT: PromptTemplate = {
-  version: "rin.test",
+const PROMPT: PromptPack = {
+  ...testPack("rin"),
+  promptVersion: "rin.test",
   staticText: "静态前缀",
   dynamicTemplate: "动态 {{user_text}}",
-  source: "mem",
 };
 
 function context(userText = "你好"): LLMContext {
-  return { history: [], scene: createInitialScene(), userText };
+  return { history: [], scene: createInitialScene(), userText, pack: PROMPT };
 }
 
 function line(obj: unknown): string {
@@ -107,7 +108,6 @@ function makeSpawn(): SpawnHarness {
 function makeLlm(harness: SpawnHarness, logs: LogRecord[] = []) {
   return createCommandCodeLlm({
     model: "deepseek/deepseek-v4-flash",
-    prompt: PROMPT,
     spawn: harness.spawn,
     makeCwd: () => Promise.resolve("/tmp/mira-fake-cwd"),
     cleanupCwd: false,

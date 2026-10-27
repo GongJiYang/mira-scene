@@ -3,7 +3,7 @@ import { llmBeatSchema, parseLlmBeatLenient, type LlmBeatParseResult } from "../
 
 describe("parseLlmBeatLenient", () => {
   it("合法 LlmBeat 原样保留且不产生 warning", () => {
-    const input = { say: "雨停了。", emotion: "sad", suggest: "show_polaroid", advance: "reveal" };
+    const input = { say: "雨停了。", emotion: "sad", suggest: "show_item", advance: "reveal" };
     const result = parseLlmBeatLenient(input);
     expect(result.warnings).toEqual([]);
     expect(result.llmBeat).toEqual(input);

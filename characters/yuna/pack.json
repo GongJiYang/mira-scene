@@ -1,0 +1,25 @@
+{
+  "$comment": "忧奈角色包（S6b §1）。文字内容在 content.json，提示词在 prompt.v1.md；本文件只描述渲染 / 语音 / 媒体 / 舞台配置。背景为 Claude 生成（S6b §5.5），不许修改。",
+  "id": "yuna",
+  "displayName": "忧奈",
+  "renderer": { "kind": "live2d", "model": "/models/yuna/yuna.model3.json" },
+  "voice": { "fishVoiceIdEnv": "FISH_VOICE_ID_YUNA" },
+  "prompt": "prompt.v1.md",
+  "content": "content.json",
+  "revealIntents": ["ask_core", "comfort"],
+  "media": {
+    "reveal": { "type": "photo", "id": "photo_first_stream" },
+    "ending": { "type": "video", "id": "clip_offline" }
+  },
+  "stage": {
+    "background": {
+      "portrait": "/characters/yuna/bg-mobile.jpg",
+      "landscape": "/characters/yuna/bg-desktop.jpg"
+    },
+    "backgroundClips": {
+      "portrait": "/characters/yuna/clip_offline.webm",
+      "landscape": "/characters/yuna/clip_offline.webm"
+    },
+    "tint": "#2a1a2e"
+  }
+}

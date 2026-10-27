@@ -7,7 +7,10 @@
 import type { FaceLayers, Hands, Media } from "@mira/protocol";
 import { useStore } from "zustand";
 import { intents, reports, useNudgeStore, type Intents, type StageReports } from "../core/controller";
+import { useFallbackStore } from "../core/fallback";
 import { usePerformanceStore } from "../core/performanceClock";
+import { useChannelStore } from "../live/channel";
+import { DEFAULT_CHANNEL_ID } from "../live/characters";
 import {
   useConnectionStore,
   useDebugStore,
@@ -72,6 +75,12 @@ export type StageView = {
   storyMedia: StageStoryMedia;
   /** D32：12s 无输入产出的主动行动；本批不发送，S3 再接。 */
   pendingNudge: boolean;
+  /** S6b §4：当前频道（角色包 id）。 */
+  characterId: string;
+  /** S6b §2：客户端本地兜底字幕（offline）；服务端兜底走 subtitle。 */
+  fallbackSubtitle: string | null;
+  /** S6b §2：原始错误信息只在 `?debug=1` 时显示。 */
+  debugMode: boolean;
 };
 
 export type StageViewModel = StageView & { intents: Intents; reports: StageReports };
@@ -85,7 +94,16 @@ export type StageViewInput = {
   performance?: PerformanceState;
   storyMedia?: StoryMediaState;
   pendingNudge?: boolean;
+  characterId?: string;
+  fallbackSubtitle?: string | null;
+  debugMode?: boolean;
 };
+
+/** S6b §2：`?debug=1` 才显示原始错误信息。 */
+export function readDebugMode(search: string): boolean {
+  const value = new URLSearchParams(search).get("debug");
+  return value === "1" || value === "true";
+}
 
 /** 纯映射：可单测，不依赖 React。 */
 export function toStageView(input: StageViewInput): StageView {
@@ -124,6 +142,9 @@ export function toStageView(input: StageViewInput): StageView {
       },
     },
     pendingNudge: input.pendingNudge ?? false,
+    characterId: input.characterId ?? DEFAULT_CHANNEL_ID,
+    fallbackSubtitle: input.fallbackSubtitle ?? null,
+    debugMode: input.debugMode ?? false,
   };
 }
 
@@ -136,10 +157,30 @@ export function useStageViewModel(): StageViewModel {
   const performance = useStore(usePerformanceStore, (state) => state);
   const storyMedia = useStore(useStoryMediaStore, (state) => state);
   const pendingNudge = useStore(useNudgeStore, (state) => state.pending);
+  const characterId = useStore(useChannelStore, (state) => state.characterId);
+  const fallbackSubtitle = useStore(useFallbackStore, (state) => state.subtitle);
+  const debugMode = useDebugMode();
 
   return {
-    ...toStageView({ stage, connection, sessionId, micError, events, performance, storyMedia, pendingNudge }),
+    ...toStageView({
+      stage,
+      connection,
+      sessionId,
+      micError,
+      events,
+      performance,
+      storyMedia,
+      pendingNudge,
+      characterId,
+      fallbackSubtitle,
+      debugMode,
+    }),
     intents,
     reports,
   };
+}
+
+/** `?debug=1` 只读一次（URL 不随交互变化）。 */
+function useDebugMode(): boolean {
+  return typeof window === "undefined" ? false : readDebugMode(window.location.search);
 }

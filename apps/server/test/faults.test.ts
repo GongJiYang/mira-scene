@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClientMessage, ServerMessage } from "@mira/protocol";
 import {
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-  FALLBACK_LINES,
   SLOW_DELAY_MS,
   parseFaults,
   readFirstTokenTimeoutMs,
@@ -15,6 +14,10 @@ import type { LogRecord } from "../src/log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
 import { createInitialScene } from "../src/story";
+import { testPack, testPacks } from "./helpers/pack";
+
+/** 兜底台词取自 rin 角色包（S6b §2）。 */
+const RIN_FALLBACK = testPack("rin").fallback;
 
 function llmBeat(say: string) {
   return { say, emotion: "neutral", suggest: null, advance: null };
@@ -94,6 +97,7 @@ function setup(options: SetupOptions = {}): Harness {
     defaultFaults: parseFaults(options.defaultFaults),
     firstTokenTimeoutMs: options.firstTokenTimeoutMs,
     dropConnection: options.dropConnection,
+    packs: testPacks(),
     log: (record) => logs.push(record),
     idleTimeoutMs: 24 * 60 * 60 * 1000,
   });
@@ -191,7 +195,7 @@ describe("withFaults：端口装饰器", () => {
 
     await withFaults(stt, "stt", []).transcribe({ mime: "audio/webm", data: Buffer.from("x") }, signal);
     for await (const _raw of withFaults(llm, "llm", []).streamBeats(
-      { history: [], scene: createInitialScene(), userText: "你好" },
+      { history: [], scene: createInitialScene(), userText: "你好", pack: testPack("rin") },
       signal,
     )) {
       // 消费一次即可。
@@ -207,7 +211,7 @@ describe("withFaults：端口装饰器", () => {
     const llm = withFaults(createMockLlm(), "llm", ["llm_timeout"]);
     const controller = new AbortController();
     const next = llm
-      .streamBeats({ history: [], scene: createInitialScene(), userText: "你好" }, controller.signal)
+      .streamBeats({ history: [], scene: createInitialScene(), userText: "你好", pack: testPack("rin") }, controller.signal)
       [Symbol.asyncIterator]()
       .next();
 
@@ -219,7 +223,7 @@ describe("withFaults：端口装饰器", () => {
   it("llm_error：立即抛出非中止类错误", async () => {
     const llm = withFaults(createMockLlm(), "llm", ["llm_error"]);
     const next = llm
-      .streamBeats({ history: [], scene: createInitialScene(), userText: "你好" }, new AbortController().signal)
+      .streamBeats({ history: [], scene: createInitialScene(), userText: "你好", pack: testPack("rin") }, new AbortController().signal)
       [Symbol.asyncIterator]()
       .next();
     await expect(next).rejects.toThrow("fault:llm_error");
@@ -310,7 +314,7 @@ describe("降级路径：llm_timeout", () => {
     expect(messagesOf(harness, 1).map((message) => message.type)).toEqual(["beat", "error", "turn_end"]);
     expect(beatsOf(harness, 1)[0]?.payload.beat).toMatchObject({
       seq: 0,
-      say: FALLBACK_LINES.llm_timeout,
+      say: RIN_FALLBACK.llm_timeout,
       emotion: "guarded",
     });
     expect(errorsOf(harness, 1)).toMatchObject([{ payload: { code: "llm_timeout", retryable: true } }]);
@@ -418,14 +422,14 @@ describe("降级路径：STT 空结果", () => {
     expect(messagesOf(harness, 1).map((message) => message.type)).toEqual(["beat", "turn_end"]);
     expect(beatsOf(harness, 1)[0]?.payload.beat).toMatchObject({
       seq: 0,
-      say: FALLBACK_LINES.stt_empty,
+      say: RIN_FALLBACK.stt_empty,
       emotion: "guarded",
     });
     expect(turnEndOf(harness, 1)?.payload).toEqual({ reason: "done" });
     expect(llmCalls).toBe(0);
     expect(sttCalls).toBe(0);
     expect(harness.logs.filter((record) => record.event === "fallback_used")).toMatchObject([
-      { detail: { category: "stt" } },
+      { detail: { category: "stt_empty" } },
     ]);
   });
 });
