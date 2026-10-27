@@ -1,7 +1,7 @@
 # PROGRESS（更新于 2026-10-28 04:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6m · 关卡 8/9】S6l-fix2 已合并（892 测试）。S6m（动作表面板 + 物理后覆盖 + §0 限流卡思考）已在 `/Users/gjy/mira-wt-s6m` 派发，不跑 e2e。跑完：简单检测 + Claude 独立审核心 → 合并 → 推送；然后派发 S6n（`docs/tasks/s6n.md` 已写好）。旧 worktree mira-wt-s6cfix1 / s6k / s6l / s6lfix1 / s6lfix2 可删。
+【S6n · 关卡 8/9】S6m 已合并（922 测试）。S6n（设置面板 + BYOK，D49）已在 `/Users/gjy/mira-wt-s6n` 派发，不跑 e2e。跑完：简单检测 + Claude 独立审（重点：Key 不进日志 / 下行）→ 合并 → 推送；然后 S6u：先在设计稿补「动作表」「设置面板」两张，再写任务说明。
 
 ## 当前位置
 main 已经包含 S6c-fix1（换背景旁路修复 + 4 个界面问题）和 S6k（语境表情 accent，D47），共 787 个单测全绿，已推送。**路线已冻结（D48）**，依据是题目原文 `/Users/gjy/Downloads/0912-candidate(1) (1).pdf`。
