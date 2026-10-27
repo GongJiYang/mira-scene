@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { OBS_TEXT } from "./obsText";
 import "./obs.css";
 
-type TurnTimeline = {
+export type TurnTimeline = {
   turnId: number;
   sessionId?: string;
   startedAt: number;
@@ -44,8 +44,12 @@ async function fetchSummary(): Promise<ObsSummary> {
   return (await response.json()) as ObsSummary;
 }
 
-/** 一轮的瀑布条：相对本轮最大值的百分比定位。 */
-function TurnBar({ turn }: { turn: TurnTimeline }) {
+/**
+ * 一轮的瀑布条（S6g-A §6：所有行共用同一时间刻度）。
+ * `scaleMs` 是全部行里最长的一轮（满宽），由父组件统一计算后传入；
+ * 这样每行同一阶段的宽度可直接横向比较快慢。
+ */
+function TurnBar({ turn, scaleMs }: { turn: TurnTimeline; scaleMs: number }) {
   const points: { key: string; ms: number | undefined; cls: string }[] = [
     { key: "stt", ms: turn.sttMs, cls: "obs-seg-stt" },
     { key: "llm", ms: turn.llmFirstBeatMs, cls: "obs-seg-llm" },
@@ -53,7 +57,7 @@ function TurnBar({ turn }: { turn: TurnTimeline }) {
     { key: "play", ms: turn.playbackMs, cls: "obs-seg-play" },
     { key: "end", ms: turn.endMs, cls: "obs-seg-end" },
   ];
-  const max = Math.max(1, ...points.map((p) => p.ms ?? 0));
+  const max = Math.max(1, scaleMs);
   let prev = 0;
   const segs = [];
   for (const p of points) {
@@ -77,6 +81,16 @@ function TurnBar({ turn }: { turn: TurnTimeline }) {
       {flag !== "" && <span className="obs-turn-flag">{flag}</span>}
     </div>
   );
+}
+
+/** S6g-A §6：一行瀑布条的“总时长” = 各阶段累计到的最大毫秒数。 */
+export function turnTotalMs(turn: TurnTimeline): number {
+  return Math.max(0, turn.sttMs ?? 0, turn.llmFirstBeatMs ?? 0, turn.ttsFirstAudioMs ?? 0, turn.playbackMs ?? 0, turn.endMs ?? 0);
+}
+
+/** S6g-A §6：所有行共用的时间刻度 = 最近若干轮里最长的一轮。 */
+export function waterfallScaleMs(turns: readonly TurnTimeline[]): number {
+  return Math.max(1, ...turns.map(turnTotalMs));
 }
 
 export function ObsApp() {
@@ -131,7 +145,11 @@ export function ObsApp() {
             <h2>{OBS_TEXT.sectionTurns}</h2>
             <div className="obs-turns">
               {(summary?.turns ?? []).map((turn) => (
-                <TurnBar key={`${turn.sessionId ?? ""}:${turn.turnId}:${turn.startedAt}`} turn={turn} />
+                <TurnBar
+                  key={`${turn.sessionId ?? ""}:${turn.turnId}:${turn.startedAt}`}
+                  turn={turn}
+                  scaleMs={waterfallScaleMs(summary?.turns ?? [])}
+                />
               ))}
             </div>
             <div className="obs-legend">

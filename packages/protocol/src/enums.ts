@@ -9,7 +9,11 @@ export const handsSchema = z.enum(["cup", "polaroid", "camera", "phone"]);
  */
 export const actionSchema = z.enum(["drink", "glance", "phone", "show_item"]);
 export const cameraSchema = z.enum(["wide", "close_up"]);
-export const fxSchema = z.enum(["rain_heavy", "rain_stop", "lights_dim", "warm_glow"]);
+/**
+ * S6g-A §2：新增 `stream_dim`（舞台压暗）/ `hearts`（爱心漂浮，由 `ParamHeart` 驱动）。
+ * 旧值（`rain_heavy` / `rain_stop` / `lights_dim` / `warm_glow`）保留不删，避免牵连太广（任务 §1）。
+ */
+export const fxSchema = z.enum(["rain_heavy", "rain_stop", "lights_dim", "warm_glow", "stream_dim", "hearts"]);
 export const storyNodeSchema = z.enum(["arrive", "probe", "reveal", "ending"]);
 export const mediaTypeSchema = z.enum(["photo", "video"]);
 

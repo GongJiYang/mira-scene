@@ -155,7 +155,6 @@ export function installPerformanceClock(options: { onNudge?: (at: number) => voi
           type: "BEAT_STARTED",
           look: {
             emotion: state.visual.emotion,
-            hands: state.visual.hands,
             action: state.visual.action,
           },
           at,

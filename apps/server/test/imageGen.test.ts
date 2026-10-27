@@ -10,7 +10,7 @@ import { testPack } from "./helpers/pack";
 
 describe("buildImagePrompt（S6b §5.5 纯函数）", () => {
   it("把 {{conversation}} 替换为最近 3 轮对话摘要", () => {
-    const pack = testPack("rin");
+    const pack = testPack("yuna");
     const history: LLMHistoryEntry[] = [
       { role: "user", text: "第1问" },
       { role: "assistant", text: "第1答" },
@@ -29,7 +29,7 @@ describe("buildImagePrompt（S6b §5.5 纯函数）", () => {
     expect(out).not.toContain("第1问");
     expect(out).not.toContain("第1答");
     // 角色包模板主体原样保留。
-    expect(out).toContain("polaroid");
+    expect(out).toContain("plush bunny");
   });
 
   it("空历史用占位说明，不留空模板", () => {
@@ -41,7 +41,7 @@ describe("buildImagePrompt（S6b §5.5 纯函数）", () => {
   });
 
   it("不足 3 轮时全部保留", () => {
-    const pack = testPack("rin");
+    const pack = testPack("yuna");
     const out = buildImagePrompt(pack, [
       { role: "user", text: "你好" },
       { role: "assistant", text: "雨还在下" },
@@ -51,7 +51,7 @@ describe("buildImagePrompt（S6b §5.5 纯函数）", () => {
   });
 
   it("S6b-fix1 §4：单条对话超过 80 字被截断", () => {
-    const pack = testPack("rin");
+    const pack = testPack("yuna");
     const long = "你".repeat(200);
     const out = buildImagePrompt(pack, [
       { role: "user", text: long },
@@ -99,7 +99,7 @@ describe("imageGen 适配器（假 fetch）", () => {
 
   it("中止：preset 在 signal 已中止时立即抛 AbortError", async () => {
     const port = createImageGenMedia({ ...base, fetchImpl: (async () => new Response("{}", { status: 200 })) as typeof fetch });
-    const ctx: MediaContext = { pack: testPack("rin"), history: [] };
+    const ctx: MediaContext = { pack: testPack("yuna"), history: [] };
     const controller = new AbortController();
     controller.abort();
     await expect(port.preset(media, ctx, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
@@ -114,7 +114,7 @@ describe("imageGen 适配器（假 fetch）", () => {
     }) as typeof fetch;
     const port = createImageGenMedia({ ...base, fetchImpl, outDir: "/tmp/mira-imagegen-test" });
     const ctx: MediaContext = {
-      pack: testPack("rin"),
+      pack: testPack("yuna"),
       history: [
         { role: "user", text: "最近的一句话" },
         { role: "assistant", text: "角色的回答" },

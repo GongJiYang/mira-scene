@@ -4,7 +4,7 @@ import { createPresetMedia, DEFAULT_PRESET_DELAY_MS } from "../src/adapters/medi
 import { silentLogger } from "../src/log";
 import type { LLMPort, MediaContext, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPack, testPacksWithRinVisible } from "./helpers/pack";
+import { testPack, testPacks } from "./helpers/pack";
 
 type LlmBeatFixture = { say: string; emotion?: string; suggest?: string | null; advance?: string | null };
 
@@ -27,7 +27,7 @@ const immediateTts: TTSPort = {
   synthesize: () => Promise.resolve({ mime: "audio/wav", data: Buffer.from([1]) }),
 };
 // S6b-fix1 §4：直接调用 preset 时的最小上下文（presetMedia 忽略它）。
-const CTX: MediaContext = { pack: testPack("rin"), history: [] };
+const CTX: MediaContext = { pack: testPack("yuna"), history: [] };
 
 type Harness = {
   manager: SessionManager;
@@ -47,7 +47,7 @@ function setup(scripts: LlmBeatFixture[][], mediaDelayMs = DEFAULT_PRESET_DELAY_
     llm: scriptedLlm(scripts),
     tts: immediateTts,
     media: createPresetMedia({ delayMs: mediaDelayMs }),
-    packs: testPacksWithRinVisible(),
+    packs: testPacks(),
     log: silentLogger,
     idleTimeoutMs: 24 * 60 * 60 * 1000,
   });
@@ -94,8 +94,8 @@ describe("presetMedia 适配器（D27）", () => {
   it("默认 2.5s 后返回 /stage/photos/<id>.png，status=ready", async () => {
     const port = createPresetMedia();
     const started = Date.now();
-    const result = await port.preset({ type: "photo", id: "photo_letters" }, CTX, new AbortController().signal);
-    expect(result).toEqual({ url: "/stage/photos/photo_letters.png", status: "ready" });
+    const result = await port.preset({ type: "photo", id: "photo_first_stream" }, CTX, new AbortController().signal);
+    expect(result).toEqual({ url: "/stage/photos/photo_first_stream.png", status: "ready" });
     expect(Date.now() - started).toBeGreaterThanOrEqual(DEFAULT_PRESET_DELAY_MS - 50);
   });
 
@@ -117,7 +117,7 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
 
     const media = mediaBeats(harness.sent);
     expect(media).toHaveLength(1);
-    expect(media[0]).toMatchObject({ type: "photo", id: "photo_letters" });
+    expect(media[0]).toMatchObject({ type: "photo", id: "photo_first_stream" });
     expect(media[0]?.storyEventId).toBe(`${harness.sessionId}:2:0`);
     // beat 本身不带 url（url 由 media_ready 给出）。
     expect(media[0]?.url).toBeUndefined();
@@ -130,7 +130,7 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
     expect(ready).toHaveLength(1);
     expect(ready[0]?.payload).toEqual({
       storyEventId: `${harness.sessionId}:2:0`,
-      media: { type: "photo", id: "photo_letters", url: "/stage/photos/photo_letters.png" },
+      media: { type: "photo", id: "photo_first_stream", url: "/stage/photos/photo_first_stream.png" },
       status: "ready",
     });
   }, 10_000);
@@ -164,8 +164,8 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
     expect(new Set(ids).size).toBe(ids.length);
   }, 10_000);
 
-  it("S6b-fix1 §3：rin 会话发起后台媒体 → 同连接切到 yuna → 媒体完成后 yuna 连接上收不到 rin 的 media_ready", async () => {
-    // 同一条连接（同一个 send）：rin hello → 进 reveal 发起媒体 → 同连接 hello yuna → 等待媒体完成。
+  it("S6b-fix1 §3：会话 A 发起后台媒体 → 同连接新建会话 B → 媒体完成后连接上收不到 A 的 media_ready", async () => {
+    // 同一条连接（同一个 send）：会话 A hello → 进 reveal 发起媒体 → 同连接再 hello（新会话）→ 等待媒体完成。
     const sent: ServerMessage[] = [];
     const send: SendFn = (message) => void sent.push(message);
     const manager = createSessionManager({
@@ -173,7 +173,7 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
       llm: scriptedLlm([[beat("我在等人。", { advance: "probe" })], ENTER_REVEAL, [beat("嗯。")]]),
       tts: immediateTts,
       media: createPresetMedia({ delayMs: 300 }),
-      packs: testPacksWithRinVisible(),
+      packs: testPacks(),
       log: silentLogger,
       idleTimeoutMs: 24 * 60 * 60 * 1000,
     });
@@ -181,26 +181,25 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
     const envelope = (type: ClientMessage["type"], payload: unknown, sessionId: string, turnId: number): ClientMessage =>
       ({ v: 1, sessionId, turnId, seq: 0, ts: Date.now(), type, payload }) as ClientMessage;
 
-    // S6f §1：缺省角色已是 yuna；本用例需要 rin 的媒体任务，显式加载隐藏包。
-    await manager.handleMessage(send, envelope("hello", { characterId: "rin" }, "", 0));
-    const rinSession = sent.findLast((m) => m.type === "session")?.sessionId ?? "";
-    await manager.handleMessage(send, envelope("text_input", { text: "你在等谁？" }, rinSession, 1));
-    await manager.handleMessage(send, envelope("text_input", { text: "然后呢" }, rinSession, 2));
+    await manager.handleMessage(send, envelope("hello", { characterId: "yuna" }, "", 0));
+    const firstSession = sent.findLast((m) => m.type === "session")?.sessionId ?? "";
+    await manager.handleMessage(send, envelope("text_input", { text: "还不睡吗？" }, firstSession, 1));
+    await manager.handleMessage(send, envelope("text_input", { text: "然后呢" }, firstSession, 2));
     expect(mediaReady(sent)).toHaveLength(0); // 媒体还在后台生成。
 
-    // 同一条连接切到 yuna。
+    // 同一条连接再建立新会话（旧会话被解绑）。
     await manager.handleMessage(send, envelope("hello", { characterId: "yuna" }, "", 0));
-    const yunaSession = sent.findLast((m) => m.type === "session")?.sessionId ?? "";
-    expect(yunaSession).not.toBe(rinSession);
+    const secondSession = sent.findLast((m) => m.type === "session")?.sessionId ?? "";
+    expect(secondSession).not.toBe(firstSession);
 
     // 等媒体任务（300ms）完成。
     await new Promise((resolve) => setTimeout(resolve, 450));
 
-    // rin 的 media_ready 不应出现在这条连接上（rin 会话已解绑）。
-    const leaked = mediaReady(sent).filter((m) => m.sessionId === rinSession);
+    // 旧会话的 media_ready 不应出现在这条连接上（已解绑）。
+    const leaked = mediaReady(sent).filter((m) => m.sessionId === firstSession);
     expect(leaked).toHaveLength(0);
-    // yuna 会话本身没有发起媒体。
-    expect(mediaReady(sent).filter((m) => m.sessionId === yunaSession)).toHaveLength(0);
+    // 新会话本身没有发起媒体。
+    expect(mediaReady(sent).filter((m) => m.sessionId === secondSession)).toHaveLength(0);
   }, 10_000);
 
   it("S6b-fix1 §4：发起媒体任务时传入当前角色包与本轮之前的对话", async () => {
@@ -218,7 +217,7 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
       llm: scriptedLlm([[beat("我在等人。", { advance: "probe" })], ENTER_REVEAL]),
       tts: immediateTts,
       media: capturingMedia as never,
-      packs: testPacksWithRinVisible(),
+      packs: testPacks(),
       log: silentLogger,
       idleTimeoutMs: 24 * 60 * 60 * 1000,
     });
@@ -226,14 +225,14 @@ describe("剧情层媒体：beat 带 storyEventId 与 media_ready（D27）", () 
     const envelope = (type: ClientMessage["type"], payload: unknown, sessionId: string, turnId: number): ClientMessage =>
       ({ v: 1, sessionId, turnId, seq: 0, ts: Date.now(), type, payload }) as ClientMessage;
 
-    await manager.handleMessage(send, envelope("hello", { characterId: "rin" }, "", 0));
+    await manager.handleMessage(send, envelope("hello", { characterId: "yuna" }, "", 0));
     const sessionId = sent.findLast((m) => m.type === "session")?.sessionId ?? "";
     await manager.handleMessage(send, envelope("text_input", { text: "第一句话" }, sessionId, 1));
     // 第 2 轮进 reveal，发起媒体。此时 history 已含第 1 轮（用户+角色）。
     await manager.handleMessage(send, envelope("text_input", { text: "然后呢" }, sessionId, 2));
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]?.pack).toBe("rin");
+    expect(seen[0]?.pack).toBe("yuna");
     // history 含第 1 轮的用户与角色台词，且不含本轮（第 2 轮）。
     const texts = seen[0]?.history.map((h) => h.text) ?? [];
     expect(texts).toContain("第一句话");

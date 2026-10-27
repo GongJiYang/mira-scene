@@ -10,6 +10,9 @@ import { composeBeats } from "../src/adapters/mock/mockLlm";
 import { createInitialScene } from "../src/story";
 import { testPack } from "./helpers/pack";
 
+/** S6g-A §2：导演层的视觉来源 = 忧奈角色包的 nodes 表。 */
+const NODE_VISUALS = testPack("yuna").nodeVisuals;
+
 function llmBeat(overrides: Partial<NormalizedLlmBeat> = {}): NormalizedLlmBeat {
   return { say: "雨还在下。", emotion: "calm", suggest: null, advance: null, ...overrides };
 }
@@ -20,6 +23,7 @@ function context(overrides: Partial<DirectorContext> = {}): DirectorContext {
     recentActions: [],
     advancedThisTurn: false,
     beatsThisTurn: 0,
+    nodeVisuals: NODE_VISUALS,
     ...overrides,
   };
 }
@@ -98,7 +102,7 @@ describe("导演层：动作与冷却", () => {
 });
 
 describe("导演层：剧情与视觉", () => {
-  it("进入 reveal：photo_letters / close_up / rain_stop / show_item / polaroid，neutral 改 sad", () => {
+  it("进入 reveal：photo_first_stream / close_up / stream_dim / show_item / polaroid，neutral 改 sad", () => {
     const result = direct(
       llmBeat({ emotion: "neutral", advance: "reveal", say: "他第一封信里说，不敢打电话。" }),
       context({ scene: sceneAt("probe") }),
@@ -106,8 +110,8 @@ describe("导演层：剧情与视觉", () => {
     const beat = result.beats[0]?.beat;
     expect(beat).toMatchObject({
       camera: "close_up",
-      fx: "rain_stop",
-      media: { type: "photo", id: "photo_letters" },
+      fx: "stream_dim",
+      media: { type: "photo", id: "photo_first_stream" },
       action: "show_item",
       hands: "polaroid",
       emotion: "sad",
@@ -125,20 +129,19 @@ describe("导演层：剧情与视觉", () => {
     expect(result.beats[0]?.beat.emotion).toBe("guarded");
   });
 
-  // S5 §5：`media` 由 `null` 改为剧情视频（唯一改动是这一行的字面值，逻辑断言不变）。
-  it("进入 ending：camera=wide、fx=warm_glow、media=剧情视频 clip_ending", () => {
+  it("进入 ending：camera=wide、fx=hearts、media=剧情视频 clip_offline", () => {
     const result = direct(llmBeat({ emotion: "warm", advance: "ending" }), context({ scene: sceneAt("reveal") }));
     expect(result.beats[0]?.beat).toMatchObject({
       camera: "wide",
-      fx: "warm_glow",
-      media: { type: "video", id: "clip_ending" },
+      fx: "hearts",
+      media: { type: "video", id: "clip_offline" },
       story: { advance: "ending" },
     });
   });
 
-  it("会话第一个 beat 带 rain_heavy，之后不再重复", () => {
+  it("S6g-A §1：会话第一个 beat 不再写死 rain_heavy（fx 只来自 nodes 表）", () => {
     const first = direct(llmBeat(), context());
-    expect(first.beats[0]?.beat.fx).toBe("rain_heavy");
+    expect(first.beats[0]?.beat.fx).toBeNull();
 
     const second = direct(llmBeat(), first.ctx);
     expect(second.beats[0]?.beat.fx).toBeNull();
@@ -194,8 +197,8 @@ describe("导演层：第一句限长", () => {
     expect(result.beats[0]?.beat).toMatchObject({
       emotion: "sad",
       camera: "close_up",
-      fx: "rain_stop",
-      media: { type: "photo", id: "photo_letters" },
+      fx: "stream_dim",
+      media: { type: "photo", id: "photo_first_stream" },
       action: "show_item",
       hands: "polaroid",
       story: { advance: "reveal" },
@@ -234,10 +237,10 @@ describe("导演层：第一句限长", () => {
 });
 
 describe("导演层：迁移自 mockLlm 的 reveal 验收", () => {
-  it("进入 reveal 的那一轮出现 photo_letters / close_up / rain_stop / show_item / polaroid", () => {
+  it("进入 reveal 的那一轮出现 photo_first_stream / close_up / stream_dim / show_item / polaroid", () => {
     let ctx = context({ scene: sceneAt("probe") });
-    const pack = testPack("rin");
-    const directed = composeBeats({ history: [], scene: ctx.scene, userText: "你在等谁？", pack }, pack).flatMap((beat) => {
+    const pack = testPack("yuna");
+    const directed = composeBeats({ history: [], scene: ctx.scene, userText: "还不睡吗？", pack }, pack).flatMap((beat) => {
       const result = direct({ ...beat, suggest: beat.suggest ?? null, advance: beat.advance ?? null }, ctx);
       ctx = result.ctx;
       return result.beats.map(({ beat: directedBeat }) => directedBeat);
@@ -245,9 +248,9 @@ describe("导演层：迁移自 mockLlm 的 reveal 验收", () => {
 
     const mediaBeat = directed.find((beat) => beat.media !== null);
     expect(mediaBeat).toMatchObject({
-      media: { type: "photo", id: "photo_letters" },
+      media: { type: "photo", id: "photo_first_stream" },
       camera: "close_up",
-      fx: "rain_stop",
+      fx: "stream_dim",
       action: "show_item",
       hands: "polaroid",
     });

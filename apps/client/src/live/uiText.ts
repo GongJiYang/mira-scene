@@ -37,6 +37,14 @@ export const UI_TEXT = {
   sceneFailed: "背景没换成",
   /** S6c §5：换背景成功后的状态条文字（短暂显示后消失）。 */
   sceneReady: "背景已换",
+  /** S6g-A §3.3：reveal 截图弹窗的标签。 */
+  screenshot: "截图",
+  /** S6g-A §5：入口按钮——文档。 */
+  docs: "文档",
+  /** S6g-A §5：入口按钮——观测。 */
+  obs: "观测",
+  /** S6g-A §5：手机端可展开菜单的无障碍标签。 */
+  menu: "菜单",
 } as const;
 
 export type UiText = typeof UI_TEXT;

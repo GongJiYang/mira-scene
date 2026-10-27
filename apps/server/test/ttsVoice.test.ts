@@ -5,11 +5,11 @@ import { createMockStt } from "../src/adapters/mock/mockStt";
 import { silentLogger } from "../src/log";
 import type { TTSAudio, TTSPort, TtsOptions } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPacksWithRinVisible } from "./helpers/pack";
+import { testPacks } from "./helpers/pack";
 
 /**
  * S6b-fix1 §1/§2：TTS 音色按会话角色包决定；Mock 按角色分目录。
- * 断言 rin 会话和 yuna 会话的 TTS 各自收到对应的 voiceId / characterId。
+ * D43：只剩忧奈，断言 yuna 会话的 TTS 收到对应的 voiceId / characterId。
  */
 
 type Captured = { text: string; opts: TtsOptions };
@@ -32,7 +32,7 @@ function setup(captured: Captured[], resolveVoiceId: (packId: string) => string 
     stt: createMockStt({ delayMs: 0 }),
     llm: createMockLlm({ beatDelayMs: 0 }),
     tts: recordingTts(captured),
-    packs: testPacksWithRinVisible(),
+    packs: testPacks(),
     resolveVoiceId: (pack) => resolveVoiceId(pack.id),
     log: silentLogger,
     idleTimeoutMs: 24 * 60 * 60 * 1000,
@@ -58,38 +58,28 @@ afterEach(() => {
 });
 
 describe("TTS 音色按角色包决定（S6b-fix1 §1）", () => {
-  it("rin 会话收到 rin 的 voiceId，yuna 会话收到 yuna 的 voiceId", async () => {
+  it("yuna 会话收到 yuna 的 voiceId", async () => {
     const captured: Captured[] = [];
-    const voices: Record<string, string> = { rin: "voice-rin-xxx", yuna: "voice-yuna-yyy" };
+    const voices: Record<string, string> = { yuna: "voice-yuna-yyy" };
     const h = setup(captured, (id) => voices[id]);
-
-    const rinSession = await h.hello("rin");
-    await h.input(rinSession, 1, "你好");
 
     const yunaSession = await h.hello("yuna");
     await h.input(yunaSession, 1, "你好");
 
-    const rinOpts = captured.filter((_, i) => i < captured.length).map((c) => c.opts);
-    // 前若干条是 rin 这一轮（arrive/greeting 两句），后面是 yuna。
-    const rinVoiceIds = new Set(captured.slice(0, 2).map((c) => c.opts.voiceId));
-    const yunaVoiceIds = new Set(captured.slice(2).map((c) => c.opts.voiceId));
-    expect(rinVoiceIds).toEqual(new Set(["voice-rin-xxx"]));
-    expect(yunaVoiceIds).toEqual(new Set(["voice-yuna-yyy"]));
-    expect(rinOpts.length).toBeGreaterThan(0);
+    // 忧奈 arrive/greeting 的第一句台词。
+    const voiceIds = new Set(captured.map((c) => c.opts.voiceId));
+    expect(voiceIds).toEqual(new Set(["voice-yuna-yyy"]));
+    expect(captured.length).toBeGreaterThan(0);
   });
 
   it("Mock 模式下 characterId 按角色包传给 TTS（S6b-fix1 §2 分目录）", async () => {
     const captured: Captured[] = [];
     const h = setup(captured, () => undefined);
 
-    const rinSession = await h.hello("rin");
-    await h.input(rinSession, 1, "你好");
     const yunaSession = await h.hello("yuna");
     await h.input(yunaSession, 1, "你好");
 
-    const rinCharIds = new Set(captured.slice(0, 2).map((c) => c.opts.characterId));
-    const yunaCharIds = new Set(captured.slice(2).map((c) => c.opts.characterId));
-    expect(rinCharIds).toEqual(new Set(["rin"]));
-    expect(yunaCharIds).toEqual(new Set(["yuna"]));
+    const charIds = new Set(captured.map((c) => c.opts.characterId));
+    expect(charIds).toEqual(new Set(["yuna"]));
   });
 });

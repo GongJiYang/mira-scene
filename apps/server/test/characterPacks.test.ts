@@ -5,11 +5,12 @@ import { createMockStt } from "../src/adapters/mock/mockStt";
 import { createMockTts } from "../src/adapters/mock/mockTts";
 import { silentLogger } from "../src/log";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPacks, testPacksWithRinVisible } from "./helpers/pack";
+import { testPacks } from "./helpers/pack";
 
 /**
- * S6b §1 / §6：两个角色包都能在 Mock 模式下跑完 arrive → ending；
- * 未知 characterId 返回 unknown_character 并关闭会话（不回退夏凛）。
+ * S6b §1 / §6：忧奈角色包在 Mock 模式下能跑完 arrive → ending；
+ * 未知 characterId 返回 unknown_character 并关闭会话（不回退）。
+ * D43：夏凛与隐藏角色机制已删除，只剩忧奈。
  */
 
 type Harness = {
@@ -65,8 +66,8 @@ afterEach(() => {
 const lastSnapshot = (sent: ServerMessage[]) =>
   sent.filter((message) => message.type === "state_snapshot").at(-1)?.payload.snapshot;
 
-describe("角色包：hello.characterId（S6b §1 / S6f §1）", () => {
-  it("缺省 → 第一个未隐藏角色 yuna（S6f §1）", async () => {
+describe("角色包：hello.characterId（S6b §1；D43 只剩忧奈）", () => {
+  it("缺省 → yuna", async () => {
     const harness = setup();
     await harness.hello({});
     const session = harness.sent.find((message) => message.type === "session");
@@ -77,7 +78,6 @@ describe("角色包：hello.characterId（S6b §1 / S6f §1）", () => {
     const beats = harness.sent.flatMap((message) =>
       message.type === "beat" ? [message.payload.beat.say] : [],
     );
-    // 缺省会话用的是忧奈的剧本。
     expect(beats).toContain("……诶？还有人？");
   });
 
@@ -104,7 +104,7 @@ describe("角色包：hello.characterId（S6b §1 / S6f §1）", () => {
     expect(harness.closed).toBe(1);
   });
 
-  it("S6f §1：隐藏角色 rin → 按 unknown_character 处理（不回退）", async () => {
+  it("已删除的 rin → 按 unknown_character 处理（不回退）", async () => {
     const harness = setup();
     await harness.hello({ characterId: "rin" });
 
@@ -113,69 +113,28 @@ describe("角色包：hello.characterId（S6b §1 / S6f §1）", () => {
     expect(harness.sent.some((message) => message.type === "session")).toBe(false);
     expect(harness.closed).toBe(1);
   });
-
-  it("S6f §1：显式加载隐藏包（hidden 覆盖为 false）后 rin 可连接、台词来自夏凛剧本", async () => {
-    const harness = setup(testPacksWithRinVisible());
-    await harness.hello({ characterId: "rin" });
-    await harness.input(1, "你好");
-
-    const beats = harness.sent.flatMap((message) =>
-      message.type === "beat" ? [message.payload.beat.say] : [],
-    );
-    expect(beats).toContain("雨还在下。");
-  });
 });
 
 describe("角色包：Mock 模式跑完 arrive → ending（S6b §6）", () => {
-  /** 各角色能命中 ask_core（revealIntents 之一）的代表输入。 */
-  const ASK_CORE: Record<"rin" | "yuna", string> = {
-    rin: "你在等谁？",
-    yuna: "还不睡吗？",
-  };
+  it("yuna：四轮推进到 ending", async () => {
+    const harness = setup();
+    await harness.hello({ characterId: "yuna" });
 
-  for (const id of ["rin", "yuna"] as const) {
-    it(`${id}：四轮推进到 ending`, async () => {
-      // rin 是隐藏角色（S6f §1）：显式加载隐藏包。
-      const harness = setup(id === "rin" ? testPacksWithRinVisible() : testPacks());
-      await harness.hello({ characterId: id });
+    // arrive → probe（第 2 次输入起）
+    await harness.input(1, "你好");
+    await harness.input(2, "你好");
+    expect(lastSnapshot(harness.sent)?.node).toBe("probe");
 
-      // arrive → probe（第 2 次输入起）
-      await harness.input(1, "你好");
-      await harness.input(2, "你好");
-      expect(lastSnapshot(harness.sent)?.node).toBe("probe");
+    // probe → reveal（ask_core 是 revealIntents 之一）
+    await harness.input(3, "还不睡吗？");
+    expect(lastSnapshot(harness.sent)?.node).toBe("reveal");
 
-      // probe → reveal（ask_core 是 revealIntents 之一）
-      await harness.input(3, ASK_CORE[id]);
-      expect(lastSnapshot(harness.sent)?.node).toBe("reveal");
+    // reveal → ending
+    await harness.input(4, "然后呢");
+    expect(lastSnapshot(harness.sent)?.node).toBe("ending");
 
-      // reveal → ending
-      await harness.input(4, "然后呢");
-      expect(lastSnapshot(harness.sent)?.node).toBe("ending");
-
-      // 每个角色都正常结束每一轮。
-      const turnEnds = harness.sent.filter((message) => message.type === "turn_end");
-      expect(turnEnds).toHaveLength(4);
-      expect(turnEnds.every((message) => message.type === "turn_end" && message.payload.reason === "done")).toBe(true);
-    });
-  }
-
-  it("两个角色的台词互不相同（确认按 pack 取剧本）", async () => {
-    // rin 是隐藏角色（S6f §1）：显式加载隐藏包。
-    const rin = setup(testPacksWithRinVisible());
-    await rin.hello({ characterId: "rin" });
-    await rin.input(1, "你好");
-    const rinBeats = rin.sent.flatMap((message) => (message.type === "beat" ? [message.payload.beat.say] : []));
-    rin.manager.dispose();
-
-    const yuna = setup();
-    await yuna.hello({ characterId: "yuna" });
-    await yuna.input(1, "你好");
-    const yunaBeats = yuna.sent.flatMap((message) => (message.type === "beat" ? [message.payload.beat.say] : []));
-
-    expect(rinBeats).toContain("雨还在下。");
-    expect(yunaBeats).toContain("……诶？还有人？");
-    // 无声 beat 的 say 都是空串，比较时排除。
-    const spoken = (lines: string[]) => lines.filter((line) => line !== "");
-    expect(spoken(rinBeats).some((line) => spoken(yunaBeats).includes(line))).toBe(false);
+    const turnEnds = harness.sent.filter((message) => message.type === "turn_end");
+    expect(turnEnds).toHaveLength(4);
+    expect(turnEnds.every((message) => message.type === "turn_end" && message.payload.reason === "done")).toBe(true);
   });
 });

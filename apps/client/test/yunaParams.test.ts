@@ -18,6 +18,7 @@ import {
   EYE_OPEN_MAX,
   FORBIDDEN_KEYS,
   GUARDED_EYE_MAX,
+  HEART_FADE_SEC,
   idleActionParams,
   LISTEN_BODY_FORWARD,
   LISTEN_HEAD_TILT_Z,
@@ -25,6 +26,8 @@ import {
   LISTEN_NOD_PERIOD_SEC,
   LISTEN_TRANSITION_SEC,
   listenNodOffset,
+  PET_FADE_SEC,
+  petGradient,
   SILENT_ACTION_TABLE,
   SPEAK_AMAZED_SEC,
   speakAmazed,
@@ -51,7 +54,7 @@ describe("clampParam：舒适区间是唯一出处", () => {
     expect(clampParam("ParamAngleX", 100)).toBe(30);
     expect(clampParam("ParamAngleX", -100)).toBe(-30);
     expect(clampParam("ParamMouthOpenY", 5)).toBe(2.1);
-    expect(clampParam("ParamBrowLY", 5)).toBe(1);
+    expect(clampParam("ParamBrowL", 5)).toBe(1);
     expect(clampParam("ParamShy", -3)).toBe(-1);
   });
 
@@ -137,19 +140,17 @@ describe("yunaParams：参数映射", () => {
     expect(yunaParams({ ...base, mouth: "open" }).ParamMouthOpenY).toBe(1);
   });
 
-  it("guarded 眼开合上限 0.6、眉压低", () => {
+  it("guarded 眼开合上限 0.6、眉压低（S6g-A §4.1：写物理输入 ParamBrowL/R）", () => {
     const p = yunaParams({ ...base, emotion: "guarded", blinkOpen: 1 });
     expect(p.ParamEyeLOpen).toBeCloseTo(GUARDED_EYE_MAX);
     expect(p.ParamEyeROpen).toBeCloseTo(GUARDED_EYE_MAX);
-    expect(p.ParamBrowLY).toBe(-0.4);
-    expect(p.ParamBrowRY).toBe(-0.4);
+    expect(p.ParamBrowL).toBe(-0.4);
+    expect(p.ParamBrowR).toBe(-0.4);
   });
-  it("sad：八字眉方向 + 嘴角下撇（S6a-fix1 §5 加大）", () => {
+  it("sad：八字眉（左右物理输入不同）+ 嘴角下撇", () => {
     const p = yunaParams({ ...base, emotion: "sad" });
-    expect(p.ParamBrowLAngle).toBe(-1);
-    expect(p.ParamBrowRAngle).toBe(1);
-    expect(p.ParamBrowLY).toBe(-0.8);
-    expect(p.ParamBrowRY).toBe(-0.8);
+    expect(p.ParamBrowL).toBe(-0.55);
+    expect(p.ParamBrowR).toBe(-0.35);
     expect(p.ParamMouthForm).toBe(-1);
   });
 
@@ -214,6 +215,10 @@ describe("yunaParams：后置条件（fast-check 属性测试，§1.3）", () =>
     mouth: fc.constantFrom(...MOUTHS),
     blinkOpen: fc.double({ min: -2, max: 3, noNaN: true }),
     tSec: fc.double({ min: -100, max: 1e6, noNaN: true }),
+    silentAction: fc.option(fc.constantFrom(...SILENT_ACTIONS), { nil: null }),
+    silentActionSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
+    heart: fc.boolean(),
+    heartSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
     look: fc.option(
       fc.record({
         eyeX: fc.double({ min: -5, max: 5, noNaN: true }),
@@ -318,26 +323,28 @@ describe("S6f §2：思考", () => {
   });
 });
 
-describe("S6f §2：待机小动作（seed 决定）", () => {
-  it("idleSinceSec > 8 后抱熊（seed=0.1 → 抱熊）", () => {
-    const params = idleActionParams(9, 0.1, 0);
-    expect(params.ParamPet).toBe(1);
-  });
-
-  it("idleSinceSec > 8 后瞟向一侧（seed=0.5 → 瞟向一侧）", () => {
-    const params = idleActionParams(9, 0.5, 0);
+describe("S6g-A §4.2/§4.3：待机小动作只剩瞟向一侧", () => {
+  it("idleSinceSec > 8 后瞟向一侧（seed=0.1 → 瞟向一侧）", () => {
+    const params = idleActionParams(9, 0.1);
     expect(params.ParamEyeBallX).toBeCloseTo(0.3);
   });
 
-  it("idleSinceSec > 8 后耳朵轻动（seed=0.9 → 耳朵）", () => {
-    const params = idleActionParams(9, 0.9, 0);
-    expect(params.ParamEarsLX1).toBeDefined();
-    expect(params.ParamEarsRX1).toBeDefined();
+  it("seed 落在另一档时不产生任何参数（抱熊 / 耳朵已删）", () => {
+    expect(idleActionParams(9, 0.9)).toEqual({});
+  });
+
+  it("任何 seed 都不再产出抱熊（ParamPet）或耳朵（ParamEarsLX1/RX1）", () => {
+    for (const seed of [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1]) {
+      const params = idleActionParams(9, seed);
+      expect(params.ParamPet).toBeUndefined();
+      expect(params.ParamEarsLX1).toBeUndefined();
+      expect(params.ParamEarsRX1).toBeUndefined();
+    }
   });
 
   it("idleSinceSec ≤ 8 无小动作", () => {
-    expect(idleActionParams(0, 0.1, 0)).toEqual({});
-    expect(idleActionParams(8, 0.1, 0)).toEqual({});
+    expect(idleActionParams(0, 0.1)).toEqual({});
+    expect(idleActionParams(8, 0.1)).toEqual({});
   });
 });
 
@@ -379,16 +386,56 @@ describe("S6f §2：silentAction 映射", () => {
     expect(p.ParamEyeBallY).toBeCloseTo(-0.25);
   });
 
-  it("show_item → 抱熊 3 秒", () => {
+  it("show_item → 抱熊 3 秒，ParamPet 0→1→0 渐变（S6g-A §4.3）", () => {
     expect(SILENT_ACTION_TABLE.show_item.durationSec).toBe(3);
-    const p = yunaParams({ ...base, silentAction: "show_item" });
-    expect(p.ParamPet).toBe(1);
+    // 起点、中途、终点：0 → 1 → 0。
+    expect(yunaParams({ ...base, silentAction: "show_item", silentActionSinceSec: 0 }).ParamPet).toBe(0);
+    expect(yunaParams({ ...base, silentAction: "show_item", silentActionSinceSec: PET_FADE_SEC }).ParamPet).toBe(1);
+    expect(yunaParams({ ...base, silentAction: "show_item", silentActionSinceSec: 1.5 }).ParamPet).toBe(1);
+    expect(yunaParams({ ...base, silentAction: "show_item", silentActionSinceSec: 3 }).ParamPet).toBe(0);
   });
 
-  it("glance → 看向一侧 1.5 秒", () => {
+  it("非 show_item 的动作不出现抱熊", () => {
+    expect(yunaParams({ ...base, silentAction: "drink" }).ParamPet).toBe(0);
+    expect(yunaParams({ ...base, silentAction: "glance" }).ParamPet).toBe(0);
+  });
+
+  it("glance → 看向一侧 1.5 秒（视线经 clampView，S6g-A §4.4）", () => {
     expect(SILENT_ACTION_TABLE.glance.durationSec).toBe(1.5);
     const p = yunaParams({ ...base, silentAction: "glance" });
-    expect(p.ParamEyeBallX).toBeCloseTo(0.3);
+    // 视线 X 取反（VTube 反向映射）：look.eyeX=+0.3 → 输出 -0.3。
+    expect(p.ParamEyeBallX).toBeCloseTo(-0.3);
+    expect(Math.abs(p.ParamEyeBallX as number)).toBeLessThanOrEqual(VIEW_LIMITS.gazeX + 1e-9);
+  });
+});
+
+describe("S6g-A §3.2：hearts 特效 ParamHeart", () => {
+  it("heart=false 时 ParamHeart=0", () => {
+    expect(yunaParams({ ...base }).ParamHeart).toBe(0);
+  });
+
+  it("heart=true 且未给秒数时直接为 1", () => {
+    expect(yunaParams({ ...base, heart: true }).ParamHeart).toBe(1);
+  });
+
+  it("heart=true 时 0.4s 渐入", () => {
+    expect(yunaParams({ ...base, heart: true, heartSinceSec: 0 }).ParamHeart).toBe(0);
+    expect(yunaParams({ ...base, heart: true, heartSinceSec: HEART_FADE_SEC / 2 }).ParamHeart).toBeCloseTo(0.5);
+    expect(yunaParams({ ...base, heart: true, heartSinceSec: HEART_FADE_SEC }).ParamHeart).toBe(1);
+    expect(yunaParams({ ...base, heart: true, heartSinceSec: 5 }).ParamHeart).toBe(1);
+  });
+});
+
+describe("S6g-A §4.3：petGradient 0→1→0", () => {
+  it("端点与中途", () => {
+    expect(petGradient(0, 3)).toBe(0);
+    expect(petGradient(-1, 3)).toBe(0);
+    expect(petGradient(PET_FADE_SEC / 2, 3)).toBeCloseTo(0.5);
+    expect(petGradient(PET_FADE_SEC, 3)).toBe(1);
+    expect(petGradient(1.5, 3)).toBe(1);
+    expect(petGradient(3 - PET_FADE_SEC / 2, 3)).toBeCloseTo(0.5);
+    expect(petGradient(3, 3)).toBe(0);
+    expect(petGradient(4, 3)).toBe(0);
   });
 });
 
@@ -424,6 +471,9 @@ describe("S6f §2：禁止参数与水印参数（fast-check 属性测试）", (
     idleSinceSec: fc.double({ min: -1, max: 1000, noNaN: true }),
     firstSpokeSinceSec: fc.option(fc.double({ min: -1, max: 100, noNaN: true }), { nil: undefined }),
     silentAction: fc.option(fc.constantFrom(...SILENT_ACTIONS), { nil: null }),
+    silentActionSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
+    heart: fc.boolean(),
+    heartSinceSec: fc.double({ min: -5, max: 100, noNaN: true }),
     seed: fc.double({ min: -1, max: 2, noNaN: true }),
     look: fc.option(
       fc.record({

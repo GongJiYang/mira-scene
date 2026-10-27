@@ -103,7 +103,7 @@ function createSim() {
         lastSpeakingSeq = seq;
         B = performanceReducer(B, {
           type: "BEAT_STARTED",
-          look: { emotion: A.visual.emotion, hands: A.visual.hands, action: A.visual.action },
+          look: { emotion: A.visual.emotion, action: A.visual.action },
           at: now,
         });
       }

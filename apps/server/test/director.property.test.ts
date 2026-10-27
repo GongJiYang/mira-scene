@@ -16,8 +16,12 @@ import {
 import { direct, type DirectorContext } from "../src/director/director";
 import { ACTION_HANDS, FISH_EMOTION_TAGS } from "../src/director/vocab";
 import { createInitialScene as createServerScene } from "../src/story";
+import { testPack } from "./helpers/pack";
 
 const RUNS = 500;
+
+/** S6g-A §2：导演层的视觉来源 = 忧奈角色包的 nodes 表（后置条件要据此断言）。 */
+const NODE_VISUALS = testPack("yuna").nodeVisuals;
 
 const NODE_RANK: Record<StoryNode, number> = { arrive: 0, probe: 1, reveal: 2, ending: 3 };
 
@@ -101,6 +105,7 @@ describe("属性：direct 的契约后置条件与不变量", () => {
           recentActions: [],
           advancedThisTurn: false,
           beatsThisTurn: 0,
+          nodeVisuals: NODE_VISUALS,
         };
         const emitted: Beat[] = [];
         let maxNodeRank = 0;
@@ -138,30 +143,22 @@ describe("属性：direct 的契约后置条件与不变量", () => {
                 expect(emitted.slice(-2).map((previous) => previous.action)).not.toContain(beat.action);
               }
 
-              // camera / fx / media 只能来自剧情规则或会话第一个 beat。
-              const isFirstSessionBeat = emitted.length === 0;
+              // S6g-A §2 后置条件：fx / camera / media 只能来自角色包的剧情节点表。
+              // 非推进 beat（story === null）不得带任何视觉覆盖；推进 beat 只能带该节点配置的视觉。
               if (beat.story === null) {
                 expect(beat.camera).toBeNull();
+                expect(beat.fx).toBeNull();
                 expect(beat.media).toBeNull();
-                if (beat.fx !== null) {
-                  expect(beat.fx).toBe("rain_heavy");
-                  expect(isFirstSessionBeat).toBe(true);
-                }
-              }
-              if (beat.fx === "rain_heavy") expect(isFirstSessionBeat).toBe(true);
-              if (beat.fx === "rain_stop") expect(beat.story?.advance).toBe("reveal");
-              // S5 §5：reveal 带照片、ending 带剧情视频；两者都只来自剧情推进（不变量的意图未变）。
-              if (beat.media !== null) {
-                if (beat.media.type === "video") {
-                  expect(beat.media).toEqual({ type: "video", id: "clip_ending" });
-                  expect(beat.story?.advance).toBe("ending");
-                  expect(beat.camera).toBe("wide");
-                  expect(beat.fx).toBe("warm_glow");
+              } else {
+                const visual = NODE_VISUALS[beat.story.advance];
+                expect(beat.camera).toBe(visual?.camera ?? null);
+                expect(beat.fx).toBe(visual?.fx ?? null);
+                const expectedMedia = visual?.media ?? null;
+                // media 只比 type / id：会话层随后会补 storyEventId。
+                if (expectedMedia === null) {
+                  expect(beat.media).toBeNull();
                 } else {
-                  expect(beat.media).toEqual({ type: "photo", id: "photo_letters" });
-                  expect(beat.story?.advance).toBe("reveal");
-                  expect(beat.camera).toBe("close_up");
-                  expect(beat.fx).toBe("rain_stop");
+                  expect(beat.media).toMatchObject({ type: expectedMedia.type, id: expectedMedia.id });
                 }
               }
 
@@ -219,6 +216,7 @@ describe("属性：parse 之后 direct 仍满足契约", () => {
           recentActions: [],
           advancedThisTurn: false,
           beatsThisTurn: 0,
+          nodeVisuals: NODE_VISUALS,
         });
         expect(result.beats.length).toBeGreaterThanOrEqual(1);
         for (const { beat } of result.beats) expect(beatSchema.safeParse(beat).success).toBe(true);

@@ -12,8 +12,8 @@ import { characterOrDefault, VISIBLE_CHARACTERS } from "./characters";
 import { danmakuReducer, initialDanmakuState, MAX_MOBILE_DANMAKU, visibleDanmaku, danmakuOpacity } from "./danmaku";
 import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layout";
 import { StageRenderer } from "./StageRenderer";
+import { LiveEntries, MobileMenu } from "./entries";
 import { UI_TEXT } from "./uiText";
-import { developProgress } from "../stage/develop";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
 import { useSceneStatusStore } from "./scene/status";
@@ -42,27 +42,6 @@ function useLayout(): LiveLayout {
   return pickLayout(width);
 }
 
-/** 拍立得显影进度（夏凛的 reveal 照片用；忧奈用截图加载样式，不需要）。 */
-function useDevelop(status: string, key: string): number {
-  const [progress, setProgress] = useState(0);
-  useEffect(() => {
-    if (status !== "shown") {
-      setProgress(0);
-      return;
-    }
-    let raf = 0;
-    const start = performance.now();
-    const tick = (): void => {
-      const value = developProgress(performance.now() - start);
-      setProgress(value);
-      if (value < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [status, key]);
-  return progress;
-}
-
 export function Live() {
   const vm = useStageViewModel();
   const layout = useLayout();
@@ -73,16 +52,13 @@ export function Live() {
   const holding = useRef(false);
 
   const orientation = layout === "desktop" ? "landscape" : "portrait";
-  // S6c §5：换背景 ready 后换成新背景；否则用角色包默认背景。
+  // S6c §5：换背景 ready 后换成新背景；否则用角色包默认背景（D43：只有忧奈）。
   const sceneBackground = useSceneStatusStore((state) => state.backgroundUrl);
-  const defaultBackground = orientation === "portrait"
-    ? (character.id === "yuna" ? "/characters/yuna/bg-mobile.jpg" : "/stage/assets/raw/b1_bg_main_v.png")
-    : (character.id === "yuna" ? "/characters/yuna/bg-desktop.jpg" : "/stage/assets/raw/b1_bg_main_h.png");
+  const defaultBackground =
+    orientation === "portrait" ? "/characters/yuna/bg-mobile.jpg" : "/characters/yuna/bg-desktop.jpg";
   const background = sceneBackground !== null
     ? (orientation === "portrait" ? sceneBackground.mobile : sceneBackground.desktop)
     : defaultBackground;
-
-  const develop = useDevelop(vm.storyMedia.status, vm.storyMedia.storyEventId ?? "");
 
   // 用户自己发的文字进弹幕；语音转写同理（transcript 走 subtitle 之外的独立通道，这里用 subtitle 兜底）。
   const submit = useCallback(() => {
@@ -146,14 +122,13 @@ export function Live() {
   const stage = (
     <StageRenderer
       characterId={character.id}
-      renderer={character.renderer}
       phase={vm.phase}
       visual={vm.visual}
       performance={vm.performance}
       storyMedia={vm.storyMedia}
       orientation={orientation}
-      develop={develop}
       backgroundUrl={background}
+      turnId={vm.debug.turnId}
     />
   );
 
@@ -189,6 +164,8 @@ export function Live() {
                 </span>
                 <span className="live-hud-viewers">{UI_TEXT.viewers}</span>
                 <FirstAudioHud />
+                {/* S6g-A §5：桌面顶栏右侧的「文档」「观测」入口。 */}
+                <LiveEntries />
               </div>
               {vm.error && vm.debugMode && (
                 <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>
@@ -409,6 +386,8 @@ function MobileLive(props: MobileProps) {
           >
             ⇅
           </button>
+          {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口）。 */}
+          <MobileMenu />
         </div>
 
         <div className="live-mobile-danmaku" data-testid="danmaku-list">

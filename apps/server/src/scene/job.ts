@@ -128,6 +128,8 @@ export function sceneJobReducer(state: SceneJobState, event: SceneJobEvent): Sce
     }
     case "failed": {
       if (state.current === null || state.current.jobId !== event.jobId) return state;
+      // S6g-A §4.5：failed 只在 writing / generating 下生效——已 ready 的任务不能被迟到的超时改成 failed。
+      if (state.current.status !== "writing" && state.current.status !== "generating") return state;
       return {
         ...state,
         current: { ...state.current, status: "failed", error: event.error, updatedAt: event.at },

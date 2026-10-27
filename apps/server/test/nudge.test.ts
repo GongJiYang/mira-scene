@@ -8,7 +8,7 @@ import type { LLMContext, LLMPort } from "../src/ports";
 import { renderPrompt, NUDGE_SCENE_NOTE } from "../src/prompts/renderPrompt";
 import { createSessionManager, NUDGE_USER_TEXT, type SendFn, type SessionManager } from "../src/session";
 import { createInitialScene } from "../src/story";
-import { testPack, testPacksWithRinVisible } from "./helpers/pack";
+import { testPack, testPacks } from "./helpers/pack";
 
 type Harness = {
   manager: SessionManager;
@@ -28,7 +28,7 @@ function setup(options: { llm?: LLMPort; sessionTurnLimit?: number; dailyTurnLim
     llm: options.llm ?? createMockLlm({ beatDelayMs: 0 }),
     tts: createMockTts({ delayMs: 0 }),
     log: silentLogger,
-    packs: testPacksWithRinVisible(),
+    packs: testPacks(),
     sessionTurnLimit: options.sessionTurnLimit,
     dailyTurnLimit: options.dailyTurnLimit,
     idleTimeoutMs: 24 * 60 * 60 * 1000,
@@ -61,7 +61,7 @@ afterEach(() => {
 
 describe("mockLlm：主动开口脚本（D32）", () => {
   it("nudge 时返回一句主动台词 + 一个无声动作，且不推进剧情", () => {
-    const beats = composeBeats({ history: [], scene: createInitialScene(), userText: NUDGE_USER_TEXT, pack: testPack("rin"), nudge: true }, testPack("rin"));
+    const beats = composeBeats({ history: [], scene: createInitialScene(), userText: NUDGE_USER_TEXT, pack: testPack("yuna"), nudge: true }, testPack("yuna"));
     expect(beats.length).toBeGreaterThanOrEqual(2);
     expect(beats.some((beat) => beat.say !== "")).toBe(true);
     expect(beats.some((beat) => beat.say === "" && beat.suggest !== null)).toBe(true);
@@ -132,7 +132,7 @@ describe("服务端 nudge：不推进剧情、不计入限额（§7）", () => {
 
 describe("提示词：主动开口的动态后缀（§7）", () => {
   it("nudge 时给动态后缀追加沉默提示，普通轮不加", () => {
-    const prompt = testPack("rin");
+    const prompt = testPack("yuna");
     const scene = createInitialScene();
     const nudge = renderPrompt(prompt, {
       scene,

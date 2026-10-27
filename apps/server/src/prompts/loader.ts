@@ -1,19 +1,21 @@
 /**
- * 提示词加载（D18、第 9 轮）：读取 `prompts/rin.v1.md`，切成静态前缀与动态后缀。
+ * 提示词加载（D18、第 9 轮）：读取 `characters/yuna/prompt.v1.md`，切成静态前缀与动态后缀。
  *
  * - `## STATIC` 部分作为 system 消息，逐字不变（命中前缀缓存）。
  * - `## DYNAMIC` 部分是模板，由 `renderPrompt` 填充后作为最后一条 user 消息。
- * - `version` 取自文件头注释（例如 `rin.v1`），每一轮写入日志。
+ * - `version` 取自文件头注释（例如 `yuna.v1`），每一轮写入日志。
+ *
+ * D43：夏凛删除后 `prompts/rin.v1.md` 一并删除；默认提示词改用忧奈角色包里的那份。
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** 相对仓库根目录的提示词文件路径。 */
-export const PROMPT_FILE = "prompts/rin.v1.md";
+/** 相对仓库根目录的提示词文件路径（忧奈角色包内的那份）。 */
+export const PROMPT_FILE = "characters/yuna/prompt.v1.md";
 
 export type PromptTemplate = {
-  /** 例如 `rin.v1`。 */
+  /** 例如 `yuna.v1`。 */
   version: string;
   /** `## STATIC` 正文（逐字不变）。 */
   staticText: string;

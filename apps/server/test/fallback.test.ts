@@ -7,7 +7,7 @@ import { createMockTts } from "../src/adapters/mock/mockTts";
 import type { LogRecord } from "../src/log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "../src/ports";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPack, testPacksWithRinVisible } from "./helpers/pack";
+import { testPack, testPacks } from "./helpers/pack";
 
 /**
  * S6b §2：情景化兜底。
@@ -15,8 +15,7 @@ import { testPack, testPacksWithRinVisible } from "./helpers/pack";
  * 客户端本地播放的 offline 由 apps/client/test/offlineFallback.test.ts 覆盖。
  */
 
-const RIN = testPack("rin");
-const YUNA = testPack("yuna");
+const PACK = testPack("yuna");
 
 type Harness = {
   manager: SessionManager;
@@ -51,7 +50,7 @@ function setup(options: SetupOptions = {}): Harness {
       llm: withFaults(base.llm, "llm", faults),
       tts: withFaults(base.tts, "tts", faults),
     }),
-    packs: testPacksWithRinVisible(),
+    packs: testPacks(),
     firstTokenTimeoutMs: options.firstTokenTimeoutMs,
     log: (record) => logs.push(record),
     idleTimeoutMs: 24 * 60 * 60 * 1000,
@@ -106,23 +105,17 @@ describe("§2 兜底：stt_empty", () => {
       },
     };
     const harness = setup({ llm });
-    await harness.hello("rin", ["stt"]);
+    await harness.hello("yuna", ["stt"]);
     await harness.audio(1);
 
-    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: RIN.fallback.stt_empty, emotion: "guarded" });
+    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: PACK.fallback.stt_empty, emotion: "guarded" });
     expect(turnEndOf(harness.sent, 1)?.payload).toEqual({ reason: "done" });
     expect(llmCalls).toBe(0);
     expect(harness.logs.filter((record) => record.event === "fallback_used")).toMatchObject([
       { detail: { category: "stt_empty" } },
-    ]);
-  });
+     ]);
+   });
 
-  it("忧奈用自己的 stt_empty 台词", async () => {
-    const harness = setup();
-    await harness.hello("yuna", ["stt"]);
-    await harness.audio(1);
-    expect(beatsOf(harness.sent, 1)[0]?.say).toBe(YUNA.fallback.stt_empty);
-  });
 });
 
 describe("§2 兜底：stt_failed", () => {
@@ -133,10 +126,10 @@ describe("§2 兜底：stt_failed", () => {
       },
     };
     const harness = setup({ stt });
-    await harness.hello("rin");
+    await harness.hello("yuna");
     await harness.audio(1);
 
-    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: RIN.fallback.stt_failed, emotion: "guarded" });
+    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: PACK.fallback.stt_failed, emotion: "guarded" });
     expect(errorsOf(harness.sent, 1)).toEqual([]);
     expect(turnEndOf(harness.sent, 1)?.payload).toEqual({ reason: "done" });
     expect(harness.logs.filter((record) => record.event === "fallback_used")).toMatchObject([
@@ -146,23 +139,11 @@ describe("§2 兜底：stt_failed", () => {
 
   it("故障注入 stt_error 走同一条路径", async () => {
     const harness = setup();
-    await harness.hello("rin", ["stt_error"]);
+    await harness.hello("yuna", ["stt_error"]);
     await harness.audio(1);
 
-    expect(beatsOf(harness.sent, 1)[0]?.say).toBe(RIN.fallback.stt_failed);
+    expect(beatsOf(harness.sent, 1)[0]?.say).toBe(PACK.fallback.stt_failed);
     expect(turnEndOf(harness.sent, 1)?.payload).toEqual({ reason: "done" });
-  });
-
-  it("忧奈用自己的 stt_failed 台词", async () => {
-    const stt: STTPort = {
-      transcribe() {
-        return Promise.reject(new Error("timeout"));
-      },
-    };
-    const harness = setup({ stt });
-    await harness.hello("yuna");
-    await harness.audio(1);
-    expect(beatsOf(harness.sent, 1)[0]?.say).toBe(YUNA.fallback.stt_failed);
   });
 });
 
@@ -170,27 +151,15 @@ describe("§2 兜底：llm_timeout", () => {
   it("首 token 超时 → 说 pack 的 llm_timeout 台词，error{llm_timeout,retryable:true}，turn_end{error}", async () => {
     vi.useFakeTimers();
     const harness = setup({ firstTokenTimeoutMs: 1_000 });
-    await harness.hello("rin", ["llm_timeout"]);
+    await harness.hello("yuna", ["llm_timeout"]);
 
     const turn = harness.input(1, "你好");
     await vi.advanceTimersByTimeAsync(1_000);
     await turn;
 
-    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: RIN.fallback.llm_timeout, emotion: "guarded" });
+    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: PACK.fallback.llm_timeout, emotion: "guarded" });
     expect(errorsOf(harness.sent, 1)).toMatchObject([{ code: "llm_timeout", retryable: true }]);
     expect(turnEndOf(harness.sent, 1)?.payload).toEqual({ reason: "error" });
-  });
-
-  it("忧奈用自己的 llm_timeout 台词", async () => {
-    vi.useFakeTimers();
-    const harness = setup({ firstTokenTimeoutMs: 500 });
-    await harness.hello("yuna", ["llm_timeout"]);
-
-    const turn = harness.input(1, "你好");
-    await vi.advanceTimersByTimeAsync(500);
-    await turn;
-
-    expect(beatsOf(harness.sent, 1)[0]?.say).toBe(YUNA.fallback.llm_timeout);
   });
 });
 
@@ -202,10 +171,10 @@ describe("§2 兜底：turn_failed", () => {
       },
     };
     const harness = setup({ llm });
-    await harness.hello("rin");
+    await harness.hello("yuna");
     await harness.input(1, "你好");
 
-    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: RIN.fallback.turn_failed, emotion: "guarded" });
+    expect(beatsOf(harness.sent, 1)[0]).toMatchObject({ say: PACK.fallback.turn_failed, emotion: "guarded" });
     expect(errorsOf(harness.sent, 1)).toMatchObject([{ code: "turn_failed", message: "boom", retryable: true }]);
     expect(turnEndOf(harness.sent, 1)?.payload).toEqual({ reason: "error" });
     // 服务端照常记录错误日志。
@@ -214,28 +183,12 @@ describe("§2 兜底：turn_failed", () => {
       { detail: { category: "turn_failed" } },
     ]);
   });
-
-  it("忧奈用自己的 turn_failed 台词", async () => {
-    const llm: LLMPort = {
-      streamBeats() {
-        throw new Error("boom");
-      },
-    };
-    const harness = setup({ llm });
-    await harness.hello("yuna");
-    await harness.input(1, "你好");
-    expect(beatsOf(harness.sent, 1)[0]?.say).toBe(YUNA.fallback.turn_failed);
-  });
 });
 
 describe("§2 兜底：五类台词都来自角色包", () => {
-  it("两个角色的五类兜底台词互不相同（除有意复用的句子）", () => {
+  it("忧奈的兜底台词逐类非空（D43 只剩一个角色）", () => {
     for (const category of ["stt_empty", "stt_failed", "llm_timeout", "turn_failed", "offline"] as const) {
-      expect(RIN.fallback[category].length).toBeGreaterThan(0);
-      expect(YUNA.fallback[category].length).toBeGreaterThan(0);
+      expect(PACK.fallback[category].length).toBeGreaterThan(0);
     }
-    expect(RIN.fallback.stt_failed).not.toBe(YUNA.fallback.stt_failed);
-    expect(RIN.fallback.turn_failed).not.toBe(YUNA.fallback.turn_failed);
-    expect(RIN.fallback.offline).not.toBe(YUNA.fallback.offline);
   });
 });

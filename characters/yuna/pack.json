@@ -11,6 +11,13 @@
     "reveal": { "type": "photo", "id": "photo_first_stream" },
     "ending": { "type": "video", "id": "clip_offline" }
   },
+  "$comment_nodes": "S6g-A §2：剧情节点 → 镜头 / 特效 / 媒体 / 强制动作。缺字段即不下发；导演层后置条件：fx / media 只能来自本表。",
+  "nodes": {
+    "arrive": { "fx": null },
+    "probe": {},
+    "reveal": { "camera": "close_up", "fx": "stream_dim", "media": { "type": "photo", "id": "photo_first_stream" }, "action": "show_item" },
+    "ending": { "camera": "wide", "fx": "hearts", "media": { "type": "video", "id": "clip_offline" } }
+  },
   "stage": {
     "background": {
       "portrait": "/characters/yuna/bg-mobile.jpg",
