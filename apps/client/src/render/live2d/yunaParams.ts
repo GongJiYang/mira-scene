@@ -43,6 +43,12 @@ export type YunaParamInput = {
   firstSpokeSinceSec?: number;
   /** S6f §2：当前无声动作（来自 content.json 的 look.silentAction / beat.suggest）。 */
   silentAction?: SilentAction | null;
+  /** S6g-A §4.3：进入当前 silentAction 以来的秒数（抱熊渐入渐出用；未传按 0）。 */
+  silentActionSinceSec?: number;
+  /** S6g-A §3.2：剧情特效 hearts 时写 `ParamHeart`（0.4s 渐入）；缺省 0。 */
+  heart?: boolean;
+  /** S6g-A §3.2：hearts 特效已进入的秒数（0.4s 渐入用；未传直接给 1）。 */
+  heartSinceSec?: number;
   /** S6f §2：待机小动作的种子（0–1，调用方每 8–14s 换一个新的）；纯函数可测。 */
   seed?: number;
 };
@@ -57,8 +63,8 @@ export type YunaParamInput = {
  *
  * 正负方向已在预览页实测核对（2026-10-27，截图见 e2e/out/emotion-*.png）：
  * - guarded：眼睛开合上限压到 0.6（见 `EMOTION_EYE_MAX`）、眉压低 → 一脸「防备」。
- * - sad：`ParamBrowLAngle=-1`/`ParamBrowRAngle=+1` 得到**内高外低的八字眉**，
- *   配合眉压低与 `ParamMouthForm=-1` 的嘴角下撇、眼睛上限 0.55 → 重睑下垂 + 撇嘴。
+ * - sad：写物理输入 `ParamBrowL/R`（左右不同）→ 物理输出八字眉，
+ *   配合 `ParamMouthForm=-1` 的嘴角下撇、眼睛上限 0.55 → 重睑下垂 + 撇嘴。
  * - warm：`ParamMouthForm=+0.7` 嘴角上扬、笑眼、`ParamShy=1` 脸红。
  *
  * 注意：`ParamEyeLOpen/ROpen` **不**放在本表里 —— 它们由 `EMOTION_EYE_MAX` 表达为
@@ -71,17 +77,17 @@ export const EMOTION_PARAMS: Record<YunaEmotion, EmotionParams> = {
   calm: {},
   neutral: {},
   // guarded：眉压低（眼睛上限见 EMOTION_EYE_MAX）。
+  // S6g-A §4.1（D46①）：写**物理输入** `ParamBrowL/R` —— 物理再据此驱动
+  // `ParamBrowLY`（Scale 1.8）、`ParamBrowLAngle`（Scale 1）。写旧输出键会被物理覆盖。
   guarded: {
-    ParamBrowLY: -0.4,
-    ParamBrowRY: -0.4,
+    ParamBrowL: -0.4,
+    ParamBrowR: -0.4,
   },
-  // sad：八字眉（内高外低 → 用 ±Angle 表达）、眉压低、嘴角下撇。
-  // S6a-fix1 §5：加大与 calm 的区分度（原值 -0.3 / -0.6 与 calm 肉眼难辨）。
+  // sad：八字眉（内高外低）、眉压低、嘴角下撇。
+  // S6g-A §4.1：同样写物理输入 `ParamBrowL/R`；左右取值不同 → 物理输出左右眉形不同。
   sad: {
-    ParamBrowLAngle: -1,
-    ParamBrowRAngle: 1,
-    ParamBrowLY: -0.8,
-    ParamBrowRY: -0.8,
+    ParamBrowL: -0.55,
+    ParamBrowR: -0.35,
     ParamMouthForm: -1,
   },
   // warm：嘴角上扬、笑眼、脸红。
@@ -153,27 +159,47 @@ export const THINK_TRANSITION_SEC = 0.3;
 /** 待机小动作（idleSinceSec > 8 后每 8–14s 随机一个，由 seed 决定哪一种）。 */
 export const IDLE_ACTION_MIN_GAP_SEC = 8;
 export const IDLE_ACTION_WINDOW_SEC = 6; // 8 + 0..6 → 8–14s
-export const IDLE_PET_SEC = 4; // 抱熊持续 3–5s，取 4
 export const IDLE_GLANCE_SEC = 1.5; // 瞟向一侧 1.5s
-export const IDLE_EAR_SEC = 2; // 耳朵轻动 2s
-export const IDLE_EAR_AMPLITUDE = 0.4;
+// S6g-A §4.2：耳朵轻动写的是物理输出 `ParamEarsLX1/RX1`，会被物理覆盖 → 删除。
+// S6g-A §4.3：抱熊从待机小动作里删掉（用户反馈突兀），只保留在 silentAction=show_item。
 
 /** 说话首句叠加惊讶的持续秒数（S6f §2）。 */
 export const SPEAK_AMAZED_SEC = 1.2;
+
+/** S6g-A §4.3：抱熊（`ParamPet`）渐入渐出时长（秒）。 */
+export const PET_FADE_SEC = 0.6;
+
+/** S6g-A §3.2：hearts 特效 `ParamHeart` 渐入时长（秒）。 */
+export const HEART_FADE_SEC = 0.4;
 
 /**
  * S6f §2：`silentAction` 在忧奈身上的映射。
  * - `drink` → 低头 + 闭眼 1 秒；
  * - `phone` → 视线向下 2 秒；
- * - `show_item` → 抱熊 3 秒；
- * - `glance` → 看向一侧 1.5 秒。
+ * - `show_item` → 抱熊 3 秒（S6g-A §4.3：`ParamPet` 由 `petGradient` 0→1→0 渐变）；
+ * - `glance` → 看向一侧 1.5 秒（S6g-A §4.4：视线经 `clampView`，见主函数）。
  */
 export const SILENT_ACTION_TABLE: Record<SilentAction, { durationSec: number; params: Record<string, number> }> = {
   drink: { durationSec: 1, params: { ParamAngleY: 8, ParamEyeLOpen: 0, ParamEyeROpen: 0 } },
   phone: { durationSec: 2, params: { ParamEyeBallY: -0.25 } },
-  show_item: { durationSec: 3, params: { ParamPet: 1 } },
-  glance: { durationSec: 1.5, params: { ParamEyeBallX: 0.3, ParamAngleX: -4 } },
+  show_item: { durationSec: 3, params: {} },
+  glance: { durationSec: 1.5, params: {} },
 };
+
+/**
+ * S6g-A §4.3：抱熊 `ParamPet` 的 0→1→0 线性渐变。
+ * `elapsedSec` 为进入该 silentAction 以来的秒数（`durationSec` 为动作总时长）：
+ * 前 `PET_FADE_SEC` 上升、后 `PET_FADE_SEC` 下降、中间保持 1。范围外为 0。
+ */
+export function petGradient(elapsedSec: number, durationSec: number): number {
+  if (!Number.isFinite(elapsedSec) || elapsedSec <= 0) return 0;
+  if (elapsedSec >= durationSec) return 0;
+  const fade = Math.min(PET_FADE_SEC, durationSec / 2);
+  if (elapsedSec < fade) return elapsedSec / fade;
+  if (elapsedSec > durationSec - fade) return (durationSec - elapsedSec) / fade;
+  return 1;
+}
+
 
 /**
  * S6f §2 禁止参数：任何输入下都必须为 0。
@@ -299,27 +325,26 @@ export function listenNodOffset(phaseSinceSec: number): number {
   return LISTEN_NOD_AMPLITUDE * phase;
 }
 
-/** 待机小动作：由 idleSinceSec + seed 推出当前应叠加的参数（无动作时返回空表）。 */
-export function idleActionParams(idleSinceSec: number, seed: number, tSec: number): Record<string, number> {
+/**
+ * 待机小动作：由 idleSinceSec + seed 推出当前应叠加的参数（无动作时返回空表）。
+ *
+ * S6g-A §4.3：抱熊已从待机小动作删掉（只在 silentAction=show_item 出现）；
+ * S6g-A §4.2：耳朵轻动已删（物理输出，写它无效）。只剩「瞟向一侧」。
+ */
+export function idleActionParams(idleSinceSec: number, seed: number): Record<string, number> {
   // S6f §2：严格大于 8s 才开始（idleSinceSec = 8 时仍无小动作）。
   if (idleSinceSec <= IDLE_ACTION_MIN_GAP_SEC) return {};
   const s = clamp(seed, 0, 1);
   // 8–14s 一个窗口；窗口内的相对秒数决定小动作是否激活。
-  const windowOffset =
-    (idleSinceSec - IDLE_ACTION_MIN_GAP_SEC) % (IDLE_ACTION_WINDOW_SEC + Math.max(IDLE_PET_SEC, IDLE_EAR_SEC));
-  const kind = Math.floor(s * 3); // 0=抱熊 1=瞟向一侧 2=耳朵轻动
-  if (kind === 0) {
-    return windowOffset < IDLE_PET_SEC ? { ParamPet: 1 } : {};
-  }
-  if (kind === 1) {
-    return windowOffset < IDLE_GLANCE_SEC ? { ParamEyeBallX: 0.3, ParamAngleX: -4 } : {};
-  }
-  if (windowOffset < IDLE_EAR_SEC) {
-    const wave = Math.sin((2 * Math.PI * tSec) / 0.8);
-    return { ParamEarsLX1: IDLE_EAR_AMPLITUDE * wave, ParamEarsRX1: IDLE_EAR_AMPLITUDE * wave };
+  const windowOffset = (idleSinceSec - IDLE_ACTION_MIN_GAP_SEC) % (IDLE_ACTION_WINDOW_SEC + IDLE_GLANCE_SEC);
+  const kind = Math.floor(s * 2); // 0=瞟向一侧 1=什么都不做
+  if (kind === 0 && windowOffset < IDLE_GLANCE_SEC) {
+    // S6g-A §4.4：微观视线仍在 `clampView` 的限幅内（由主函数统一限制，这里给目标值）。
+    return { ParamEyeBallX: 0.3, ParamAngleX: -4 };
   }
   return {};
 }
+
 
 /**
  * 流泪 motion 的纯函数采样（S6f §2：不依赖 SDK 表情管理器）。
@@ -374,8 +399,16 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
   const speaking = input.phase === "speaking";
   const phaseSince = input.phaseSinceSec ?? 0;
 
+  // S6g-A §4.4：silentAction 的视线类动作（glance）也先并入 look，再过 `clampView`
+  // （唯一限幅出处），避免绕过产品侧上限。
+  let lookInput = input.look ?? VIEW_BY_PHASE[input.phase];
+  if (input.silentAction === "glance") {
+    lookInput = { ...lookInput, eyeX: lookInput.eyeX + 0.3, headX: lookInput.headX - 4 };
+  } else if (input.silentAction === "phone") {
+    lookInput = { ...lookInput, eyeY: lookInput.eyeY - 0.25 };
+  }
   // 视线与转头：先经 params.ts 的 clampView（唯一出处）拿到截断后的目标视线。
-  const look = clampView(input.look ?? VIEW_BY_PHASE[input.phase]);
+  const look = clampView(lookInput);
 
   const breath = breathOffsets(input.tSec, speaking);
 
@@ -428,23 +461,35 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
   // S6f §2：禁止参数与水印参数恒为 0（任何输入下）。
   for (const name of FORBIDDEN_KEYS) out[name] = 0;
 
-  // S6f §2：待机小动作（抱熊 / 瞟向一侧 / 耳朵轻动；由 idleSinceSec + seed 决定）。
+  // S6f §2：待机小动作（只剩「瞟向一侧」；由 idleSinceSec + seed 决定）。
   if (input.phase === "idle") {
-    for (const [name, value] of Object.entries(idleActionParams(input.idleSinceSec ?? 0, input.seed ?? 0, input.tSec))) {
+    for (const [name, value] of Object.entries(idleActionParams(input.idleSinceSec ?? 0, input.seed ?? 0))) {
       out[name] = (out[name] ?? 0) + value;
     }
   }
 
-  // S6f §2：silentAction 映射（覆盖对应参数：drink 的低头+闭眼、phone 的视线向下等）。
+  // S6f §2：silentAction 映射（drink 的低头+闭眼、show_item 的抱熊渐变等）。
+  // S6g-A §4.3：抱熊只在 show_item 出现，`ParamPet` 由 `petGradient` 0→1→0 渐变。
+  // S6g-A §4.4：glance / phone 的视线已并入 look，经 clampView（见函数开头）。
   if (input.silentAction) {
     const entry = SILENT_ACTION_TABLE[input.silentAction];
     for (const [name, value] of Object.entries(entry.params)) {
       out[name] = value;
     }
+    if (input.silentAction === "show_item") {
+      out.ParamPet = petGradient(input.silentActionSinceSec ?? 0, entry.durationSec);
+    }
   }
 
   // S6f §2：说话首句叠加惊讶（1.2s；只在本会话第一句回话开始时）。
   out.ParamAmazed = speakAmazed(input.firstSpokeSinceSec);
+
+  // S6g-A §3.2：剧情特效 hearts → `ParamHeart` 0.4s 渐入（缺省 0）。
+  out.ParamHeart = input.heart
+    ? input.heartSinceSec === undefined
+      ? 1
+      : clamp(input.heartSinceSec / HEART_FADE_SEC, 0, 1)
+    : 0;
 
   // S6f §2：sad → 哭哭（ParamCry）+ 流泪（泪参数按 motion3 曲线纯函数采样）。
   if (input.emotion === "sad") {
@@ -462,10 +507,8 @@ export function yunaParams(input: YunaParamInput): Record<string, number> {
     out.ParamTearRY = 0;
   }
 
-  // 保证键集合恒定（惊讶与抱熊未激活时也出现）。
+  // 保证键集合恒定（抱熊 / 爱心未激活时也出现）。
   out.ParamPet = out.ParamPet ?? 0;
-  out.ParamEarsLX1 = out.ParamEarsLX1 ?? 0;
-  out.ParamEarsRX1 = out.ParamEarsRX1 ?? 0;
 
   // 后置条件：最后统一截断到舒适区间。
   for (const name of Object.keys(out)) {

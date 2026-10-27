@@ -15,12 +15,10 @@ const baseInput = {
 describe("toStageView：G1-c 新增字段", () => {
   it("缺省时用 B / C 的初始状态，pendingNudge=false", () => {
     const view = toStageView(baseInput);
+    // D43：B 的投影只剩 Live2D 消费的字段。
     expect(view.performance).toEqual({
-      face: initialPerformanceState.face,
       blink: "open",
       mouth: "closed",
-      hands: "cup",
-      handsTransition: null,
       activeAction: null,
       idleSince: null,
     });
@@ -33,15 +31,13 @@ describe("toStageView：G1-c 新增字段", () => {
     expect(view.pendingNudge).toBe(false);
   });
 
-  it("透传 B 的眨眼 / 口型 / 手部过渡与 C 的媒体状态", () => {
+  it("透传 B 的眨眼 / 口型 / 动作与 C 的媒体状态", () => {
     const view = toStageView({
       ...baseInput,
       performance: {
         ...initialPerformanceState,
         blink: "closed",
         mouth: "open",
-        hands: "phone",
-        handsTransition: { from: "phone", to: "cup", startedAt: 100, progress: 0.5 },
         activeAction: { action: "drink", startedAt: 200 },
         idleSince: 50,
       },
@@ -49,20 +45,19 @@ describe("toStageView：G1-c 新增字段", () => {
         ...initialStoryMediaState,
         status: "shown",
         storyEventId: "story-1",
-        media: { type: "photo", id: "photo_letters" },
+        media: { type: "photo", id: "photo_first_stream" },
       },
       pendingNudge: true,
     });
 
     expect(view.performance.blink).toBe("closed");
     expect(view.performance.mouth).toBe("open");
-    expect(view.performance.handsTransition).toEqual({ from: "phone", to: "cup", startedAt: 100, progress: 0.5 });
     expect(view.performance.activeAction).toEqual({ action: "drink", startedAt: 200 });
     expect(view.performance.idleSince).toBe(50);
     expect(view.storyMedia).toEqual({
       status: "shown",
       storyEventId: "story-1",
-      media: { type: "photo", id: "photo_letters" },
+      media: { type: "photo", id: "photo_first_stream" },
       video: { status: "none", storyEventId: null, media: null },
     });
     expect(view.pendingNudge).toBe(true);

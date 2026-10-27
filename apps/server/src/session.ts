@@ -338,6 +338,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         // 主动开口轮禁止推进剧情：不计入 trust（D32）。
         advancedThisTurn: isNudge,
         beatsThisTurn: 0,
+        // S6g-A §2：视觉（镜头 / 特效 / 媒体）只来自角色包节点表。
+        nodeVisuals: session.pack.nodeVisuals,
       };
 
       // S6c §1：弹幕命中「换背景」→ 照常回话，并在后台启动场景任务。
@@ -605,10 +607,10 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       session = existing;
       logFor(session, session.lastTurnId, "session_resumed");
     } else {
-      // S6f §1：缺省角色 = 第一个未隐藏角色；未知或隐藏 id → error{unknown_character} 并关闭会话，不回退。
-      const characterId = message.payload.characterId ?? (deps.packs ? defaultCharacterId(deps.packs) : "rin");
+      // D43：缺省角色 = 目录里第一个（忧奈）；未知 id → error{unknown_character} 并关闭会话，不回退。
+      const characterId = message.payload.characterId ?? (deps.packs ? defaultCharacterId(deps.packs) : "yuna");
       const pack = deps.packs?.get(characterId);
-      if (!pack || pack.hidden) {
+      if (!pack) {
         deps.log({ ts: clock(), sessionId: message.sessionId, turnId: message.turnId, event: "unknown_character", detail: { characterId } });
         send({
           v: 1,

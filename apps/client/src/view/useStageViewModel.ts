@@ -4,7 +4,7 @@
  * 约束：UI 组件不得直接 import store、connection、audio —— 只能通过 useStageViewModel 读写。
  * G1-c 只新增字段（performance / storyMedia / pendingNudge），已有字段未改。
  */
-import type { FaceLayers, Hands, Media } from "@mira/protocol";
+import type { Media } from "@mira/protocol";
 import { useStore } from "zustand";
 import { intents, reports, useNudgeStore, type Intents, type StageReports } from "../core/controller";
 import { useFallbackStore } from "../core/fallback";
@@ -25,7 +25,6 @@ import {
   initialPerformanceState,
   type ActiveAction,
   type Blink,
-  type HandsTransition,
   type MouthShape,
   type PerformanceState,
 } from "../state/performance";
@@ -39,13 +38,10 @@ export type StagePhase = Phase["kind"];
 
 export type StageError = { code: string; message: string; retryable: boolean };
 
-/** 状态机 B 的只读投影（D28）。 */
+/** 状态机 B 的只读投影（D28）。D43：删除立绘用字段，只留 Live2D 消费的。 */
 export type StagePerformance = {
-  face: FaceLayers;
   blink: Blink;
   mouth: MouthShape;
-  hands: Hands;
-  handsTransition: HandsTransition | null;
   activeAction: ActiveAction | null;
   idleSince: number | null;
 };
@@ -132,11 +128,8 @@ export function toStageView(input: StageViewInput): StageView {
     micError: input.micError,
     debug: { turnId: stage.currentTurnId, sessionId: input.sessionId, lastEvents: input.events },
     performance: {
-      face: performance.face,
       blink: performance.blink,
       mouth: performance.mouth,
-      hands: performance.hands,
-      handsTransition: performance.handsTransition,
       activeAction: performance.activeAction,
       idleSince: performance.idleSince,
     },

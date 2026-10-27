@@ -6,18 +6,18 @@ import type { LLMContext } from "../src/ports";
 import { createInitialScene } from "../src/story";
 import { testPack } from "./helpers/pack";
 
-const pack = testPack("rin");
+const pack = testPack("yuna");
 
 const NODES: StoryNode[] = ["arrive", "probe", "reveal", "ending"];
 const INTENTS: Intent[] = ["ask_core", "ask_item", "ask_job", "comfort", "greeting", "other"];
 
 const TEXT_BY_INTENT: Record<Intent, string> = {
-  ask_core: "你在等谁？",
-  ask_item: "能看看照片吗",
-  ask_job: "你主持的节目叫什么",
-  comfort: "我陪你坐一会儿",
+  ask_core: "还不睡吗？",
+  ask_item: "能看看截图吗",
+  ask_job: "今天直播怎么样",
+  comfort: "别担心，我陪着你",
   greeting: "你好",
-  other: "今天店里很安静",
+  other: "今天弹幕很安静",
 };
 
 const LLM_BEAT_KEYS = ["say", "emotion", "suggest", "advance"];
@@ -29,15 +29,14 @@ function context(overrides: Partial<LLMContext> = {}): LLMContext {
 describe("mockLlm：意图与台词", () => {
   it("关键词意图识别", () => {
     const c = (text: string) => classifyIntent(text, pack.intentPatterns);
-    expect(c("你在等谁？")).toBe("ask_core");
-    expect(c("为什么还没来")).toBe("ask_core");
-    expect(c("他约的几点")).toBe("ask_core");
-    expect(c("能看看照片吗")).toBe("ask_item");
-    expect(c("带拍立得了吗")).toBe("ask_item");
-    expect(c("相机借我看看")).toBe("ask_item");
-    expect(c("能拍一张吗")).toBe("ask_item");
-    expect(c("你的电台节目几点开始")).toBe("ask_job");
-    expect(c("声音很好听")).toBe("ask_job");
+    expect(c("还不睡吗？")).toBe("ask_core");
+    expect(c("为什么还不下播")).toBe("ask_core");
+    expect(c("这么晚了")).toBe("ask_core");
+    expect(c("能看看截图吗")).toBe("ask_item");
+    expect(c("第一次开播是什么样")).toBe("ask_item");
+    expect(c("有老粉吗")).toBe("ask_item");
+    expect(c("今天直播怎么样")).toBe("ask_job");
+    expect(c("粉丝多吗")).toBe("ask_job");
     expect(c("别担心")).toBe("comfort");
     expect(c("我陪你")).toBe("comfort");
     expect(c("你好")).toBe("greeting");
@@ -86,7 +85,7 @@ describe("mockLlm：意图与台词", () => {
     expect(secondInput.at(-1)?.advance).toBe("probe");
 
     const probeScene = { ...createInitialScene(), node: "probe" as const };
-    expect(composeBeats(context({ scene: probeScene, userText: "你在等谁？" }), pack).at(-1)?.advance).toBe("reveal");
+    expect(composeBeats(context({ scene: probeScene, userText: "还不睡吗？" }), pack).at(-1)?.advance).toBe("reveal");
     expect(composeBeats(context({ scene: probeScene, userText: "别担心" }), pack).at(-1)?.advance).toBe("reveal");
     expect(composeBeats(context({ scene: probeScene, userText: "你好" }), pack).at(-1)?.advance ?? null).toBeNull();
 
@@ -99,22 +98,20 @@ describe("mockLlm：意图与台词", () => {
 
   it("进入 reveal 的那一轮用 advance + suggest 表达意图（视觉由导演层给出）", () => {
     const probeScene = { ...createInitialScene(), node: "probe" as const };
-    const beats = composeBeats(context({ scene: probeScene, userText: "你在等谁？" }), pack);
+    const beats = composeBeats(context({ scene: probeScene, userText: "还不睡吗？" }), pack);
     expect(beats.at(-1)).toMatchObject({ advance: "reveal", suggest: "show_item", emotion: "sad" });
     expect(beats.every((beat) => !("camera" in beat) && !("fx" in beat) && !("media" in beat))).toBe(true);
   });
 
-  it("至少一个 beat 提议 glance 的无声动作（say 为空串）", () => {
+  it("无声动作来自节点 look（probe → phone，say 为空串）", () => {
     const probeScene = { ...createInitialScene(), node: "probe" as const };
-    const beats = composeBeats(context({ scene: probeScene, userText: "今天店里很安静" }), pack);
-    expect(beats).toContainEqual(expect.objectContaining({ say: "", suggest: "glance" }));
+    const beats = composeBeats(context({ scene: probeScene, userText: "今天弹幕很安静" }), pack);
+    expect(beats).toContainEqual(expect.objectContaining({ say: "", suggest: "phone" }));
   });
 
-  it("咖啡台词暗示「一直没人动」，不说成给用户点的", () => {
-    const line = composeBeats(context({ scene: createInitialScene(), userText: "今天店里很安静" }), pack)[1]?.say ?? "";
-    expect(line).toContain("咖啡");
-    expect(line).toContain("没人");
-    expect(line).not.toContain("给你点");
+  it("arrive 的无声动作是 drink（来自节点 look）", () => {
+    const beats = composeBeats(context({ scene: createInitialScene(), userText: "今天弹幕很安静" }), pack);
+    expect(beats).toContainEqual(expect.objectContaining({ say: "", suggest: "drink" }));
   });
 });
 

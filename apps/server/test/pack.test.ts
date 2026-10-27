@@ -40,22 +40,11 @@ function rawPack(id: string): { dir: string; packJson: unknown; contentJson: unk
   return { dir, packJson, contentJson: readJson(join(dir, "content.json")), prompt: promptParts(dir, packJson.prompt) };
 }
 
-describe("角色包：两个角色都能加载（S6b §1）", () => {
-  it("characters/ 下恰好有 rin 与 yuna，且目录名与 id 一致", () => {
+describe("角色包：忧奈能加载（S6b §1；D43 只剩忧奈）", () => {
+  it("characters/ 下只有 yuna，且目录名与 id 一致", () => {
     const packs = loadPacks();
-    expect([...packs.keys()].sort()).toEqual(["rin", "yuna"]);
+    expect([...packs.keys()].sort()).toEqual(["yuna"]);
     for (const [id, pack] of packs) expect(pack.id).toBe(id);
-  });
-
-  it("rin：分层渲染、FISH_VOICE_ID、提示词与内容路径齐全；S6f §1 起为隐藏角色", () => {
-    const pack = loadPack(join(ROOT, "rin"));
-    expect(pack.displayName).toBe("夏凛");
-    expect(pack.hidden).toBe(true);
-    expect(pack.renderer).toEqual({ kind: "layered" });
-    expect(pack.voice.fishVoiceIdEnv).toBe("FISH_VOICE_ID");
-    expect(pack.promptVersion).toBe("rin.v1");
-    expect(pack.staticText).toContain("夏凛");
-    expect(pack.revealIntents).toEqual(["ask_core", "comfort"]);
   });
 
   it("yuna：Live2D 渲染、FISH_VOICE_ID_YUNA、模型地址与背景", () => {
@@ -67,6 +56,23 @@ describe("角色包：两个角色都能加载（S6b §1）", () => {
     expect(pack.staticText).toContain("忧奈");
     expect(pack.stage.background.landscape).toBe("/characters/yuna/bg-desktop.jpg");
     expect(pack.stage.background.portrait).toBe("/characters/yuna/bg-mobile.jpg");
+  });
+
+  it("S6g-A §2：yuna 的 nodes 视觉配置（镜头 / 特效 / 媒体 / 强制动作）", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
+    expect(pack.nodeVisuals.reveal).toEqual({
+      camera: "close_up",
+      fx: "stream_dim",
+      media: { type: "photo", id: "photo_first_stream" },
+      action: "show_item",
+    });
+    expect(pack.nodeVisuals.ending).toEqual({
+      camera: "wide",
+      fx: "hearts",
+      media: { type: "video", id: "clip_offline" },
+      action: null,
+    });
+    expect(pack.nodeVisuals.arrive).toEqual({ camera: null, fx: null, media: null, action: null });
   });
 
   it("每个角色：所有节点 × 所有意图都有两句台词，fallback 五类齐全", () => {
@@ -106,7 +112,7 @@ describe("角色包：两个角色都能加载（S6b §1）", () => {
 
 describe("parsePack：结构校验", () => {
   it("合法输入返回 Pack", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const parsed = parsePack({
       dir: raw.dir,
       packJson: raw.packJson,
@@ -119,7 +125,7 @@ describe("parsePack：结构校验", () => {
   });
 
   it("pack.json 缺 id → 拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const packJson = { ...(raw.packJson as Record<string, unknown>) };
     delete packJson.id;
     const parsed = parsePack({
@@ -134,7 +140,7 @@ describe("parsePack：结构校验", () => {
   });
 
   it("节点缺少某种意图的台词 → 拒绝（交叉校验）", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const content = structuredClone(raw.contentJson) as {
       nodes: Record<string, { lines: Record<string, unknown> }>;
     };
@@ -151,7 +157,7 @@ describe("parsePack：结构校验", () => {
   });
 
   it("fallback 缺少一类 → 拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const content = structuredClone(raw.contentJson) as { fallback: Record<string, unknown> };
     delete content.fallback.offline;
     const parsed = parsePack({
@@ -166,7 +172,7 @@ describe("parsePack：结构校验", () => {
   });
 
   it("动作不是通用槽位 → 拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const content = structuredClone(raw.contentJson) as {
       nodes: Record<string, { look: { silentAction: string } }>;
     };
@@ -183,7 +189,7 @@ describe("parsePack：结构校验", () => {
   });
 
   it("revealIntents 含非法意图 → 拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const packJson = { ...(raw.packJson as Record<string, unknown>), revealIntents: ["ask_waiting"] };
     const parsed = parsePack({
       dir: raw.dir,
@@ -197,7 +203,7 @@ describe("parsePack：结构校验", () => {
   });
 
   it("imagePrompt 缺少 {{conversation}} → 拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const content = { ...(raw.contentJson as Record<string, unknown>), imagePrompt: "no placeholder" };
     const parsed = parsePack({
       dir: raw.dir,
@@ -231,7 +237,7 @@ describe("parsePack：属性测试（fast-check）", () => {
   const CONTENT_KEYS = ["displayName", "intents", "nodes", "nudge", "fallback", "imagePrompt"];
 
   it("任意删掉一个必需字段都会被拒绝（pack.json）", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     fc.assert(
       fc.property(fc.constantFrom(...PACK_KEYS), (key) => {
         const packJson = structuredClone(raw.packJson) as Record<string, unknown>;
@@ -251,7 +257,7 @@ describe("parsePack：属性测试（fast-check）", () => {
   });
 
   it("任意删掉一个必需字段都会被拒绝（content.json）", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     fc.assert(
       fc.property(fc.constantFrom(...CONTENT_KEYS), (key) => {
         const content = structuredClone(raw.contentJson) as Record<string, unknown>;
@@ -271,7 +277,7 @@ describe("parsePack：属性测试（fast-check）", () => {
   });
 
   it("任意删掉一个 fallback 类别都会被拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     fc.assert(
       fc.property(fc.constantFrom(...FALLBACK_CATEGORIES), (category) => {
         const content = structuredClone(raw.contentJson) as { fallback: Record<string, unknown> };
@@ -291,7 +297,7 @@ describe("parsePack：属性测试（fast-check）", () => {
   });
 
   it("任意删掉一个节点的某句台词都会被拒绝", () => {
-    const raw = rawPack("rin");
+    const raw = rawPack("yuna");
     const nodes = ["arrive", "probe", "reveal", "ending"] as const;
     fc.assert(
       fc.property(fc.constantFrom(...nodes), fc.constantFrom(...INTENT_SLOTS), (node, slot) => {
@@ -331,7 +337,7 @@ describe("parsePack：属性测试（fast-check）", () => {
       }
       return value;
     };
-    for (const id of ["rin", "yuna"] as const) {
+    for (const id of ["yuna"] as const) {
       const raw = rawPack(id);
       expect(packFileSchema.safeParse(strip(raw.packJson)).success).toBe(true);
       expect(contentFileSchema.safeParse(strip(raw.contentJson)).success).toBe(true);
@@ -340,43 +346,41 @@ describe("parsePack：属性测试（fast-check）", () => {
 });
 
 describe("角色包：内容原样搬运（铁律 6）", () => {
-  it("rin 的兜底台词与说明一致", () => {
-    const pack: Pack = loadPack(join(ROOT, "rin"));
+  it("yuna 的兜底台词与说明一致", () => {
+    const pack: Pack = loadPack(join(ROOT, "yuna"));
     expect(pack.fallback).toEqual({
-      stt_empty: "刚才没听清，你再说一遍好吗？",
-      llm_timeout: "……抱歉，刚才走神了。你刚才说到哪了？",
-      stt_failed: "雨声太大了，信号断了一下……你刚才说什么？",
-      turn_failed: "店里的灯闪了一下。我们刚才说到哪了？",
-      offline: "……喂？好像断线了。",
-      scene_failed: "好像没换成。这里也挺好的，不是吗。",
-      scene_rejected: "那个地方……我们换一个吧。",
-      scene_busy: "别急，一个一个来。",
+      stt_empty: "你那边声音糊了，没听清，再说一次？",
+      stt_failed: "啊，卡了卡了，网络又抽风了……你刚说啥？",
+      llm_timeout: "……抱歉，刚刚发呆了。你说到哪了？",
+      turn_failed: "直播间好像卡住了，等我一下……好了，你继续。",
+      offline: "诶？画面卡住了……还在吗？",
+      scene_failed: "诶，背景卡住了，没换成……先凑合一下吧。",
+      scene_rejected: "这个不行哦，换一个别的吧。",
+      scene_busy: "等等，上一个还没换完呢。",
     });
   });
 
-  it("rin 的节点 label / guidance 与原有代码一致", () => {
-    const pack = loadPack(join(ROOT, "rin"));
-    expect(pack.nodes.arrive.label).toBe("初遇");
-    expect(pack.nodes.probe.label).toBe("试探");
-    expect(pack.nodes.reveal.label).toBe("坦白");
-    expect(pack.nodes.ending.label).toBe("余韵");
-    expect(pack.nodes.arrive.guidance).toContain("那杯咖啡");
-    expect(pack.nodes.reveal.guidance).toContain("三年的信");
+  it("yuna 的节点 label 与说明一致", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
+    expect(pack.nodes.arrive.label).toBe("下播之后");
+    expect(pack.nodes.probe.label).toBe("防备");
+    expect(pack.nodes.reveal.label).toBe("老截图");
+    expect(pack.nodes.ending.label).toBe("决定");
   });
 
-  it("rin 的剧本台词原样保留（抽查各节点）", () => {
-    const pack = loadPack(join(ROOT, "rin"));
-    expect(pack.nodes.arrive.lines.greeting).toEqual(["雨还在下。", "先坐吧，靠窗那桌干净。"]);
-    expect(pack.nodes.probe.lines.ask_core).toEqual(["他没说几点到。", "我也没问。问了，好像就变成催了。"]);
-    expect(pack.nodes.reveal.lines.ask_item).toEqual(["这张背面有一行字。", "「等雨停」。是他写的。"]);
-    expect(pack.nodes.ending.lines.other).toEqual(["灯我留着。", "路上小心。"]);
+  it("yuna 的剧本台词原样保留（抽查各节点）", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
+    expect(pack.nodes.arrive.lines.greeting).toEqual(["……诶？还有人？", "我以为大家都走了，推流忘关了。"]);
+    expect(pack.nodes.probe.lines.ask_core).toEqual(["哈，我能有什么事。", "就是在想……算了，不说了。"]);
+    expect(pack.nodes.reveal.lines.ask_item).toEqual(["这是我第一次开播。", "三个观众，我紧张到一直在喝水。"]);
+    expect(pack.nodes.ending.lines.other).toEqual(["晚安，最后一位观众。", "这次真的下播啦。"]);
   });
 
-  it("rin 的主动开口台词原样保留", () => {
-    const pack = loadPack(join(ROOT, "rin"));
+  it("yuna 的主动开口台词原样保留", () => {
+    const pack = loadPack(join(ROOT, "yuna"));
     expect(pack.nudge).toEqual([
       { say: "", emotion: "calm", suggest: "drink" },
-      { say: "……你还在听吗？", emotion: "calm" },
+      { say: "……还在吗？弹幕好安静。", emotion: "calm" },
     ]);
   });
 });

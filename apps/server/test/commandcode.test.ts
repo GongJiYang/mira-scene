@@ -9,8 +9,8 @@ import { createInitialScene } from "../src/story";
 import { testPack } from "./helpers/pack";
 
 const PROMPT: PromptPack = {
-  ...testPack("rin"),
-  promptVersion: "rin.test",
+  ...testPack("yuna"),
+  promptVersion: "yuna.test",
   staticText: "静态前缀",
   dynamicTemplate: "动态 {{user_text}}",
 };
@@ -262,7 +262,7 @@ describe("Command Code 适配器（S6a §2 · 假 spawn）", () => {
     child?.end(0);
     await pending;
 
-    expect(logs.find((record) => record.event === "prompt_version")?.detail).toEqual({ prompt_version: "rin.test" });
+    expect(logs.find((record) => record.event === "prompt_version")?.detail).toEqual({ prompt_version: "yuna.test" });
     const usage = logs.find((record) => record.event === "llm_usage");
     expect(usage?.detail).toMatchObject({ inputTokens: 10, outputTokens: 3 });
   });

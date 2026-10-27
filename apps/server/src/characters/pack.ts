@@ -11,7 +11,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { actionSchema, emotionSchema, mediaSchema, storyNodeSchema, type Action, type Emotion, type Media, type StoryNode } from "@mira/protocol";
+import { actionSchema, cameraSchema, emotionSchema, fxSchema, mediaSchema, storyNodeSchema, type Action, type Camera, type Emotion, type Fx, type Media, type StoryNode } from "@mira/protocol";
 
 /* ------------------------------------------------------------------------------------------------
  * 通用意图槽位（S6b §1）。意图不进 protocol：它是「Mock 剧本 + 提示词」层的概念。
@@ -37,10 +37,8 @@ export type FallbackCategory = (typeof FALLBACK_CATEGORIES)[number];
  * pack.json schema
  * ---------------------------------------------------------------------------------------------- */
 
-const rendererSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("layered") }),
-  z.object({ kind: z.literal("live2d"), model: z.string().min(1) }),
-]);
+/** D43：只剩 Live2D 一种渲染器。 */
+const rendererSchema = z.object({ kind: z.literal("live2d"), model: z.string().min(1) });
 
 const voiceSchema = z.object({
   /** 真实模式下 TTS 音色所在的 .env 变量名（如 `FISH_VOICE_ID` / `FISH_VOICE_ID_YUNA`）。 */
@@ -51,6 +49,40 @@ const mediaSlotsSchema = z.object({
   reveal: mediaSchema,
   ending: mediaSchema,
 });
+
+/**
+ * S6g-A §2：剧情节点视觉配置（`nodes`）。缺字段即不下发；`null` 与「缺省」语义相同（不下发）。
+ * `action` 是该节点进入时强制下发的动作（如 reveal 的 show_item）。
+ */
+const nodeVisualSchema = z.object({
+  camera: cameraSchema.nullish(),
+  fx: fxSchema.nullish(),
+  media: mediaSchema.nullish(),
+  action: actionSchema.nullish(),
+});
+export type NodeVisual = {
+  camera: Camera | null;
+  fx: Fx | null;
+  media: Media | null;
+  action: Action | null;
+};
+
+/** 把解析出的节点视觉（字段可能缺省 / undefined）规范成 NodeVisual（缺省 → null）。 */
+function normalizeNodeVisuals(
+  nodes: Partial<Record<StoryNode, z.infer<typeof nodeVisualSchema>>> | undefined,
+): Partial<Record<StoryNode, NodeVisual>> {
+  if (!nodes) return {};
+  const out: Partial<Record<StoryNode, NodeVisual>> = {};
+  for (const [node, visual] of Object.entries(nodes) as Array<[StoryNode, z.infer<typeof nodeVisualSchema>]>) {
+    out[node] = {
+      camera: visual.camera ?? null,
+      fx: visual.fx ?? null,
+      media: visual.media ?? null,
+      action: visual.action ?? null,
+    };
+  }
+  return out;
+}
 
 const stageSchema = z.object({
   background: z.object({ portrait: z.string().min(1), landscape: z.string().min(1) }),
@@ -67,8 +99,6 @@ const sceneLockSchema = z.string().min(1);
 export const packFileSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
-  /** S6f §1：隐藏角色——不出现在频道列表、不可连接；素材与剧本保留。缺省 false。 */
-  hidden: z.boolean().optional(),
   renderer: rendererSchema,
   voice: voiceSchema,
   /** 相对角色包目录的提示词文件名，例如 `prompt.v1.md`。 */
@@ -78,6 +108,8 @@ export const packFileSchema = z.object({
   /** probe → reveal 的触发意图（S6b §1）。 */
   revealIntents: z.array(intentSlotSchema).min(1),
   media: mediaSlotsSchema,
+  /** S6g-A §2：剧情节点 → 镜头 / 特效 / 媒体 / 强制动作（键为 storyNodeSchema 的子集）。 */
+  nodes: z.record(storyNodeSchema, nodeVisualSchema).optional(),
   stage: stageSchema,
   /** S6c §3：构图锁（英文常量）。 */
   sceneLock: sceneLockSchema,
@@ -133,12 +165,12 @@ export type NudgeBeat = { say: string; emotion: Emotion; suggest?: Action };
 export type Pack = {
   id: string;
   displayName: string;
-  /** S6f §1：隐藏角色（缺省 false）。 */
-  hidden: boolean;
   renderer: z.infer<typeof rendererSchema>;
   voice: z.infer<typeof voiceSchema>;
   revealIntents: readonly IntentSlot[];
   media: { reveal: Media; ending: Media };
+  /** S6g-A §2：剧情节点视觉配置（缺省为空表 → 该节点不下发任何视觉）。 */
+  nodeVisuals: Partial<Record<StoryNode, NodeVisual>>;
   stage: z.infer<typeof stageSchema>;
   /** 提示词静态/动态模板（由 loader 解析）。 */
   promptPath: string;
@@ -253,11 +285,11 @@ export function parsePack(input: {
     pack: {
       id: packParsed.data.id,
       displayName: packParsed.data.displayName,
-      hidden: packParsed.data.hidden ?? false,
       renderer: packParsed.data.renderer,
       voice: packParsed.data.voice,
       revealIntents: packParsed.data.revealIntents,
       media: packParsed.data.media,
+      nodeVisuals: normalizeNodeVisuals(packParsed.data.nodes),
       stage: packParsed.data.stage,
       promptPath: join(input.dir, packParsed.data.prompt),
       promptVersion: input.promptVersion,
@@ -349,7 +381,6 @@ export function loadPack(dir: string): Pack {
 export function loadPacks(root: string = charactersRoot()): Map<string, Pack> {
   if (!existsSync(root)) throw new Error(`找不到角色包目录：${root}`);
   const packs = new Map<string, Pack>();
-  // S6f §1：按目录名排序遍历，保证「第一个未隐藏角色」作为缺省角色时顺序确定。
   const entries = readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -363,10 +394,9 @@ export function loadPacks(root: string = charactersRoot()): Map<string, Pack> {
   return packs;
 }
 
-/** S6f §1：缺省角色 = 第一个未隐藏的角色（按 characters/ 目录排序）；没有未隐藏角色时抛错。 */
+/** D43：缺省角色 = 目录里第一个角色（只排序确定顺序；现在只有忧奈）。 */
 export function defaultCharacterId(packs: ReadonlyMap<string, Pack>): string {
-  for (const pack of packs.values()) {
-    if (!pack.hidden) return pack.id;
-  }
-  throw new Error("没有未隐藏的角色包，无法确定缺省角色");
+  const first = packs.values().next().value as Pack | undefined;
+  if (first === undefined) throw new Error("没有角色包，无法确定缺省角色");
+  return first.id;
 }

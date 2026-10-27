@@ -78,11 +78,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
 
   // S6b-fix1 §1：启动时按每个角色包的 `fishVoiceIdEnv` 读环境变量。
   // 真实模式下任一角色缺失对应环境变量 → 启动报错（s6b §1 原要求）；Mock 模式全部为空（不读 Key）。
-  // S6f §1：隐藏角色不做必填校验（不可连接，音色永远不会用到）。
   const voiceIds = new Map<string, string>();
   if (config.providerMode === "real") {
     for (const pack of packs.values()) {
-      if (pack.hidden) continue;
       const envName = pack.voice.fishVoiceIdEnv;
       const value = (options.env?.[envName] ?? process.env[envName] ?? "").trim();
       if (value === "") {
@@ -189,7 +187,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
             outDir: defaultOutDir(options.env ?? process.env),
             log: (event, detail) => logger({ ts: Date.now(), event, detail }),
           })
-        : createPresetMedia({ delayMs: config.mediaPresetDelayMs }),
+        : createPresetMedia({
+            delayMs: config.mediaPresetDelayMs,
+            // D43：`/stage/` 目录随夏凛删除；预置照片 / 视频改落在忧奈角色包目录。
+            basePath: "/characters/yuna",
+            videoBasePath: "/characters/yuna",
+          }),
     dropConnection: (sessionId) => {
       const socket = sessionSockets.get(sessionId);
       if (!socket) return;

@@ -262,4 +262,24 @@ describe("sceneJobReducer（S6c §4）", () => {
     expect(state.current?.status).toBe("failed");
     expect(state.lastFinishedAt).toBe(1000);
   });
+
+  it("S6g-A §4.5：failed 只在 writing / generating 下生效（ready 后迟到的超时被忽略）", () => {
+    let state = initialSceneJobState();
+    state = sceneJobReducer(state, { type: "request", jobId: "j1", at: 0 });
+    state = sceneJobReducer(state, { type: "written", jobId: "j1", label: "海边", at: 500 });
+    state = sceneJobReducer(state, { type: "ready", jobId: "j1", urls: { desktop: "a", mobile: "b" }, at: 1000 });
+
+    // ready 之后迟到的 failed（超时）不改变状态。
+    const lateFailed = sceneJobReducer(state, { type: "failed", jobId: "j1", error: "timeout", at: 2000 });
+    expect(lateFailed).toBe(state);
+    expect(lateFailed.current?.status).toBe("ready");
+    expect(lateFailed.lastFinishedAt).toBe(1000);
+
+    // generating 下仍然生效。
+    let generating = initialSceneJobState();
+    generating = sceneJobReducer(generating, { type: "request", jobId: "j2", at: 0 });
+    generating = sceneJobReducer(generating, { type: "written", jobId: "j2", label: "海边", at: 100 });
+    generating = sceneJobReducer(generating, { type: "failed", jobId: "j2", error: "timeout", at: 200 });
+    expect(generating.current?.status).toBe("failed");
+  });
 });

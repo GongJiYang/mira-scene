@@ -6,7 +6,7 @@ import { createMockStt } from "../src/adapters/mock/mockStt";
 import type { LogRecord } from "../src/log";
 import { withPaceCheck } from "../src/quality/paceGuard";
 import { createSessionManager, type SendFn, type SessionManager } from "../src/session";
-import { testPacksWithRinVisible } from "./helpers/pack";
+import { testPacks } from "./helpers/pack";
 
 /** 1 秒 128kbps 的音频字节数：5 个字的句子 ≈ 5 字/秒，落在正常范围。 */
 const ONE_SECOND_BYTES = 16_000;
@@ -77,7 +77,7 @@ function setup(logs: LogRecord[]): Harness {
       createFishTts({ baseUrl: "https://api.fish.audio/v1", apiKey: "k", voiceId: "voice-1", model: "s2.1-pro-free", fetch: fetchImpl }),
       { log: (record) => logs.push(record) },
     ),
-    packs: testPacksWithRinVisible(),
+    packs: testPacks(),
     log: (record) => logs.push(record),
   });
   activeManager = manager;
@@ -131,7 +131,7 @@ describe("集成：文字 → LLM 流 → 导演层 → TTS → 下发（假 fet
     expect(tts.every((message) => message.type === "tts_audio" && message.payload.mime === "audio/mpeg")).toBe(true);
 
     const turnLogs = logs.filter((record) => record.turnId === 1);
-    expect(logs.find((record) => record.event === "prompt_version")?.detail).toEqual({ prompt_version: "rin.v1" });
+    expect(logs.find((record) => record.event === "prompt_version")?.detail).toEqual({ prompt_version: "yuna.v1" });
     for (const event of ["turn_start", "llm_first_beat", "tts_first_audio", "turn_end"]) {
       const record = turnLogs.find((entry) => entry.event === event);
       expect(record, `缺少计时事件 ${event}`).toBeDefined();

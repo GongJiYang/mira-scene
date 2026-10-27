@@ -17,9 +17,9 @@ const DYNAMIC = [
   "<用户>{{user_text}}</用户>",
 ].join("\n");
 
-/** 用一个轻量 pack（复用真实 rin 的节点/意图，替换静态与动态模板）。 */
-const rin = testPack("rin");
-const pack: PromptPack = { ...rin, staticText: STATIC, dynamicTemplate: DYNAMIC };
+/** 用一个轻量 pack（复用真实忧奈的节点/意图，替换静态与动态模板）。 */
+const base = testPack("yuna");
+const pack: PromptPack = { ...base, staticText: STATIC, dynamicTemplate: DYNAMIC };
 
 function ctx(overrides: Partial<{ scene: ReturnType<typeof createInitialScene>; history: LLMHistoryEntry[]; userText: string }> = {}) {
   return {
@@ -84,13 +84,13 @@ describe("renderPrompt", () => {
   it("node_label / node_guidance 按剧情节点切换", () => {
     const arrive = renderPrompt(pack, ctx());
     const reveal = renderPrompt(pack, ctx({ scene: { ...createInitialScene(), node: "reveal" } }));
-    expect(arrive[1]?.content).toContain("初遇");
-    expect(arrive[1]?.content).toContain("那杯咖啡");
-    expect(reveal[1]?.content).toContain("坦白");
-    expect(reveal[1]?.content).toContain("三年的信");
+    expect(arrive[1]?.content).toContain("下播之后");
+    expect(arrive[1]?.content).toContain("她以为直播间没人了");
+    expect(reveal[1]?.content).toContain("老截图");
+    expect(reveal[1]?.content).toContain("第一次开播的截图");
   });
 
-  it("history 用「客人：/凛：」格式，最多保留最近 12 条", () => {
+  it("history 用「客人：/忧奈：」格式，最多保留最近 12 条", () => {
     const history: LLMHistoryEntry[] = Array.from({ length: 20 }, (_, index) => ({
       role: index % 2 === 0 ? "user" : "assistant",
       text: `第${index}句`,
@@ -98,7 +98,7 @@ describe("renderPrompt", () => {
     const messages = renderPrompt(pack, ctx({ history }));
     const user = messages[1]?.content ?? "";
     expect(user).toContain("客人：第8句");
-    expect(user).toContain("凛：第9句");
+    expect(user).toContain("忧奈：第9句");
     expect(user).not.toContain("第0句");
   });
 
@@ -129,11 +129,11 @@ describe("loader", () => {
     expect(parsed.dynamicTemplate).toBe("动态 {{user_text}}");
   });
 
-  it("从仓库读取 rin.v1.md", () => {
+  it("从仓库读取 yuna.v1.md", () => {
     const template = loadPromptTemplate();
     expect(template.source).toContain(PROMPT_FILE);
-    expect(template.version).toBe("rin.v1");
-    expect(template.staticText).toContain("夏凛");
+    expect(template.version).toBe("yuna.v1");
+    expect(template.staticText).toContain("忧奈");
     expect(template.dynamicTemplate).toContain("{{node_label}}");
   });
 });

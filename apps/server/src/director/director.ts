@@ -11,6 +11,7 @@ import {
   type StoryNode,
 } from "@mira/protocol";
 import { advanceScene, applyBeatToScene, evaluateStoryAdvance } from "../story";
+import type { NodeVisual } from "../characters/pack";
 import { ACTION_HANDS, buildTtsText } from "./vocab";
 
 /** 采纳过的动作在最近 3 个 beat 内不再采纳（D29）。 */
@@ -23,12 +24,15 @@ const SPLIT_PUNCTUATION = "，。？！…";
  * 导演层上下文。
  * - `recentActions`：最近 3 个产出 beat 的 action（按时间顺序，含 null）。
  * - `advancedThisTurn` / `beatsThisTurn`：每轮开始由会话层重置。
+ * - `nodeVisuals`：S6g-A §2：角色包的剧情节点视觉表（镜头 / 特效 / 媒体 / 强制动作）。
+ *   导演层只能从这里取 fx / media，保证「任意 LLM 输出都不会产生包里没有的 fx / media id」。
  */
 export type DirectorContext = {
   scene: SceneState;
   recentActions: readonly (Action | null)[];
   advancedThisTurn: boolean;
   beatsThisTurn: number;
+  nodeVisuals: Partial<Record<SceneState["node"], NodeVisual>>;
 };
 
 /** `seq` 由会话层统一分配；导演层只填 0。 */
@@ -97,28 +101,29 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
     if (mapped !== null) hands = mapped;
   }
 
-  // 规则 3/4：先取会话第一个 beat 的雨声，再让剧情节点覆盖。
+  // 规则 3（S6g-A §1/§2）：camera / fx / media 只来自角色包的剧情节点表。
+  // 会话第一个 beat 不再写死 rain_heavy（旧雨景随夏凛删除）。
   let camera: Camera | null = null;
   let fx: Fx | null = null;
   let media: Media | null = null;
-  if (scene.turnCount === 0 && ctx.beatsThisTurn === 0) {
-    fx = "rain_heavy";
-  }
 
-  if (advancedTo === "reveal") {
-    // s3-fix §2：记录「进入 reveal 的轮次」，供 advanceRule 判定两轮后才允许 ending。
-    scene = { ...scene, revealTurn: scene.turnCount };
-    camera = "close_up";
-    fx = "rain_stop";
-    media = { type: "photo", id: "photo_letters" };
-    action = "show_item";
-    hands = "polaroid";
-    if (emotion === "neutral") emotion = "sad";
-  } else if (advancedTo === "ending") {
-    camera = "wide";
-    fx = "warm_glow";
-    // S5 §5：进入 ending 时播放占位剧情视频（type 已在协议里，不改协议）。
-    media = { type: "video", id: "clip_ending" };
+  if (advancedTo !== null) {
+    const visual: NodeVisual = ctx.nodeVisuals[advancedTo] ?? { camera: null, fx: null, media: null, action: null };
+    camera = visual.camera;
+    fx = visual.fx;
+    media = visual.media;
+    // 节点强制动作（如 reveal 的 show_item）：覆盖 suggest 的冷却判断。
+    if (visual.action !== null) {
+      action = visual.action;
+      const mapped = ACTION_HANDS[visual.action];
+      if (mapped !== null) hands = mapped;
+    }
+    if (advancedTo === "reveal") {
+      // s3-fix §2：记录「进入 reveal 的轮次」，供 advanceRule 判定两轮后才允许 ending。
+      scene = { ...scene, revealTurn: scene.turnCount };
+      // reveal 时 neutral → sad 是唯一例外（原逻辑保留）。
+      if (emotion === "neutral") emotion = "sad";
+    }
   }
 
   // 规则 5：只切本轮第一句；切不动就保持原样。
@@ -153,6 +158,7 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
       recentActions: nextRecentActions,
       advancedThisTurn,
       beatsThisTurn: ctx.beatsThisTurn + beats.length,
+      nodeVisuals: ctx.nodeVisuals,
     },
   };
 }

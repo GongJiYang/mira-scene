@@ -7,8 +7,8 @@ import { createInitialScene } from "../src/story";
 import { testPack } from "./helpers/pack";
 
 const PROMPT: PromptPack = {
-  ...testPack("rin"),
-  promptVersion: "rin.test",
+  ...testPack("yuna"),
+  promptVersion: "yuna.test",
   staticText: "静态前缀",
   dynamicTemplate: "动态 {{user_text}}",
 };
@@ -172,7 +172,7 @@ describe("DeepSeek 适配器（§1 / 格式 a）", () => {
     const logs: LogRecord[] = [];
     const llm = makeLlm(fakeFetch(() => sse([dataChunk('{"say":"好"}\n'), "data: [DONE]\n\n"])), logs);
     await collect(llm, context(), new AbortController().signal);
-    expect(logs.find((record) => record.event === "prompt_version")?.detail).toEqual({ prompt_version: "rin.test" });
+    expect(logs.find((record) => record.event === "prompt_version")?.detail).toEqual({ prompt_version: "yuna.test" });
   });
 
   it("中途 abort → 迭代器立即结束，不再产出", async () => {

@@ -15,32 +15,20 @@ export type ClientCharacter = {
   avatar: string;
   /** offline 兜底台词（来自 content.json 的 fallback.offline，原样）。 */
   offlineLine: string;
-  /** 渲染器种类：决定舞台用分层立绘还是 Live2D。 */
-  renderer: "layered" | "live2d";
-  /** S6f §1：隐藏角色——不出现在频道栏、不参与切换；条目保留以便显式加载。 */
-  hidden?: boolean;
 };
 
+/** D43：只剩忧奈一个角色（Live2D）。 */
 export const CLIENT_CHARACTERS: readonly ClientCharacter[] = [
-  {
-    id: "rin",
-    displayName: "夏凛",
-    avatar: "/stage/assets/parts/master_clean.png",
-    offlineLine: "……喂？好像断线了。",
-    renderer: "layered",
-    hidden: true,
-  },
   {
     id: "yuna",
     displayName: "忧奈",
     avatar: "/characters/yuna/avatar.png",
     offlineLine: "诶？画面卡住了……还在吗？",
-    renderer: "live2d",
   },
 ];
 
-/** S6f §1：频道栏只显示未隐藏角色。 */
-export const VISIBLE_CHARACTERS: readonly ClientCharacter[] = CLIENT_CHARACTERS.filter((character) => !character.hidden);
+/** 频道栏显示的角色（D43 之后只有忧奈）。 */
+export const VISIBLE_CHARACTERS: readonly ClientCharacter[] = CLIENT_CHARACTERS;
 
 export const DEFAULT_CHANNEL_ID = (VISIBLE_CHARACTERS[0] as ClientCharacter).id;
 
