@@ -13,6 +13,7 @@ import { timeline, pushTimelineLog, timelineCountForTurn, timelineStoryCount } f
 import { initialNudgeLimitState, nudgeLimit, type NudgeLimitState } from "../state/nudge";
 import { characterOrDefault } from "../live/characters";
 import { setChannel, useChannelStore } from "../live/channel";
+import { resetSceneStatus } from "../live/scene/status";
 import { initialPerformanceState } from "../state/performance";
 
 export type Intents = {
@@ -151,10 +152,12 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
       // 进行中的一轮按打断处理（D34）：停音频、闭嘴、清时间线、发 interrupt。
       if (phase.kind !== "idle") performInterrupt("text", currentTurnId);
       // 不保留聊天记录：A 回到初始值；B / C 与兜底字幕一并复位。
+      // S6c §5：换背景状态也复位（切频道 → 取消并丢弃该会话的任务）。
       dispatch({ type: "RESET" });
       usePerformanceStore.setState(initialPerformanceState);
       dispatchStoryMedia({ type: "PHASE", phase: "idle" });
       useFallbackStore.setState({ subtitle: null });
+      resetSceneStatus();
       setChannel(characterId);
       connection.switchCharacter?.(characterId);
     },

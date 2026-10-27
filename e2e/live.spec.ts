@@ -66,6 +66,36 @@ async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `e2e/out/${name}.png` });
 }
 
+test.describe("直播间 UI v1 · S6c 换背景", () => {
+  // S6c §6：桌面和手机各发一条「换背景到海边」弹幕 → 出现转场状态 → 新背景出现。
+  // Mock 模式：scene_status writing → generating → ready（urls 指向预置测试图）。
+  test("发「换背景到海边」弹幕 → 转场状态 → 新背景", async ({ page }, testInfo) => {
+    const layout = testInfo.project.name === "desktop" ? "desktop" : "mobile";
+    await openLive(page);
+    await expect(page.getByTestId("live")).toHaveAttribute("data-layout", layout);
+
+    // 发一条「换背景到海边」弹幕：命中 §1 的 sceneTriggers。
+    await submitText(page, "换背景到海边");
+
+    // 转场状态条出现（writing / generating）。
+    await expect(page.getByTestId("scene-status")).toBeVisible({ timeout: 10_000 });
+
+    // 新背景出现（ready 后背景 URL 换成测试图）。
+    await page.waitForFunction(
+      () => {
+        const bg = document.querySelector(".live-bg");
+        if (!bg) return false;
+        const url = getComputedStyle(bg).backgroundImage;
+        return url.includes("test-scene");
+      },
+      undefined,
+      { timeout: 15_000, polling: 250 },
+    );
+
+    await shot(page, `live-scene-${layout}`);
+  });
+});
+
 test.describe("直播间 UI v1", () => {
   test("发一条弹幕收到回复", async ({ page }, testInfo) => {
     const layout = testInfo.project.name === "desktop" ? "desktop" : "mobile";

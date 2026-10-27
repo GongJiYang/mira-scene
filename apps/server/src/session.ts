@@ -8,6 +8,7 @@ import {
   type Media,
   type MediaReadyPayload,
   type SceneState,
+  type SceneStatusPayload,
   type ServerMessage,
   type SessionPayload,
   type TranscriptPayload,
@@ -19,10 +20,13 @@ import {
 } from "@mira/protocol";
 import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, type Fault } from "./adapters/faults";
 import { isAbortError, throwIfAborted } from "./abort";
-import { DEFAULT_CHARACTER_ID, type FallbackCategory, type Pack } from "./characters/pack";
+import { DEFAULT_CHARACTER_ID, resolveClientAssetPath, type FallbackCategory, type Pack } from "./characters/pack";
 import { direct, type DirectorContext } from "./director/director";
 import type { Logger } from "./log";
-import type { LLMHistoryEntry, MediaPort, Ports, TTSAudio, TTSPort, TtsOptions } from "./ports";
+import type { LLMHistoryEntry, MediaPort, Ports, SceneWriterPort, TTSAudio, TTSPort, TtsOptions } from "./ports";
+import { detectSceneRequest } from "./scene/detect";
+import { admitScene, runSceneJob, type SceneRunnerDeps } from "./scene/runner";
+import { initialSceneJobState, sceneJobReducer, type SceneJobState } from "./scene/job";
 import { createInitialScene } from "./story";
 
 export type SendFn = (message: ServerMessage) => void;
@@ -38,6 +42,7 @@ type TurnPayloads = {
   turn_end: TurnEndPayload;
   state_snapshot: StateSnapshotPayload;
   media_ready: MediaReadyPayload;
+  scene_status: SceneStatusPayload;
   error: ErrorPayload;
 };
 
@@ -67,6 +72,14 @@ type Session = {
   mediaController: AbortController;
   /** S6b-fix1 §1：本会话角色的 TTS 音色（从 pack.voice.fishVoiceIdEnv 对应的环境变量解析）。 */
   voiceId?: string;
+  /** S6c §4：本会话的换背景任务状态（冷却、次数上限、单任务）。 */
+  sceneJob: SceneJobState;
+  /** S6c §4：换背景任务的 AbortController（切频道时中止）。 */
+  sceneController: AbortController;
+  /** S6c §4：换背景端口（扩写 + 生图），由 index.ts 注入。 */
+  sceneWriter?: SceneWriterPort;
+  sceneImageGen?: SceneRunnerDeps["image"];
+  sceneReferencePaths?: SceneRunnerDeps["referencePaths"];
 };
 
 /** 一轮输入的规范化形式：文字 / 语音 / 主动开口（D32）。 */
@@ -103,6 +116,12 @@ export type SessionDeps = Ports & {
    * 由 index.ts 在启动时注入；真实模式下缺失会在启动时报错。Mock 模式返回 undefined。
    */
   resolveVoiceId?: (pack: Pack) => string | undefined;
+  /** S6c §4：场景扩写端口（Mock 或真实）。 */
+  sceneWriter?: SceneWriterPort;
+  /** S6c §4：生图参数（不含 prompt / size / media / signal）。 */
+  sceneImageGen?: SceneRunnerDeps["image"];
+  /** S6c §4：参考图路径（当前背景）。 */
+  sceneReferencePaths?: SceneRunnerDeps["referencePaths"];
 };
 
 export type SessionManager = {
@@ -321,6 +340,91 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         beatsThisTurn: 0,
       };
 
+      // S6c §1：弹幕命中「换背景」→ 照常回话，并在后台启动场景任务。
+      let sceneNotes: string | undefined;
+      // S6c §5：上一轮 ready 后，本轮 scene_notes 加「背景已经换成 {label}」。
+      if (session.sceneJob.lastReadyLabel !== undefined) {
+        sceneNotes = `背景已经换成 ${session.sceneJob.lastReadyLabel}`;
+        session.sceneJob.lastReadyLabel = undefined;
+      }
+      if (!isNudge && input.type === "text_input") {
+        const detected = detectSceneRequest(input.text, session.pack.sceneTriggerPattern);
+        if (detected.hit) {
+          // S6c §1：与「背景已经换成 …」可叠加（两句之间用句号分隔）。
+          sceneNotes = sceneNotes === undefined ? "对方想换个背景，你这边正在换" : `${sceneNotes}。对方想换个背景，你这边正在换`;
+          const admission = admitScene(session.sceneJob, clock());
+          if (!admission.ok) {
+            // 冷却中 / 超次数 / 已有任务：不发起，角色用 scene_busy 回应。
+            const busyBeat: Beat = {
+              seq: 0,
+              say: session.pack.fallback.scene_busy,
+              emotion: "guarded",
+              hands: session.scene.hands,
+              action: null,
+              camera: null,
+              fx: null,
+              media: null,
+              story: null,
+            };
+            // 场景任务是后台旁路，beat 用当前 lastTurnId（不绑定发起轮次）。
+            session.send?.(buildEnvelope(session, session.lastTurnId, "beat", { beat: busyBeat }));
+            session.send?.(buildEnvelope(session, session.lastTurnId, "scene_status", { jobId: "", status: "busy" }));
+            logTurn("scene_busy", { reason: admission.reason });
+            // 本轮照常回话（场景任务不启动）。
+          } else {
+            // 发起场景任务（后台，不阻塞本轮）。
+            const jobId = randomUUID();
+            session.sceneJob = sceneJobReducer(session.sceneJob, { type: "request", jobId, at: clock() });
+            // S6c §4：参考图 = 当前背景（从 pack.stage.background 的公开 URL 映射到 apps/client/public/）。
+            const referencePaths = session.sceneReferencePaths ?? {
+              desktop: resolveClientAssetPath(session.pack.stage.background.landscape),
+              mobile: resolveClientAssetPath(session.pack.stage.background.portrait),
+            };
+            const sceneDeps: SceneRunnerDeps = {
+              writer: session.sceneWriter!,
+              image: session.sceneImageGen!,
+              referencePaths,
+              nodeLabel: session.pack.nodes[session.scene.node].label,
+              currentScene: session.scene.node,
+              emit: (event, payload) => {
+                session.sceneJob = sceneJobReducer(session.sceneJob, event);
+                const statusPayload: SceneStatusPayload = {
+                  jobId: payload.jobId,
+                  status: payload.status as SceneStatusPayload["status"],
+                  label: payload.label,
+                  urls: payload.urls,
+                };
+                session.send?.(buildEnvelope(session, turnId, "scene_status", statusPayload));
+                // S6c §5：failed / rejected 时角色立即说一句预录兜底（不经 LLM）。
+                if (payload.status === "failed" || payload.status === "rejected") {
+                  const category = payload.status === "rejected" ? "scene_rejected" : "scene_failed";
+                  const fallbackBeat: Beat = {
+                    seq: 0,
+                    say: session.pack.fallback[category],
+                    emotion: "guarded",
+                    hands: session.scene.hands,
+                    action: null,
+                    camera: null,
+                    fx: null,
+                    media: null,
+                    story: null,
+                  };
+                  session.send?.(buildEnvelope(session, turnId, "beat", { beat: fallbackBeat }));
+                }
+              },
+              log: (event, detail) => logFor(session, turnId, event, detail),
+              now: clock,
+            };
+            void runSceneJob(session.pack, input.text, jobId, sceneDeps, session.sceneController.signal).then((outcome) => {
+              if (outcome.kind === "ready") {
+                // ready 后下一轮 scene_notes 加「背景已经换成 {label}」。
+                session.sceneJob = { ...session.sceneJob, lastReadyLabel: outcome.label };
+              }
+            }).catch(() => undefined);
+          }
+        }
+      }
+
       firstTokenTimer = setTimeout(() => {
         llmTimedOut = true;
         llmAbort.abort();
@@ -328,7 +432,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
       try {
         for await (const raw of session.ports.llm.streamBeats(
-          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge },
+          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge, sceneNotes },
           llmSignal,
         )) {
           // 收到第一个 token 即撤销超时；后续不确定性交给现有取消语义。
@@ -482,11 +586,13 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     // S6b-fix1 §3：同一连接上建立新会话时，解绑该连接上的其它会话——
     // 中止轮次与后台媒体任务、断开 send（会话本身留给空闲回收）。
     // 否则旧会话的后台媒体任务完成后会把 media_ready 发进新频道。
+    // S6c §5：同时中止换背景任务（切频道 → 取消并丢弃该会话的任务）。
     for (const other of sessions.values()) {
       if (other.send !== null && other.send === send) {
         other.controller?.abort();
         other.controller = null;
         other.mediaController.abort();
+        other.sceneController.abort();
         other.send = null;
         logFor(other, other.lastTurnId, "session_unbound", { reason: "new_hello" });
       }
@@ -536,6 +642,11 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         mediaSent: new Set(),
         mediaController: new AbortController(),
         voiceId: resolveVoiceId(pack),
+        sceneJob: initialSceneJobState(),
+        sceneController: new AbortController(),
+        sceneWriter: deps.sceneWriter,
+        sceneImageGen: deps.sceneImageGen,
+        sceneReferencePaths: deps.sceneReferencePaths,
       };
       sessions.set(session.id, session);
       logFor(session, 0, "session_created", { faults, characterId: pack.id });

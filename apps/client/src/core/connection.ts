@@ -2,6 +2,7 @@ import { parseServerMessage, type ClientMessage } from "@mira/protocol";
 import { handleTtsAudio, setPlaybackStartedReporter } from "./audio";
 import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./heartbeat";
 import { handleMediaReady, handleMediaRequest } from "./storyMediaLink";
+import { handleSceneStatus } from "../live/scene/status";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 import { currentChannelId } from "../live/channel";
 
@@ -236,6 +237,8 @@ export function createConnection(): Connection {
     }
     // D27：media_ready 是剧情层消息，不经过 A 的 turnId 过滤，直接进 C。
     if (message.type === "media_ready") handleMediaReady(message);
+    // S6c §5：scene_status 也是剧情层消息，不经过 A 的 turnId 过滤。
+    if (message.type === "scene_status") handleSceneStatus(message.payload);
     if (message.type === "pong") lastPongAt = Date.now();
     pushEvent(`recv ${message.type} t${message.turnId}`);
   }

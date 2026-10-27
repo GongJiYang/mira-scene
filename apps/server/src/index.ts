@@ -15,6 +15,7 @@ import { parseFaults, readFirstTokenTimeoutMs, withFaults } from "./adapters/fau
 import { createMockLlm } from "./adapters/mock/mockLlm";
 import { createMockStt } from "./adapters/mock/mockStt";
 import { createMockTts } from "./adapters/mock/mockTts";
+import { createMockSceneWriter } from "./adapters/mock/mockSceneWriter";
 import { createImageGenMedia, defaultOutDir } from "./adapters/media/imageGen";
 import { generatedFileFor } from "./adapters/media/generatedRoute";
 import { createPresetMedia } from "./adapters/media/presetMedia";
@@ -23,6 +24,7 @@ import { applyRepoEnv, loadConfig } from "./config";
 import { consoleLogger, type Logger } from "./log";
 import type { LLMPort, Ports, STTPort, TTSPort } from "./ports";
 import { withPaceCheck } from "./quality/paceGuard";
+import { createSceneWriter } from "./scene/writer";
 import { createSessionManager, type SendFn } from "./session";
 import { createTokenStore } from "./tokens";
 
@@ -195,6 +197,29 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     log: logger,
     sessionTurnLimit: config.sessionTurnLimit,
     dailyTurnLimit: config.dailyTurnLimit,
+    // S6c §4：换背景端口（Mock 用查表；真实按 LLM_PROVIDER 复用适配器）。
+    sceneWriter:
+      config.providerMode === "real"
+        ? createSceneWriter({
+            provider: config.llmProvider,
+            deepseek: providers.deepseek.apiKey !== "" ? providers.deepseek : undefined,
+            commandcode: { model: config.commandCodeModel },
+            log: logger,
+          })
+        : createMockSceneWriter(),
+    // S6c §4：生图参数（真实模式用 image credentials；Mock 模式也要能跑，用假 fetch 或预置图由 e2e 处理）。
+    sceneImageGen:
+      config.providerMode === "real" && providers.image.apiKey !== ""
+        ? {
+            baseUrl: providers.image.baseUrl,
+            apiKey: providers.image.apiKey,
+            model: providers.image.model,
+            outDir: defaultOutDir(options.env ?? process.env),
+            log: (event, detail) => logger({ ts: Date.now(), event, detail }),
+          }
+        : undefined,
+    // S6c §4：参考图 = 当前背景（桌面 / 手机）。由会话层按 pack.stage.background 动态解析本地文件路径。
+    sceneReferencePaths: undefined,
   });
 
   // S6b-fix1 §5：真实生图输出目录（服务端数据目录），HTTP 路由 GET /generated/<file> 从这里读。

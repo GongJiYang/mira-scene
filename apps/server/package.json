@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:real": "tsx scripts/smoke-real.ts",
+    "smoke:scene": "tsx scripts/smoke-scene.ts",
     "make-sfx": "tsx scripts/make-sfx.ts",
     "typecheck": "tsc -p tsconfig.json"
   },

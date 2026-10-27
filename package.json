@@ -12,6 +12,7 @@
     "voices:record": "pnpm --filter @mira/server exec tsx scripts/record-voices.ts",
     "voices:list": "pnpm --filter @mira/server exec tsx ../../tools/voice-pack/list.ts",
     "smoke:real": "pnpm --filter @mira/server run smoke:real",
+    "smoke:scene": "pnpm --filter @mira/server run smoke:scene",
     "probe:p1": "pnpm --filter @mira/probes exec tsx p1/run.ts",
     "probe:p2": "pnpm --filter @mira/probes exec tsx p2/run.ts",
     "probe:p3": "pnpm --filter @mira/probes exec tsx p3/run.ts",

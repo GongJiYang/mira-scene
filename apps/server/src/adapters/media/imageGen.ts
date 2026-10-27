@@ -35,6 +35,13 @@ export type ImageGenOptions = {
   /** S6b-fix1 §4：外层中止信号（会话解绑/关闭时中止进行中的生图请求）。内部 60 秒超时仍独立生效。 */
   signal?: AbortSignal;
   log?: (event: string, detail?: unknown) => void;
+  /**
+   * S6c §4：参考图（当前背景）。有参考图时走 `POST {baseUrl}/v1/images/edits`（multipart），
+   * 否则走 generations。参考图只用于相机与构图，内容由提示词决定。
+   */
+  reference?: { path: string };
+  /** S6c §3：生图尺寸（desktop 1536×1024 / mobile 1024×1536）。 */
+  size?: "1536x1024" | "1024x1536";
 };
 
 export const DEFAULT_IMAGE_TIMEOUT_MS = 60_000;
@@ -61,12 +68,12 @@ type ImagesResponse = { data?: Array<{ b64_json?: string }> };
 /**
  * 调一次生图接口并把结果落盘。成功返回 `{ url, status: "ready" }`；
  * HTTP 错误 / 超时 / 中止按契约抛出（调用方决定降级）。
+ * S6c §4：有参考图时走 `/v1/images/edits`（multipart：`model`、`prompt`、`size`、`image`）。
  */
 export async function generateImage(options: ImageGenOptions): Promise<PresetMediaResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_IMAGE_TIMEOUT_MS;
   const outDir = options.outDir ?? defaultOutDir();
-  const url = `${options.baseUrl}/images/generations`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -81,12 +88,30 @@ export async function generateImage(options: ImageGenOptions): Promise<PresetMed
   // 任一信号中止都会触发 fetch 中止。
   const fetchSignal = outer !== undefined ? AbortSignal.any([controller.signal, outer]) : controller.signal;
   try {
-    const response = await fetchImpl(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${options.apiKey}` },
-      body: JSON.stringify({ model: options.model, prompt: options.prompt, n: 1 }),
-      signal: fetchSignal,
-    });
+    let response: Response;
+    if (options.reference !== undefined) {
+      // S6c §4：参考图走 /v1/images/edits（multipart）。
+      const { readFileSync } = await import("node:fs");
+      const imageBuffer = readFileSync(options.reference.path);
+      const form = new FormData();
+      form.append("model", options.model);
+      form.append("prompt", options.prompt);
+      form.append("size", options.size ?? "1536x1024");
+      form.append("image", new Blob([imageBuffer]), "reference.png");
+      response = await fetchImpl(`${options.baseUrl}/images/edits`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${options.apiKey}` },
+        body: form,
+        signal: fetchSignal,
+      });
+    } else {
+      response = await fetchImpl(`${options.baseUrl}/images/generations`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${options.apiKey}` },
+        body: JSON.stringify({ model: options.model, prompt: options.prompt, n: 1, size: options.size ?? "1536x1024" }),
+        signal: fetchSignal,
+      });
+    }
     if (!response.ok) {
       throw new Error(`生图接口 HTTP ${response.status}`);
     }

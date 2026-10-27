@@ -85,6 +85,9 @@ Mock 模式找不到某条录音时照旧按现有逻辑处理（静音 beat + �
 | assets/voice/rin/clips/53c4a02d06fc0ab8.mp3 | ……抱歉，刚才走神了。你刚才说到哪了？ | guarded | fallback（） |
 | assets/voice/rin/clips/276b9f578d0d184c.mp3 | 店里的灯闪了一下。我们刚才说到哪了？ | guarded | fallback（） |
 | assets/voice/rin/clips/28c240cbe728ee5a.mp3 | ……喂？好像断线了。 | guarded | fallback（） |
+| assets/voice/rin/clips/4841bec79d5cbc66.mp3 | 好像没换成。这里也挺好的，不是吗。 | guarded | fallback（） |
+| assets/voice/rin/clips/348f718989c3dcb6.mp3 | 那个地方……我们换一个吧。 | guarded | fallback（） |
+| assets/voice/rin/clips/6cabd6a6ee0c375f.mp3 | 别急，一个一个来。 | guarded | fallback（） |
 
 ## 忧奈（yuna）
 
@@ -140,3 +143,6 @@ Mock 模式找不到某条录音时照旧按现有逻辑处理（静音 beat + �
 | assets/voice/yuna/clips/4b4fc7cd1a397bea.mp3 | ……抱歉，刚刚发呆了。你说到哪了？ | guarded | fallback（） |
 | assets/voice/yuna/clips/45436f812286ae6e.mp3 | 直播间好像卡住了，等我一下……好了，你继续。 | guarded | fallback（） |
 | assets/voice/yuna/clips/09deab7a0a8d105c.mp3 | 诶？画面卡住了……还在吗？ | guarded | fallback（） |
+| assets/voice/yuna/clips/9f3b6e729336ff88.mp3 | 诶，背景卡住了，没换成……先凑合一下吧。 | guarded | fallback（） |
+| assets/voice/yuna/clips/6f71dc9db3703404.mp3 | 这个不行哦，换一个别的吧。 | guarded | fallback（） |
+| assets/voice/yuna/clips/dc45dcc06e729b4a.mp3 | 等等，上一个还没换完呢。 | guarded | fallback（） |

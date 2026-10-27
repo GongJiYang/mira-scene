@@ -22,6 +22,11 @@ export type PromptContext = {
   userText: string;
   /** D32：主动开口轮。动态后缀据此刻追加一句「对方沉默了一会儿」的提示。 */
   nudge?: boolean;
+  /**
+   * S6c §1：本轮弹幕命中「换背景」时，追加到 `scene_notes` 的提示
+   * （「对方想换个背景，你这边正在换」）。角色照常回话，扩写与生图在后台进行。
+   */
+  sceneNotes?: string;
 };
 
 /** D32：主动开口轮追加到动态后缀的场景提示。 */
@@ -90,7 +95,8 @@ export function renderPrompt(pack: PromptPack, ctx: PromptContext): ChatMessage[
     advance_rule: rule,
     turn_count: String(ctx.scene.turnCount),
     trust: String(care),
-    scene_notes: ctx.nudge ? NUDGE_SCENE_NOTE : "",
+    // S6c §1：nudge 与 sceneNotes 可叠加（弹幕命中换背景时，角色照常回话并知道正在换背景）。
+    scene_notes: [ctx.nudge ? NUDGE_SCENE_NOTE : "", ctx.sceneNotes ?? ""].filter(Boolean).join(""),
     history: renderHistory(pack, ctx.history),
     user_text: userText,
   });

@@ -13,6 +13,7 @@ import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layo
 import { StageRenderer } from "./StageRenderer";
 import { UI_TEXT } from "./uiText";
 import { developProgress } from "../stage/develop";
+import { useSceneStatusStore } from "./scene/status";
 import "./live.css";
 
 /** 监听窗口宽度 → 布局。 */
@@ -57,9 +58,14 @@ export function Live() {
   const holding = useRef(false);
 
   const orientation = layout === "desktop" ? "landscape" : "portrait";
-  const background = orientation === "portrait"
+  // S6c §5：换背景 ready 后换成新背景；否则用角色包默认背景。
+  const sceneBackground = useSceneStatusStore((state) => state.backgroundUrl);
+  const defaultBackground = orientation === "portrait"
     ? (character.id === "yuna" ? "/characters/yuna/bg-mobile.jpg" : "/stage/assets/raw/b1_bg_main_v.png")
     : (character.id === "yuna" ? "/characters/yuna/bg-desktop.jpg" : "/stage/assets/raw/b1_bg_main_h.png");
+  const background = sceneBackground !== null
+    ? (orientation === "portrait" ? sceneBackground.mobile : sceneBackground.desktop)
+    : defaultBackground;
 
   const develop = useDevelop(vm.storyMedia.status, vm.storyMedia.storyEventId ?? "");
 
@@ -142,6 +148,8 @@ export function Live() {
           <section className="live-main">
             <div className="live-stage" data-testid="live-stage">
               {stage}
+              {/* S6c §5：换背景转场状态条（右上角） */}
+              <SceneStatusBar />
               <div className="live-hud">
                 <span className="live-badge">{UI_TEXT.live}</span>
                 <span className="live-hud-name" data-testid="live-name">
@@ -222,6 +230,39 @@ export function Live() {
   );
 }
 
+/** S6c §5：换背景转场状态条（右上角）。 */
+function SceneStatusBar() {
+  const display = useSceneStatusStore((state) => state.display);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (display.kind === "idle") {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    if (display.kind === "ready" || display.kind === "failed" || display.kind === "rejected" || display.kind === "busy") {
+      const timer = window.setTimeout(() => setVisible(false), 3_000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [display.kind]);
+
+  if (!visible) return null;
+
+  const text =
+    display.kind === "writing" || display.kind === "generating"
+      ? UI_TEXT.sceneTransition
+      : display.kind === "ready"
+        ? `${UI_TEXT.sceneReady}${display.label !== "" ? `：${display.label}` : ""}`
+        : UI_TEXT.sceneFailed;
+
+  return (
+    <div className="live-scene-status" data-testid="scene-status" data-kind={display.kind}>
+      {text}
+    </div>
+  );
+}
+
 type MobileProps = {
   vm: ReturnType<typeof useStageViewModel>;
   characterId: string;
@@ -289,6 +330,8 @@ function MobileLive(props: MobileProps) {
           style={{ transform: `translateY(${slide * 100}%)` }}
         >
           {stage}
+          {/* S6c §5：换背景转场状态条（右上角，手机同样显示）。 */}
+          <SceneStatusBar />
         </div>
 
         <div className="live-mobile-top">

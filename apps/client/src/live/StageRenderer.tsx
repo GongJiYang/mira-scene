@@ -24,6 +24,38 @@ import type { StoryMediaStatus } from "../state/storyMedia";
 const RIN_CHAR_ASPECT = 1024 / 1536;
 const RIN_TABLE_ASPECT = 1024 / 1024;
 
+/** S6c §5：新背景交叉淡入时长（毫秒）。 */
+const BG_CROSSFADE_MS = 1_200;
+
+/**
+ * S6c §5：背景交叉淡入。背景变化时保留旧图一层，新图在其上从 0 淡入到 1（1.2 秒），
+ * 淡入结束后卸掉旧层。URL 不变时只是一层静态背景，不触发动画。
+ */
+function CrossfadeBackground({ url }: { url: string }) {
+  const [layers, setLayers] = useState<{ base: string; top: string }>({ base: url, top: url });
+
+  useEffect(() => {
+    setLayers((previous) => {
+      if (previous.top === url) return previous;
+      // 新图叠在旧图上从 0 淡入；旧图作为底色保留到动画结束。
+      return { base: previous.top, top: url };
+    });
+  }, [url]);
+
+  return (
+    <>
+      <div className="live-bg" data-bg-layer="base" style={{ backgroundImage: `url(${layers.base})` }} />
+      <div
+        key={layers.top}
+        className="live-bg live-bg-crossfade"
+        data-bg-layer="top"
+        style={{ backgroundImage: `url(${layers.top})`, animationDuration: `${BG_CROSSFADE_MS}ms` }}
+        onAnimationEnd={() => setLayers((previous) => ({ base: previous.top, top: previous.top }))}
+      />
+    </>
+  );
+}
+
 export type StageRendererProps = {
   characterId: string;
   renderer: "layered" | "live2d";
@@ -74,7 +106,7 @@ function LayeredStage({
 
   return (
     <div ref={rootRef} className="live-layered-root" style={{ ["--char-clip" as never]: `${charClip}px` }}>
-      <div className="live-bg" style={{ backgroundImage: `url(${background})` }} />
+      <CrossfadeBackground url={background} />
       {layers
         .filter((layer) => layer.id !== "bg:main")
         .map((layer) => {
@@ -180,7 +212,7 @@ function Live2dStage({
 
   return (
     <>
-      <div className="live-bg" style={{ backgroundImage: `url(${background})` }} />
+      <CrossfadeBackground url={background} />
       {/* S6b §3：脚下柔和的椭圆接触阴影（宽约人物宽度 70%，半透明深紫），避免人物悬空。 */}
       <div className="live-contact-shadow" data-testid="contact-shadow" aria-hidden />
       <canvas ref={canvasRef} className="live-live2d-canvas" data-testid="yuna-canvas" />
