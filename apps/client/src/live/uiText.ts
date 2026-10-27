@@ -51,6 +51,49 @@ export const UI_TEXT = {
   guideHint: "点一下替你说",
   /** S6l §3：观众昵称兜底。 */
   viewerFallback: "观众",
+  /** S6m §3：动作表入口 / 面板标题。 */
+  actionPanel: "动作表",
+  /** S6m §3：忧奈在思考 / 说话时动作表整组禁用，禁用原因。 */
+  actionSpeaking: "她在说话",
+  /** S6m §3：动作表分组标题。 */
+  actionGroupEmotion: "情绪",
+  actionGroupAccent: "表情",
+  actionGroupAction: "动作",
+  actionGroupLocal: "新动作",
 } as const;
+
+/** S6m §3：动作表按钮文案（按 id → 中文名）。 */
+export const ACTION_LABELS = {
+  // 情绪
+  calm: "平静",
+  guarded: "防备",
+  sad: "难过",
+  warm: "温暖",
+  surprised: "惊讶",
+  neutral: "中性",
+  // 表情
+  love: "爱心眼",
+  heart: "飘爱心",
+  shy: "脸红",
+  amazed: "惊讶",
+  cry: "哭",
+  angry: "生气",
+  black: "脸黑",
+  dark: "黑眼圈",
+  fly_head: "飞头",
+  fly_pet: "飞宠",
+  // 动作（现有）
+  drink: "喝一口",
+  glance: "瞄弹幕",
+  phone: "看手机",
+  show_item: "抱熊",
+  // 新动作
+  wave: "挥手",
+  tail_wag: "摇尾巴",
+  ear_flick: "抖耳朵",
+  sway: "身体晃",
+} as const;
+
+export type ActionLabelId = keyof typeof ACTION_LABELS;
 
 export type UiText = typeof UI_TEXT;

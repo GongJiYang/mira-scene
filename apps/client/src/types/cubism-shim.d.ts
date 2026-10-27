@@ -36,6 +36,12 @@ declare module "@cubism/model/cubismmodel" {
   export class CubismModel {
     setParameterValueById(id: CubismId | string, value: number, weight?: number): void;
     getParameterValueById(id: CubismId | string): number;
+    /** S6m §1：物理后覆盖用。不存在时返回负值。 */
+    getParameterIndex(id: CubismId | string): number;
+    getParameterMinimumValue(parameterIndex: number): number;
+    getParameterMaximumValue(parameterIndex: number): number;
+    getParameterValueByIndex(parameterIndex: number): number;
+    setParameterValueByIndex(parameterIndex: number, value: number, weight?: number): void;
     update(): void;
   }
 }

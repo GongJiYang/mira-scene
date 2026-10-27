@@ -891,3 +891,113 @@ body,
   z-index: 15;
   cursor: pointer;
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * S6m §3：动作表面板（可展开）。样式只求清楚可用，S6u 统一重做。
+ * ---------------------------------------------------------------------------------------------- */
+
+.action-panel-desktop {
+  margin-bottom: 8px;
+}
+
+.action-panel-toggle {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--live-panel-2);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text-dim);
+  font-family: var(--live-font);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action-panel-toggle:hover,
+.action-panel-toggle[aria-expanded="true"] {
+  color: var(--live-text);
+  border-color: var(--live-border);
+}
+
+.action-panel {
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--live-panel);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+}
+
+.action-groups[data-disabled="1"] {
+  opacity: 0.55;
+}
+
+.action-disabled-note {
+  margin: 0 0 6px;
+  color: var(--live-accent);
+  font-size: 11px;
+}
+
+.action-group {
+  margin-bottom: 8px;
+}
+
+.action-group-title {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--live-text-dim);
+  font-size: 11px;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.action-button {
+  padding: 3px 8px;
+  background: var(--live-panel-2);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text);
+  font-family: var(--live-font);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action-button:hover:not(:disabled) {
+  border-color: var(--live-accent-2);
+}
+
+.action-button:disabled {
+  cursor: not-allowed;
+  color: var(--live-text-dim);
+}
+
+/* 手机：底部抽屉。 */
+.action-panel-mobile-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  padding: 10px 12px 16px;
+  background: rgba(15, 10, 20, 0.96);
+  border-top: 2px solid var(--live-border);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.action-panel-close {
+  float: right;
+  padding: 2px 8px;
+  background: var(--live-panel-2);
+  border: 1px solid var(--live-border-soft);
+  border-radius: var(--live-radius);
+  color: var(--live-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action-panel-mobile {
+  margin-top: 4px;
+}

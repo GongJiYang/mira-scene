@@ -21,6 +21,9 @@ import { createYunaRenderer, YunaLoadError, type YunaRendererHandle } from "../r
 import { cameraFor, type StageOrientation } from "../render/live2d/cameraFor";
 import { yunaParams } from "../render/live2d/yunaParams";
 import { ACCENT_FADE_SEC, accentBlend, type AccentTiming } from "../render/live2d/accentParams";
+import { composePreview, usePreviewStore, type PreviewItem } from "./previewStore";
+import { SILENT_ACTION_TABLE } from "../render/live2d/yunaParams";
+import { LOCAL_ACTION_DURATION_SEC } from "../render/live2d/localActions";
 import { toYunaEmotion } from "./emotionMap";
 import { StoryVideo } from "../stage/StoryVideo";
 import {
@@ -144,6 +147,18 @@ function Live2dStage({
   const frameRef = useRef({ phase, emotion, performance, visual });
   frameRef.current = { phase, emotion, performance, visual };
 
+  // S6m §3：动作表预览（客户端独立状态）。预览优先于当前待机视觉，但不改 reducer 的 visual。
+  const previewItem = usePreviewStore((state) => state.item);
+  const previewStartedAtMs = usePreviewStore((state) => state.startedAtMs);
+  const previewEnd = usePreviewStore((state) => state.endPreview);
+  const previewRef = useRef<{ item: PreviewItem | null; startedAtMs: number }>({ item: null, startedAtMs: 0 });
+  previewRef.current = { item: previewItem, startedAtMs: previewStartedAtMs };
+
+  // 预览进行中若来了新一轮输入或 beat（phase 变为 thinking / speaking）→ 立即结束预览（渐出）。
+  useEffect(() => {
+    if (previewItem !== null && (phase === "thinking" || phase === "speaking")) previewEnd();
+  }, [phase, previewItem, previewEnd]);
+
   // S6g-A §3.2：hearts 特效进入时刻（0.4s 渐入用）。
   const heartRef = useRef({ active: false, since: 0 });
   // S6g-A §4.3：silentAction 进入时刻（抱熊渐入渐出用）。
@@ -187,7 +202,25 @@ function Live2dStage({
         // 注意：这里不能用名为 `performance` 的局部变量，否则会遮住全局 performance。
         const nowMs = typeof globalThis.performance !== "undefined" ? globalThis.performance.now() : Date.now();
         const tSec = nowMs / 1000;
-        const yunaEmotion = toYunaEmotion(currentEmotion);
+        const baseYunaEmotion = toYunaEmotion(currentEmotion);
+
+        // S6m §3：合成动作表预览（优先于待机视觉；不改 reducer 的 visual）。
+        // 预览到期自行失效（composePreview 内部判断），此处的 emotion 以预览为准。
+        const composition = composePreview(
+          { emotion: baseYunaEmotion, visual: currentVisual, phase: currentPhase },
+          previewRef.current,
+          nowMs,
+        );
+        const yunaEmotion = composition.emotion;
+        // 预览的「现有无声动作」（drink / glance / phone / show_item）通过 silentAction 驱动。
+        const previewItem = previewRef.current.item;
+        const previewedSilentAction =
+          previewItem !== null &&
+          previewItem.kind === "action" &&
+          previewItem.value in SILENT_ACTION_TABLE &&
+          !(previewItem.value in LOCAL_ACTION_DURATION_SEC)
+            ? (previewItem.value as keyof typeof SILENT_ACTION_TABLE)
+            : null;
         const blinkOpen = current.blink === "closed" ? 0 : current.blink === "half" ? 0.5 : 1;
 
         // S6f §2：相位计时推进（纯本地，不依赖 B 的绝对时刻——phase 变化时重置）。
@@ -214,8 +247,14 @@ function Live2dStage({
         if (!heart) heartRef.current.active = false;
 
         // S6g-A §4.3：silentAction 进入时刻（抱熊 0→1→0 渐变）。
+        // S6m §3：预览「现有无声动作」时用预览项驱动（不影响 reducer 的 activeAction）。
         const action = current.activeAction?.action ?? null;
-        if (action !== silentRef.current.action) silentRef.current = { action, sinceMs: nowMs };
+        const effectiveSilentAction = previewedSilentAction ?? action;
+        if (effectiveSilentAction !== silentRef.current.action) {
+          // 预览的 silentAction 用预览起点计时；普通动作沿用进入时刻。
+          const sinceMs = previewedSilentAction !== null ? previewRef.current.startedAtMs : nowMs;
+          silentRef.current = { action: effectiveSilentAction, sinceMs };
+        }
         const silentActionSinceSec = (nowMs - silentRef.current.sinceMs) / 1000;
 
         // D47：accent 起止时刻（0.4s 渐入渐出）。
@@ -264,28 +303,36 @@ function Live2dStage({
               };
         const accentBlended = accentBlend(prevTiming, currentTiming);
 
+        const params = yunaParams({
+          phase: currentPhase,
+          emotion: yunaEmotion,
+          mouth: current.mouth,
+          blinkOpen,
+          tSec,
+          phaseSinceSec: clock.phaseSince,
+          idleSinceSec: clock.idleSince,
+          firstSpokeSinceSec,
+          silentAction: effectiveSilentAction,
+          silentActionSinceSec,
+          heart,
+          heartSinceSec: (nowMs - heartRef.current.since) / 1000,
+          accent: accentState.accent,
+          accentSinceSec: currentTiming?.sinceSec ?? 0,
+          accentEndedSinceSec: currentTiming?.untilSec,
+          accentBlended,
+          seed: clock.seed,
+        });
+        // S6m §3：叠加预览参数（表情 accent 的渐入渐出 / sway 的物理输入，已截断）。
+        for (const [name, value] of Object.entries(composition.params)) {
+          params[name] = value;
+        }
+
         return {
-          params: yunaParams({
-            phase: currentPhase,
-            emotion: yunaEmotion,
-            mouth: current.mouth,
-            blinkOpen,
-            tSec,
-            phaseSinceSec: clock.phaseSince,
-            idleSinceSec: clock.idleSince,
-            firstSpokeSinceSec,
-            silentAction: action,
-            silentActionSinceSec,
-            heart,
-            heartSinceSec: (nowMs - heartRef.current.since) / 1000,
-            accent: accentState.accent,
-            accentSinceSec: currentTiming?.sinceSec ?? 0,
-            accentEndedSinceSec: currentTiming?.untilSec,
-            accentBlended,
-            seed: clock.seed,
-          }),
+          params,
           emotion: yunaEmotion,
           manualBlink: blinkOpen,
+          // S6m §1：动作预览的物理后覆盖（wave / tail_wag / ear_flick）。
+          postPhysics: composition.postPhysics,
         };
       },
     })

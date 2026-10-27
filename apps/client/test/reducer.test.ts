@@ -35,6 +35,15 @@ const turnEndMsg = (turnId: number): ServerMessage => ({
   payload: { reason: "done" },
 });
 
+/** S6m §0：被限流的 poke / gift → 无 beat 的 turn_end{reason:"throttled"}。 */
+const throttledTurnEndMsg = (turnId: number): ServerMessage => ({
+  ...envelope,
+  type: "turn_end",
+  turnId,
+  seq: 0,
+  payload: { reason: "throttled" },
+});
+
 const errorMsg = (turnId: number, scope?: "session" | "turn"): ServerMessage => ({
   ...envelope,
   type: "error",
@@ -612,6 +621,19 @@ describe("一轮完整流程", () => {
     expect(state.phase).toEqual({ kind: "idle" });
     expect(state.subtitle).toBeNull();
     expect(state.queue).toEqual([]);
+  });
+
+  it("S6m §0：thinking + 无 beat 的 throttled turn_end → 立即回 idle（不卡思考）", () => {
+    const state = run(
+      initialState,
+      { type: "SUBMIT_TEXT" },
+      { type: "SERVER_MESSAGE", message: throttledTurnEndMsg(1) },
+    );
+    expect(state.turnEnded).toBe(true);
+    expect(state.phase).toEqual({ kind: "idle" });
+    expect(state.queue).toEqual([]);
+    expect(state.subtitle).toBeNull();
+    expect(state.visual.accent).toBeNull();
   });
 
   it("started 的 beat 不在 queue 中时丢弃回调", () => {

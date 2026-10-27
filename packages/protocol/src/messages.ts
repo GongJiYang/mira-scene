@@ -89,7 +89,11 @@ export const ttsAudioPayloadSchema = z.object({
 });
 
 export const turnEndPayloadSchema = z.object({
-  reason: z.enum(["done", "interrupted", "error"]),
+  /**
+   * S6m §0：`throttled` —— 服务端对 poke / gift 限流时不下发 beat、不扣轮数，
+   * 但必须回一条无 beat 的 turn_end，否则客户端会一直卡在 thinking。
+   */
+  reason: z.enum(["done", "interrupted", "error", "throttled"]),
 });
 
 export const stateSnapshotPayloadSchema = z.object({

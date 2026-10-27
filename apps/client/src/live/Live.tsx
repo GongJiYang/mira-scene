@@ -13,6 +13,7 @@ import { danmakuReducer, initialDanmakuState, MAX_MOBILE_DANMAKU, visibleDanmaku
 import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layout";
 import { StageRenderer } from "./StageRenderer";
 import { LiveEntries, MobileMenu } from "./entries";
+import { ActionPanelDesktop } from "./ActionPanel";
 import { UI_TEXT } from "./uiText";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
@@ -309,6 +310,8 @@ export function Live() {
           </section>
 
           <aside className="live-chat">
+            {/* S6m §3：桌面在弹幕窗口顶部做一个可展开的「动作表」标签（默认收起）。 */}
+            <ActionPanelDesktop phase={vm.phase} />
             <h2 className="live-chat-title">{UI_TEXT.chat}</h2>
             <div className="live-chat-list" data-testid="danmaku-list">
               {danmaku.items.map((item) => (
@@ -584,8 +587,8 @@ function MobileLive(props: MobileProps) {
           >
             ⇅
           </button>
-          {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口）。 */}
-          <MobileMenu />
+          {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口 + S6m §3 动作表）。 */}
+          <MobileMenu phase={vm.phase} />
         </div>
 
         <div className="live-mobile-danmaku" data-testid="danmaku-list" data-no-stage-tap>

@@ -23,6 +23,8 @@ import {
   EMOTION_KEYS,
   type YunaEmotion,
 } from "../yunaParams";
+import type { PostPhysicsOverride } from "../postPhysics";
+import { pushEvent } from "../../../core/store";
 import {
   fitModel,
   FIT_PRESETS,
@@ -116,11 +118,17 @@ class YunaModel extends CubismUserModel {
   }
 
   /**
-   * 每帧由外壳调用：写参数 → EyeBlink → 读回并写最终睁眼值 → 物理 → 更新。
+   * 每帧由外壳调用：写参数 → EyeBlink → 读回并写最终睁眼值 → 物理 → **物理后覆盖** → 更新。
    * **每帧只调用一次 `model.update()`**（S6a-fix1 §2）。纯命令，无决策：
-   * 最终睁眼值由纯函数 `combineBlink` + `applyEyeOpen` 算出。
+   * 最终睁眼值由纯函数 `combineBlink` + `applyEyeOpen` 算出；物理后覆盖的目标 / 权重由纯函数给出。
    */
-  applyFrame(params: Record<string, number>, manualBlink: number, emotion: YunaEmotion, dtSec: number): void {
+  applyFrame(
+    params: Record<string, number>,
+    manualBlink: number,
+    emotion: YunaEmotion,
+    dtSec: number,
+    postPhysics?: PostPhysicsOverride,
+  ): void {
     const model: CubismModel = this.getModel();
     const idManager = CubismFramework.getIdManager();
     for (const [name, value] of Object.entries(params)) {
@@ -137,8 +145,42 @@ class YunaModel extends CubismUserModel {
     this.writeEyeOpen(eyeOpen);
     // 物理（使用外部传入的参数作为输入）。
     this.physics?.evaluate(model, dtSec);
+    // S6m §1：物理**之后**、update **之前**按权重混入手 / 尾 / 耳的覆盖目标。
+    if (postPhysics !== undefined && postPhysics.weight > 0) {
+      this.applyPostPhysics(model, postPhysics);
+    }
     model.update();
   }
+
+  /**
+   * S6m §1：物理后覆盖。`value = physicsValue * (1 - w) + clamp(target, modelMin, modelMax) * w`。
+   * 参数范围从模型运行时读取（Cubism 的 parameter min/max），**不硬编码**；
+   * 读不到的参数 id 跳过并 `pushEvent` 记一次（按 id 去重，避免每帧刷屏）。
+   */
+  private applyPostPhysics(model: CubismModel, override: PostPhysicsOverride): void {
+    const idManager = CubismFramework.getIdManager();
+    const { target, weight } = override;
+    for (const [name, rawTarget] of Object.entries(target)) {
+      const id = idManager.getId(name);
+      const index = id ? model.getParameterIndex(id) : -1;
+      if (index === undefined || index < 0) {
+        if (!this.postPhysicsReported.has(name)) {
+          this.postPhysicsReported.add(name);
+          pushEvent(`postPhysics: 未知参数 ${name}（已跳过）`);
+        }
+        continue;
+      }
+      const min = model.getParameterMinimumValue(index);
+      const max = model.getParameterMaximumValue(index);
+      const clamped = Math.max(min, Math.min(max, rawTarget));
+      const physValue = model.getParameterValueByIndex(index);
+      model.setParameterValueByIndex(index, physValue * (1 - weight) + clamped * weight);
+    }
+  }
+
+  /** S6m §1：已上报过的「未知参数」，避免每帧重复 pushEvent。 */
+  private postPhysicsReported = new Set<string>();
+
 
   /** 上一帧读出并已交给外部的手动值（外壳不直接用，保留以便调试与测试）。 */
   private lastAutoBlink = 1;
@@ -279,6 +321,8 @@ export type YunaFrame = {
   emotion: YunaEmotion;
   /** 手动眨眼值 0–1（预览页的按钮给出；无手动输入时为 1）。 */
   manualBlink: number;
+  /** S6m §1：物理后覆盖（手 / 尾 / 耳），由 `postPhysicsParams` 给出；缺省不覆盖。 */
+  postPhysics?: PostPhysicsOverride;
 };
 
 export type YunaRendererHandle = {
@@ -360,7 +404,8 @@ export async function createYunaRenderer(
 
     // §2：自动眨眼（EyeBlink 写入并被外壳读回的 0–1 值）与手动值相乘后再经上限。
     // 组合与上限在纯函数 `combineBlink` / `applyEyeOpen` 里完成（applyFrame 内部调用）。
-    model.applyFrame(params, frame.manualBlink, frame.emotion, dtSec);
+    // S6m §1：`frame.postPhysics` 在物理之后、update 之前按权重覆盖手 / 尾 / 耳。
+    model.applyFrame(params, frame.manualBlink, frame.emotion, dtSec, frame.postPhysics);
     model.draw();
 
     rafId = requestAnimationFrame(loop);

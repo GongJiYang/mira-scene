@@ -152,3 +152,52 @@ describe("S6l-fix2 §6：服务端 poke / gift 限流", () => {
     expect(harness.beats(3).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * S6m §0：被限流的 poke / gift 仍回一条**无 beat**的 turn_end{reason:"throttled"}，
+ * 否则客户端已经 beginTurn 进入 thinking，等不到 turn_end 会一直卡着。
+ */
+describe("S6m §0：限流的 poke / gift 回 turn_end{throttled}", () => {
+  it("3 秒内第二次 poke：收到 turn_end{reason:'throttled'}，且无 beat", async () => {
+    const harness = setup();
+    await harness.hello();
+
+    await harness.input("", 1, "poke");
+    expect(harness.beats(1)).toHaveLength(2);
+
+    // 冷却内重复：turnId 更大但应被限流。
+    await harness.input("", 2, "poke");
+    expect(harness.beats(2)).toHaveLength(0);
+    const end = harness.sent.findLast(
+      (m) => m.type === "turn_end" && m.turnId === 2,
+    );
+    expect(end?.type).toBe("turn_end");
+    expect(end?.type === "turn_end" ? end.payload.reason : null).toBe("throttled");
+  });
+
+  it("礼物冷却内的第二次 gift 同样回 throttled", async () => {
+    const harness = setup();
+    await harness.hello();
+
+    await harness.input("", 1, "gift");
+    harness.advanceClock(5_000);
+    await harness.input("", 2, "gift");
+
+    expect(harness.beats(2)).toHaveLength(0);
+    const end = harness.sent.findLast((m) => m.type === "turn_end" && m.turnId === 2);
+    expect(end?.type === "turn_end" ? end.payload.reason : null).toBe("throttled");
+  });
+
+  it("被限流的一轮不扣轮数：第二次 throttled 后仍能正常起新轮（无 quota 错误）", async () => {
+    const harness = setup();
+    await harness.hello();
+
+    await harness.input("", 1, "poke");
+    await harness.input("", 2, "poke"); // 被限流
+    harness.advanceClock(3_000);
+    await harness.input("", 3, "poke"); // 冷却过后正常
+
+    expect(harness.beats(3).length).toBeGreaterThan(0);
+    expect(harness.sent.some((m) => m.type === "error" && m.payload.code === "quota_exceeded")).toBe(false);
+  });
+});
