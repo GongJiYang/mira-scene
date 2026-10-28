@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   composePreview,
   PREVIEW_ACCENT_HOLD_SEC,
+  PREVIEW_CRY_HOLD_SEC,
   PREVIEW_EMOTION_SEC,
   previewDisabled,
   previewDurationSec,
@@ -78,6 +79,34 @@ describe("S6m §3：composePreview", () => {
     // 渐出之后 → 空。
     const ended = composePreview(base(), preview, (PREVIEW_ACCENT_HOLD_SEC + ACCENT_FADE_SEC + 0.01) * 1000);
     expect(ended.params).toEqual({});
+  });
+
+  it("§4.5：渐出期间权重单调下降（不再先跳 0 再渐入）", () => {
+    const preview = { item: { kind: "accent", value: "love" } as const, startedAtMs: 0 };
+    const hold = PREVIEW_ACCENT_HOLD_SEC;
+    // 从保持结束进入渐出，逐点采样，权重应单调不增。
+    let prev = Number.POSITIVE_INFINITY;
+    for (let t = hold; t <= hold + ACCENT_FADE_SEC + 1e-9; t += ACCENT_FADE_SEC / 8) {
+      const out = composePreview(base(), preview, t * 1000);
+      const value = out.params.ParamLove ?? 0;
+      expect(value, `t=${t.toFixed(3)} 权重回升`).toBeLessThanOrEqual(prev + 1e-6);
+      prev = value;
+    }
+    // 渐出末尾应显著低于保持期稳态（说明确实在下降）。
+    const atEnd = composePreview(base(), preview, (hold + ACCENT_FADE_SEC * 0.75) * 1000);
+    expect(atEnd.params.ParamLove ?? 0).toBeLessThan(0.5);
+  });
+
+  it("§4.3：哭的预览时长 4s（眼泪 2.2s 才流到底）", () => {
+    expect(PREVIEW_CRY_HOLD_SEC).toBe(4);
+    expect(previewDurationSec({ kind: "accent", value: "cry" })).toBe(4);
+    const preview = { item: { kind: "accent", value: "cry" } as const, startedAtMs: 0 };
+    // 2.2s 时仍在预览中（权重 1）。
+    const at22 = composePreview(base(), preview, 2200);
+    expect(at22.params.ParamCry).toBeCloseTo(1);
+    // 4s 后才结束。
+    const after = composePreview(base(), preview, (PREVIEW_CRY_HOLD_SEC + ACCENT_FADE_SEC + 0.01) * 1000);
+    expect(after.params).toEqual({});
   });
 
   it("动作预览（wave）：给物理后覆盖，权重随时间渐入", () => {

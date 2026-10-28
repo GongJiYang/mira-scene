@@ -111,6 +111,11 @@ export const sessionPayloadSchema = z.object({
   mode: z.enum(["mock", "real"]).optional(),
   /** D49 / S6n §2：各类能力的来源（只说明来源，不含 Key）。 */
   capabilities: sessionCapabilitiesSchema.optional(),
+  /**
+   * §5.1：会话创建时刻（服务端 epoch ms）。客户端据此显示真实开播时长 `HH:MM:SS`；
+   * 恢复会话沿用原值（从会话开始时刻继续）。
+   */
+  startedAt: z.number().optional(),
 });
 
 export const transcriptPayloadSchema = z.object({

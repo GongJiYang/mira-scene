@@ -26,8 +26,15 @@ export const LOCAL_ACTION_DURATION_SEC: Record<LocalActionId, number> = {
   sway: 2.5,
 };
 
-/** 挥手时抬手到的目标（模型范围 [-1,1]，取接近上限）。 */
+/**
+ * 挥手时抬手到的目标（模型范围 [-1,1]）。
+ * §4：`ParamHandR`（手R）只是**手的姿态**，抬手要同时抬**整条手臂**——
+ * `ParamBoomR`（大臂R）+ `ParamForeamR`（小臂R）都在 physics3 里是物理输出，
+ * 必须经物理后覆盖才有效。三者一起驱动，挥手才看得出「抬起手臂在挥」。
+ */
 export const WAVE_HAND_RAISE = 0.95;
+export const WAVE_BOOM_RAISE = 0.9;
+export const WAVE_FOREARM_RAISE = 0.9;
 /** 挥手幅度（取范围的 60%）。 */
 export const WAVE_TURN_AMPLITUDE = 0.6;
 /** 挥手摆动频率（Hz）。 */
@@ -85,6 +92,9 @@ export function localActionSample(action: LocalActionId, elapsedSec: number): Lo
     case "wave":
       return {
         postPhysics: {
+          // §4：整条手臂一起抬（大臂 + 小臂 + 手），手掌再左右摆动。
+          ParamBoomR: WAVE_BOOM_RAISE,
+          ParamForeamR: WAVE_FOREARM_RAISE,
           ParamHandR: WAVE_HAND_RAISE,
           ParamHandTurnR: WAVE_TURN_AMPLITUDE * Math.sin(TWO_PI * WAVE_FREQ_HZ * t),
         },

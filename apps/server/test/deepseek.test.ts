@@ -189,3 +189,76 @@ describe("DeepSeek 适配器（§1 / 格式 a）", () => {
     expect(second.done).toBe(true);
   });
 });
+
+describe("§3 LLM 网络抖动重试（未出 token 时重试 1 次）", () => {
+  it("首 token 前 fetch failed → 重试 1 次，本轮正常完成，日志含 llm_retry", async () => {
+    const logs: LogRecord[] = [];
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    let n = 0;
+    const llm = makeLlm(
+      fakeFetch(() => {
+        const call = n++;
+        if (call === 0) throw new TypeError("fetch failed");
+        return sse([dataChunk('{"say":"好"}\n'), "data: [DONE]\n\n"]);
+      }, calls),
+      logs,
+    );
+    const beats = await collect(llm, context(), new AbortController().signal);
+    expect(beats).toEqual([{ say: "好" }]);
+    expect(calls.length).toBe(2);
+    expect(logs.some((record) => record.event === "llm_retry")).toBe(true);
+  });
+
+  it("4xx（HTTP 401）→ 不重试", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const llm = makeLlm(fakeFetch(() => new Response("unauthorized", { status: 401 }), calls));
+    await expect(collect(llm, context(), new AbortController().signal)).rejects.toThrow(/401/);
+    expect(calls.length).toBe(1);
+  });
+
+  it("5xx（HTTP 500）首 token 前 → 重试 1 次", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    let n = 0;
+    const llm = makeLlm(
+      fakeFetch(() => {
+        const call = n++;
+        return call === 0 ? new Response("boom", { status: 500 }) : sse([dataChunk('{"say":"好"}\n'), "data: [DONE]\n\n"]);
+      }, calls),
+    );
+    const beats = await collect(llm, context(), new AbortController().signal);
+    expect(beats).toEqual([{ say: "好" }]);
+    expect(calls.length).toBe(2);
+  });
+
+  it("abort → 不重试（静默结束）", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const llm = makeLlm(
+      fakeFetch(() => {
+        throw Object.assign(new Error("aborted"), { name: "AbortError" });
+      }, calls),
+    );
+    const beats = await collect(llm, context(), controller.signal);
+    expect(beats).toEqual([]);
+    expect(calls.length).toBe(1);
+  });
+
+  it("已出 token 后网络错误 → 不重试", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const llm = makeLlm(
+      fakeFetch(() => {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(dataChunk('{"say":"一"}\n')));
+            controller.error(new TypeError("fetch failed"));
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+      }, calls),
+    );
+    await expect(collect(llm, context(), new AbortController().signal)).rejects.toThrow(/fetch failed/);
+    expect(calls.length).toBe(1);
+  });
+});

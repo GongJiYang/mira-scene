@@ -27,6 +27,9 @@ import { isAbortError, throwIfAborted } from "./abort";
 import { clientPublicRoot, defaultCharacterId, type FallbackCategory, type Pack } from "./characters/pack";
 import { defaultOutDir } from "./adapters/media/imageGen";
 import { direct, type DirectorContext } from "./director/director";
+import { forcedAdvance } from "./director/forcedAdvance";
+import { advanceAllowance, resolveIntent } from "./prompts/advanceRule";
+import { countCare } from "./prompts/renderPrompt";
 import type { Logger } from "./log";
 import { redactSecrets } from "./obs/sanitize";
 import type { LLMHistoryEntry, MediaPort, Ports, SceneWriterPort, TTSAudio, TTSPort, TtsOptions } from "./ports";
@@ -77,6 +80,10 @@ type Session = {
   recentAccents: readonly (Accent | null)[];
   /** S6l §5：戳一下的累计次数（用于 poke 的 shy / angry 轮流）。 */
   pokeCount: number;
+  /** §1：连续「已允许推进但 LLM 未推进」的真实用户轮数（推进后清零）。 */
+  stalledUserTurns: number;
+  /** §5.1：会话创建时刻（epoch ms），供顶栏显示真实开播时长；恢复会话沿用原值。 */
+  startedAt: number;
   /** S6l-fix2 §6：上一次被接受的 poke / gift 时刻（服务端限流）。 */
   lastPokeAt: number | null;
   lastGiftAt: number | null;
@@ -488,6 +495,34 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         pokeIndex,
       };
 
+      // §1：导演层保底推进。规则允许进入下一节点后，若 LLM 连续 2 个真实用户轮仍未推进，
+      // 或本轮 ask_core / comfort 命中，则在本轮第一个 beat 上强制推进（走 story.ts 校验）。
+      // 只数真实用户轮（source === "user"）；nudge / poke / gift 不计数。
+      const isRealUserTurn = !isNudge && inputKind === "text";
+      const intent = resolveIntent(session.pack, userText);
+      const care = countCare(session.pack, session.history, userText);
+      const userTurns = session.history.filter(
+        (entry) => entry.role === "user" && (entry.source ?? "user") === "user",
+      ).length;
+      const allowedNode = advanceAllowance(
+        { ...session.scene, trust: care },
+        intent,
+        session.scene.turnCount,
+        userTurns,
+      );
+      const forceNow = allowedNode !== null && (intent === "ask_core" || intent === "comfort");
+      // 注意：这里不知道本轮 LLM 会不会自己推进，故先按「未推进」算出基线计数；
+      // 若本轮最终推进了（LLM 或强制），在末尾把计数清零（见 nodeBefore 比较）。
+      const forced = forcedAdvance({
+        allowed: allowedNode,
+        advancedThisTurn: false,
+        stalledUserTurns: session.stalledUserTurns,
+        isRealUserTurn,
+        forceNow,
+      });
+      const forcedNode = forced.force;
+      const nodeBefore = session.scene.node;
+
       // S6c §1：弹幕命中「换背景」→ 照常回话，并在后台启动场景任务。
       let sceneNotes: string | undefined;
       // S6c §5：上一轮 ready 后，本轮 scene_notes 加「背景已经换成 {label}」。
@@ -592,8 +627,9 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
                 // failed / rejected：下一轮 scene_notes 提一句「刚才背景没换成」。
                 session.sceneJob = { ...session.sceneJob, lastFailed: true };
                 // S6l-fix1 §0：换背景失败 / 被拒写进错误统计（不含 Key、不含完整提示词）。
+                // §2：失败带分类（timeout / session_aborted / other_image_failed / error），不再一律 "aborted"。
                 if (outcome.kind === "failed") {
-                  logTurn("scene_failed", { error: outcome.error });
+                  logTurn("scene_failed", { category: outcome.category, error: outcome.error });
                 } else {
                   logTurn("scene_rejected", { note: outcome.note });
                 }
@@ -633,11 +669,23 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
           const parsed = parseLlmBeatLenient(raw);
           if (parsed.warnings.length > 0) logTurn("llm_beat_warning", { warnings: parsed.warnings });
 
-          const directed = direct(parsed.llmBeat, directorCtx);
+          // §1：只在本轮第一个 beat 注入保底推进目标；推进 / 用过后即清空。
+          const beatCtx: DirectorContext =
+            forcedNode !== null && !firstBeatSeen ? { ...directorCtx, forcedAdvanceTo: forcedNode } : { ...directorCtx, forcedAdvanceTo: undefined };
+          const directed = direct(parsed.llmBeat, beatCtx);
           directorCtx = directed.ctx;
           session.scene = directorCtx.scene;
           session.recentActions = directorCtx.recentActions;
           session.recentAccents = directorCtx.recentAccents;
+
+          // §1：保底推进真正落地（LLM 未提出，由导演层强制）时记一条 story_forced。
+          if (
+            forcedNode !== null &&
+            parsed.llmBeat.advance === null &&
+            directed.beats.some(({ beat }) => beat.story?.advance === forcedNode)
+          ) {
+            logTurn("story_forced", { from: nodeBefore, to: forcedNode });
+          }
 
           const suggested = parsed.llmBeat.suggest;
           const proposedAdvance = parsed.llmBeat.advance;
@@ -744,6 +792,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       }
 
       closed = true;
+      // §1：本轮推进了（LLM 自己走或保底强制）→ 计数清零；否则写入基线计数。
+      session.stalledUserTurns = session.scene.node !== nodeBefore ? 0 : forced.nextStalled;
       // S6l-fix2 §7：记录用户条目的来源（user / nudge / poke / gift），供 userTurns 与刷新恢复过滤。
       const historySource: HistorySource = isNudge ? "nudge" : inputKind === "poke" || inputKind === "gift" ? inputKind : "user";
       session.history.push(
@@ -875,6 +925,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         recentActions: [],
         recentAccents: [],
         pokeCount: 0,
+        stalledUserTurns: 0,
+        startedAt: clock(),
         lastPokeAt: null,
         lastGiftAt: null,
         lastTurnId: 0,
@@ -917,6 +969,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       ...resumePayload(session),
       mode: session.mode,
       capabilities: session.capabilities,
+      // §5.1：会话创建时刻（恢复会话沿用原值）。
+      startedAt: session.startedAt,
     }));
   }
 

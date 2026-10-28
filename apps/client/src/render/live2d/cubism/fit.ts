@@ -88,6 +88,20 @@ export function livePresetFor(canvasW: number): "liveDesktop" | "liveMobile" {
   return canvasW < LIVE_MOBILE_MAX_WIDTH ? "liveMobile" : "liveDesktop";
 }
 
+/**
+ * §5.2：模型可见包围盒**顶部**在画布中的屏幕 y（CSS 像素，从画布顶算起）。
+ *
+ * 归一化画布：中心为原点、高 2.0；模型顶部映射到 `top*y + fit.y`（归一化坐标，+ 向上）。
+ * 屏幕 y（+ 向下）= `(1 - normalizedTopY) / 2 * canvasH`。
+ *
+ * 用于几何断言：手机端画布下移 `--mobile-top-safe` 后，人物顶部屏幕 y 应 ≥ 顶栏 + 标题胶囊底部。
+ */
+export function modelBBoxTopPx(canvasW: number, canvasH: number, bounds: ModelBounds, preset: FitPreset): number {
+  const fit = fitModel(canvasW, canvasH, bounds, preset);
+  const normalizedTopY = bounds.top * fit.scale + fit.y;
+  return ((1 - normalizedTopY) / 2) * canvasH;
+}
+
 /** 按画布宽度选择预设名（小于 `MOBILE_MAX_WIDTH` 视为移动端，与预览页 CSS 断点一致）。 */
 export const MOBILE_MAX_WIDTH = 720;
 

@@ -21,7 +21,7 @@ import { createYunaRenderer, YunaLoadError, type YunaRendererHandle } from "../r
 import { cameraFor, type StageOrientation } from "../render/live2d/cameraFor";
 import { yunaParams } from "../render/live2d/yunaParams";
 import { ACCENT_FADE_SEC, accentBlend, type AccentTiming } from "../render/live2d/accentParams";
-import { composePreview, usePreviewStore, type PreviewItem } from "./previewStore";
+import { composePreview, previewDurationSec, usePreviewStore, type PreviewItem } from "./previewStore";
 import { SILENT_ACTION_TABLE } from "../render/live2d/yunaParams";
 import { LOCAL_ACTION_DURATION_SEC } from "../render/live2d/localActions";
 import { toYunaEmotion } from "./emotionMap";
@@ -354,8 +354,26 @@ function Live2dStage({
     };
   }, []);
 
+  // §4.2：动作表预览的「表情 / 情绪」在全身取景下太小 → 预览期间临时推近（close_up），
+  // 预览结束（到期 / 切换）再拉回。只影响动作表预览，不改对话中的镜头逻辑（visual.camera 不变）。
+  const [faceZoom, setFaceZoom] = useState(false);
+  useEffect(() => {
+    if (previewItem === null || (previewItem.kind !== "accent" && previewItem.kind !== "emotion")) {
+      setFaceZoom(false);
+      return;
+    }
+    setFaceZoom(true);
+    // 预览到期（保持 + 渐出）后拉回。
+    const totalMs = (previewDurationSec(previewItem) + ACCENT_FADE_SEC) * 1000;
+    const now = typeof globalThis.performance !== "undefined" ? globalThis.performance.now() : Date.now();
+    const remaining = Math.max(0, previewStartedAtMs + totalMs - now);
+    const timer = window.setTimeout(() => setFaceZoom(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [previewItem, previewStartedAtMs]);
+
   // S6g-A §3.1：镜头取景（纯函数），作用在画布容器上；600ms 缓动。
-  const camera = cameraFor(visual.camera as Camera | null, orientation);
+  // §4.2：表情预览期间用 close_up 取景（复用同一套 CLOSE_UP_TRANSFORM）。
+  const camera = cameraFor(faceZoom ? "close_up" : (visual.camera as Camera | null), orientation);
 
   return (
     <div

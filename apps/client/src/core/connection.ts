@@ -253,7 +253,7 @@ export function createConnection(): Connection {
     }
     if (verdict === "lock") {
       awaitingSession = false;
-      useConnectionStore.setState({ sessionId: message.sessionId });
+      useConnectionStore.setState({ sessionId: message.sessionId, startedAt: message.type === "session" ? (message.payload.startedAt ?? null) : null });
       storeSessionId(message.sessionId);
       dispatch({ type: "SERVER_MESSAGE", message });
       if (message.type === "session") applySessionRestore(message.payload);
@@ -264,7 +264,7 @@ export function createConnection(): Connection {
     dispatch({ type: "SERVER_MESSAGE", message });
 
     if (message.type === "session") {
-      useConnectionStore.setState({ sessionId: message.sessionId });
+      useConnectionStore.setState({ sessionId: message.sessionId, startedAt: message.payload.startedAt ?? null });
       storeSessionId(message.sessionId);
       // D49 / S6n §2：记录本会话实际生效的模式与能力来源（顶栏标签 / 设置面板来源标签用）。
       if (message.payload.mode !== undefined && message.payload.capabilities !== undefined) {

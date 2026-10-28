@@ -13,6 +13,37 @@ import { yunaParams, type YunaEmotion } from "../render/live2d/yunaParams";
 import type { MouthShape, StagePhaseKind } from "../state/performance";
 import "./preview.css";
 
+/**
+ * §4.1：开发探针——`?preview=yuna&param=<id>&value=<v>` 把单个参数强制置为该值。
+ * 用于逐参数实测（min / max 下的画面变化），只在带 query 时生效，不影响正常预览页。
+ * 物理**输出**类参数（手 / 尾 / 耳）在物理之后会被覆盖，故对这些参数同时走物理后覆盖。
+ */
+const PROBE_PHYSICS_OUTPUT = /^Param(Hand|HandHold|HandTurn|Boom|Foream|Tail|Ears(L|R))/;
+
+type Probe = { param: string; value: number } | null;
+
+/** 探针状态：既可来自 URL query，也可由 e2e 通过 `window.__setProbe` 运行时改写（免去反复重载模型）。 */
+let runtimeProbe: Probe = null;
+
+declare global {
+  interface Window {
+    __setProbe?: (param: string | null, value?: number) => void;
+    __probeReady?: boolean;
+  }
+}
+
+function readProbe(): Probe {
+  if (typeof window === "undefined") return null;
+  if (runtimeProbe !== null) return runtimeProbe;
+  const params = new URLSearchParams(window.location.search);
+  const param = params.get("param");
+  const valueRaw = params.get("value");
+  if (param === null || valueRaw === null) return null;
+  const value = Number.parseFloat(valueRaw);
+  if (!Number.isFinite(value)) return null;
+  return { param, value };
+}
+
 const PHASES: StagePhaseKind[] = ["idle", "listening", "thinking", "speaking"];
 const EMOTIONS: YunaEmotion[] = ["calm", "guarded", "sad", "warm"];
 const MOUTHS: MouthShape[] = ["closed", "small", "open"];
@@ -46,6 +77,10 @@ export function YunaPreview() {
     let disposed = false;
     let handle: YunaRendererHandle | null = null;
 
+    // §4.1：e2e 可在运行时改探针（免去反复重载模型）。
+    window.__setProbe = (param: string | null, value?: number) => {
+      runtimeProbe = param === null ? null : { param, value: value ?? 0 };
+    };
     createYunaRenderer({
       canvas,
       frame: () => {
@@ -58,6 +93,19 @@ export function YunaPreview() {
           blinkOpen: 1,
           tSec: (performance.now() - startedAt) / 1000,
         });
+        // §4.1：探针强制覆盖单参数（物理输出类参数同时走物理后覆盖）。
+        const probe = readProbe();
+        if (probe !== null) {
+          params[probe.param] = probe.value;
+          if (PROBE_PHYSICS_OUTPUT.test(probe.param)) {
+            return {
+              params,
+              emotion: e,
+              manualBlink,
+              postPhysics: { target: { [probe.param]: probe.value }, weight: 1 },
+            };
+          }
+        }
         return { params, emotion: e, manualBlink };
       },
     })
@@ -69,6 +117,7 @@ export function YunaPreview() {
         handle = created;
         rendererRef.current = created;
         setTextureSize(created.textureSize());
+        window.__probeReady = true;
       })
       .catch((cause: unknown) => {
         if (disposed) return;

@@ -53,12 +53,16 @@ test.describe("S6l §3 观众引导弹幕", () => {
     const guide = page.getByTestId("guide-danmaku").first();
     await expect(guide).toBeVisible({ timeout: 14_000 });
 
-    const text = (await guide.innerText()).replace(/^[^:：]*[:：]/, "").replace("点一下替你说", "").trim();
+    // 取引导的**弹幕正文**（`.live-danmaku-text`），不依赖昵称 / 前缀 / 换行格式。
+    const text = (await guide.locator(".live-danmaku-text").innerText()).trim();
     expect(text.length).toBeGreaterThan(0);
 
-    // 点击引导 → 作为用户弹幕发送（弹幕列表出现该文字）。
+    // 点击引导 → 作为用户弹幕发送。
     await guide.click();
-    await expect(page.getByTestId("danmaku-list")).toContainText(text);
+    // 断言弹幕区出现了「你」发出的该句文本（不依赖换行格式）。
+    const list = page.getByTestId("danmaku-list");
+    await expect(list).toContainText(text, { timeout: 10_000 });
+    await expect(list.locator(".live-danmaku-nick-user").first()).toHaveText("你", { timeout: 10_000 });
   });
 });
 

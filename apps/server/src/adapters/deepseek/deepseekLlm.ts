@@ -13,6 +13,7 @@ import type { LLMContext, LLMPort } from "../../ports";
 import { isAbortError } from "../../abort";
 import { renderPrompt, type ChatMessage } from "../../prompts/renderPrompt";
 import { parseBeatLines } from "./parseBeatLines";
+import { isRetryableLlmNetworkError, isRetryableLlmStatus } from "./llmRetry";
 
 export type DeepSeekLlmOptions = {
   /** 例如 `https://api.deepseek.com/v1`。 */
@@ -56,9 +57,18 @@ export function createDeepSeekLlm(options: DeepSeekLlmOptions): LLMPort {
         detail: { prompt_version: ctx.pack.promptVersion },
       });
 
-      let response: Response;
-      try {
-        response = await doFetch(`${options.baseUrl}/chat/completions`, {
+      // §3：还没出任何 token 时，网络类错误 / 5xx 在首 token 预算内重试 1 次。
+      const requestBody = JSON.stringify({
+        model: options.model,
+        messages,
+        stream: true,
+        stream_options: { include_usage: true },
+        thinking: { type: "disabled" },
+        temperature,
+        max_tokens: maxTokens,
+      });
+      const doRequest = (): Promise<Response> =>
+        doFetch(`${options.baseUrl}/chat/completions`, {
           method: "POST",
           signal,
           headers: {
@@ -66,25 +76,44 @@ export function createDeepSeekLlm(options: DeepSeekLlmOptions): LLMPort {
             authorization: `Bearer ${options.apiKey}`,
             accept: "text/event-stream",
           },
-          body: JSON.stringify({
-            model: options.model,
-            messages,
-            stream: true,
-            stream_options: { include_usage: true },
-            thinking: { type: "disabled" },
-            temperature,
-            max_tokens: maxTokens,
-          }),
+          body: requestBody,
         });
-      } catch (error) {
-        if (signal.aborted || isAbortError(error)) return;
-        throw error;
-      }
 
-      if (!response.ok || response.body === null) {
-        const detail = await response.text().catch(() => "");
-        throw new Error(`DeepSeek 返回 ${response.status} ${detail.slice(0, 200)}`);
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const candidate = await doRequest();
+          if (!candidate.ok) {
+            // 4xx（鉴权 / 请求非法）不重试；5xx 首 token 前重试一次。
+            if (attempt === 0 && isRetryableLlmStatus(candidate.status) && !signal.aborted) {
+              options.log?.({ ts: Date.now(), event: "llm_retry", detail: { reason: `HTTP ${candidate.status}`, attempt: attempt + 1 } });
+              continue;
+            }
+            const detail = await candidate.text().catch(() => "");
+            throw new Error(`DeepSeek 返回 ${candidate.status} ${detail.slice(0, 200)}`);
+          }
+          if (candidate.body === null) {
+            if (attempt === 0 && !signal.aborted) {
+              options.log?.({ ts: Date.now(), event: "llm_retry", detail: { reason: "empty_body", attempt: attempt + 1 } });
+              continue;
+            }
+            throw new Error("DeepSeek 返回空响应体");
+          }
+          response = candidate;
+          break;
+        } catch (error) {
+          if (signal.aborted || isAbortError(error)) return;
+          // 网络抖动：首 token 前重试一次；否则原样抛出（不改写 HTTP 错误信息）。
+          if (attempt === 0 && isRetryableLlmNetworkError(error)) {
+            options.log?.(
+              { ts: Date.now(), event: "llm_retry", detail: { reason: error instanceof Error ? error.message : String(error), attempt: attempt + 1 } },
+            );
+            continue;
+          }
+          throw error;
+        }
       }
+      if (response === null || response.body === null) return;
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();

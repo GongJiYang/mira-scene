@@ -80,8 +80,6 @@ export const UI_TEXT = {
   // ---- S6u §2/§3：桌面顶栏 / 字幕 / 弹幕 ----
   /** 观看人数占位（S6u：静态占位，无真实数据源）。 */
   viewerCount: "1 viewer",
-  /** 开播时长占位（S6u：静态占位，无真实数据源）。 */
-  durationPlaceholder: "02:14:37",
   /** 说话时字幕下方的打断提示。 */
   interruptHint: "点画面任意位置可以打断她",
   /** 兜底台词的名牌（琥珀样式）。 */
@@ -184,3 +182,16 @@ export const ACTION_LABELS = {
 export type ActionLabelId = keyof typeof ACTION_LABELS;
 
 export type UiText = typeof UI_TEXT;
+
+/**
+ * §5.1：把毫秒时长格式化成 `HH:MM:SS`（小时可超过 99，仍以两位起）。
+ * 负数 / 非有限值按 0 处理。纯函数，便于单测。
+ */
+export function formatHms(ms: number): string {
+  const total = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0;
+  const hh = Math.floor(total / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+}

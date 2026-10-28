@@ -11,7 +11,7 @@ import type { SceneState } from "@mira/protocol";
 import type { Pack } from "../characters/pack";
 import { classifyIntent, type Intent } from "../intent";
 import type { LLMHistoryEntry } from "../ports";
-import { advanceRule } from "./advanceRule";
+import { advanceRule, resolveIntent } from "./advanceRule";
 
 export type ChatRole = "system" | "user" | "assistant";
 export type ChatMessage = { role: ChatRole; content: string };
@@ -39,12 +39,6 @@ export const HISTORY_LIMIT = 12;
 
 /** 历史里用户的固定称谓（各角色通用）。 */
 const USER_LABEL = "客人";
-
-/**
- * 夏凛的「那杯咖啡」在提示词里算作温和地直接问起（§2 的示例）。
- * 这是提示词渲染层的补充规则，不改变角色包的关键词表。
- */
-const COFFEE_PATTERN = /咖啡|那杯/;
 
 /** 渲染提示词所需的最小角色信息（便于单测传入轻量对象）。 */
 export type PromptPack = Pick<
@@ -83,9 +77,8 @@ export function renderPrompt(pack: PromptPack, ctx: PromptContext): ChatMessage[
   const userText = sanitizeUserText(ctx.userText);
   const care = countCare(pack, ctx.history, ctx.userText);
   // 复用角色包的关键词表；额外把「问那杯咖啡」当作直接问起（§2 的示例）。
-  const intent: Intent = COFFEE_PATTERN.test(ctx.userText)
-    ? "ask_core"
-    : classifyIntent(ctx.userText, pack.intentPatterns);
+  // §1：与保底推进共用 `resolveIntent`，两处意图判定永不脱节。
+  const intent: Intent = resolveIntent(pack, ctx.userText);
   // S6l §1：arrive → probe 需要「用户说过至少 1 轮」，与 Mock 的 `priorUserTurns >= 1` 一致
   // （只看历史里的用户轮数，不含本轮）。
   // S6l-fix2 §7：只数真实用户（source === "user"）；主动开口 / poke / gift 的占位不算用户说过话。

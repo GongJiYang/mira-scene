@@ -45,6 +45,11 @@ export type DirectorContext = {
   inputKind?: "text" | "poke" | "gift";
   /** S6l §5：戳一下的序号（从 0 开始），用于 poke 的 shy / angry 轮流。 */
   pokeIndex?: number;
+  /**
+   * §1：导演层保底推进目标。LLM 本轮未提出 advance 时，若此项非空则在本 beat 上强制推进到它
+   * （仍走 `story.ts` 校验、视觉照节点表）。由会话层只在「本轮第一个 beat」上注入。
+   */
+  forcedAdvanceTo?: StoryNode;
 };
 
 /** `seq` 由会话层统一分配；导演层只填 0。 */
@@ -94,6 +99,17 @@ export function direct(llmBeat: NormalizedLlmBeat, ctx: DirectorContext): Direct
   // 规则 3：剧情推进先用 story.ts 校验，每轮最多一步。
   if (llmBeat.advance !== null && !advancedThisTurn) {
     const decision = evaluateStoryAdvance(scene, llmBeat.advance);
+    if (decision.ok) {
+      scene = advanceScene(scene, decision.node);
+      advancedThisTurn = true;
+      advancedTo = decision.node;
+    }
+  }
+
+  // §1：导演层保底推进。LLM 本轮没推进，但会话层判定「已允许未推进」需强制时，
+  // 在本 beat 上强制推进到 `forcedAdvanceTo`（仍走 story.ts 校验、视觉照节点表）。
+  if (!advancedThisTurn && ctx.forcedAdvanceTo !== undefined) {
+    const decision = evaluateStoryAdvance(scene, ctx.forcedAdvanceTo);
     if (decision.ok) {
       scene = advanceScene(scene, decision.node);
       advancedThisTurn = true;

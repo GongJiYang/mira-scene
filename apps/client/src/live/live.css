@@ -734,12 +734,32 @@ body,
   overflow: hidden;
   background: var(--ink);
   touch-action: pan-x;
+  /*
+   * §5.2：手机竖屏顶部安全区高度 = 顶栏（12px + safe-top + 头像胶囊约 40px + 间隙 8px）
+   * + 剧情标题胶囊（约 28px）。Live2D 画布整体下移这么多，保证头顶 / 猫耳不被标题胶囊遮挡。
+   */
+  --mobile-top-safe: calc(96px + env(safe-area-inset-top));
 }
 
 .live-mobile-stage {
   position: absolute;
   inset: 0;
   transition: transform 220ms ease;
+}
+
+/*
+ * §5.2：手机端 Live2D 画布整体下移（顶部安全区），背景仍铺满全屏不受影响。
+ * 画布下移不改构图缩放（渲染器按父容器尺寸算 fit，与位置无关），只把人物推离顶部胶囊。
+ */
+.live-mobile .live-live2d-canvas {
+  top: var(--mobile-top-safe);
+  height: auto;
+  bottom: 0;
+}
+
+/* 接触阴影随画布一起下移，避免与人物错位。 */
+.live-mobile .live-contact-shadow {
+  bottom: 3%;
 }
 
 /*
@@ -759,7 +779,17 @@ body,
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 30;
+  /*
+   * §7：动作表 / 设置抽屉是 `position: fixed` 挂在 header 里；header 形成层叠上下文，
+   * 其 z-index 必须高于底部输入条（30），否则抽屉按钮会被输入框拦截点击。
+   */
+  z-index: 35;
+  pointer-events: none;
+}
+
+/* header 自身只作定位容器；其内的可交互元素恢复点击。 */
+.live-mobile-header > * {
+  pointer-events: auto;
 }
 
 .live-mobile-top {

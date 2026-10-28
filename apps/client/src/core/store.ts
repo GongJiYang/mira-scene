@@ -14,12 +14,18 @@ export function getStageState(): ClientState {
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting";
 
-type ConnectionSlice = { status: ConnectionStatus; sessionId: string | null };
+type ConnectionSlice = {
+  status: ConnectionStatus;
+  sessionId: string | null;
+  /** §5.1：会话创建时刻（服务端 epoch ms），用于顶栏真实开播时长；null 表示尚未收到。 */
+  startedAt: number | null;
+};
 
 /** 连接状态独立 slice：不写进 reducer（D14）。 */
 export const useConnectionStore = create<ConnectionSlice>()(() => ({
   status: "connecting",
   sessionId: null,
+  startedAt: null,
 }));
 
 type MicSlice = { micError: string | null };

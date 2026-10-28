@@ -69,7 +69,8 @@ function attachMessages(socket: WebSocket): void {
 }
 
 async function main(): Promise<void> {
-  const server = await startServer({ port: 0 });
+  // §6：冒烟固定走 Mock——显式注入 PROVIDER_MODE=mock，避免环境里有 PROVIDER_MODE=real 时走真实服务。
+  const server = await startServer({ port: 0, env: { ...process.env, PROVIDER_MODE: "mock" } });
   const health = (await fetch(`http://127.0.0.1:${server.port}/health`).then((response) => response.json())) as { ok?: boolean };
   if (health?.ok !== true) fail(`/health 异常：${JSON.stringify(health)}`);
 
@@ -113,6 +114,8 @@ async function main(): Promise<void> {
     if (session.type !== "session") return;
     sessionId = session.sessionId;
     if (session.payload.snapshot.node !== "arrive") fail(`初始 node 应为 arrive，实际 ${session.payload.snapshot.node}`);
+    // §6：确认走的是 Mock（不读任何 Key，也不发真实网络请求）。
+    if (session.payload.mode !== "mock") fail(`冒烟应走 Mock，实际模式 ${session.payload.mode}`);
     timings.push({ step: "hello → session", ms: now() - startedAt });
 
     // 2. 第 1 轮：收到至少 1 个 turnId=1 的 beat
