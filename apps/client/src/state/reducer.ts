@@ -78,6 +78,13 @@ function markTurnEnded(state: ClientState): ClientState {
   return { ...state, turnEnded: true };
 }
 
+/**
+ * freeze-fix6 §2.1：轮次级「兜底」错误码。服务端在这类错误之前已下发兜底 beat
+ * （现在带预录语音），它们是**非致命**的：不得清空本轮队列 / 字幕或把界面切进错误态，
+ * 否则兜底台词永远不显示。客户端只把它们视为「本轮即将结束」，让兜底 beat 播完再回 idle。
+ */
+const FALLBACK_ERROR_CODES: ReadonlySet<string> = new Set(["llm_timeout", "turn_failed"]);
+
 function applySnapshot(state: ClientState, snapshot: SceneState): ClientState {
   return {
     ...state,
@@ -139,6 +146,12 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
       // 不进入错误态、不清空本轮，只记下「本轮已降级」——无声 beat 改按可读时长停留 + 显示轻提示。
       if (message.payload.code === "tts_degraded") {
         return { ...state, ttsDegradedTurnId: message.turnId };
+      }
+      // freeze-fix6 §2.1：兜底错误非致命——服务端已下发兜底 beat（带预录语音）。
+      // 保留本轮 queue / 相位，只标记「本轮已结束」，让兜底 beat 播完再回 idle；
+      // 不进入错误态（原始报错只在 ?debug=1 显示）。
+      if (FALLBACK_ERROR_CODES.has(message.payload.code)) {
+        return { ...state, turnEnded: true };
       }
       return {
         ...toIdle(state),

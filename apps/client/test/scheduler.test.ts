@@ -61,4 +61,22 @@ describe("pickNextPlayable", () => {
     const state: ClientState = { ...view({ kind: "thinking" }, [beat(0)]), currentTurnId: 2, ttsDegradedTurnId: 1 };
     expect(pickNextPlayable(state, new Set(), false)).toBeNull();
   });
+
+  it("freeze-fix6 §2.1：本轮已 turn_end 且无音频就绪 → 按无声 beat 处理（不卡死）", () => {
+    const ended: ClientState = { ...view({ kind: "speaking", seq: 0 }, [beat(1)]), turnEnded: true };
+    expect(pickNextPlayable(ended, new Set(), false)).toEqual({ seq: 1, silent: true });
+    // thinking 阶段（本轮第一个 beat 还没播）同样成立。
+    const thinkingEnded: ClientState = { ...view({ kind: "thinking" }, [beat(0)]), turnEnded: true };
+    expect(pickNextPlayable(thinkingEnded, new Set(), false)).toEqual({ seq: 0, silent: true });
+  });
+
+  it("freeze-fix6 §2.1：turn_end 之前且无音频且未降级 → 仍 null（正常轮不受影响）", () => {
+    const state = view({ kind: "thinking" }, [beat(0)]); // turnEnded: false
+    expect(pickNextPlayable(state, new Set(), false)).toBeNull();
+  });
+
+  it("freeze-fix6 §2.1：音频就绪时即使已 turn_end 仍走正常音频路径（非 silent）", () => {
+    const ended: ClientState = { ...view({ kind: "speaking", seq: 0 }, [beat(1)]), turnEnded: true };
+    expect(pickNextPlayable(ended, new Set([1]), false)).toEqual({ seq: 1, silent: false });
+  });
 });
