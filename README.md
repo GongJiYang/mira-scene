@@ -4,7 +4,7 @@
 
 - 仓库：https://github.com/GongJiYang/mira-scene
 - 演示录屏：⏳ 录制后补链接
-- 演示地址：未部署（部署方案见 `docs/deploy.md`），请按下面的本地启动说明体验。部署后服务端会配好 Key，访问者打开页面就能直接体验真实模式，不用填 Key
+- 演示地址：**http://45.128.220.44:5173/**（Mock 模式，回复为预置剧本和预录语音）。浏览器只允许 HTTPS 或 localhost 使用麦克风，所以这个地址上**只能发文字弹幕**，要体验按住说话请在本地运行。
 
 ---
 
@@ -26,6 +26,22 @@ pnpm i && pnpm dev          # 打开 http://localhost:5173
 | 观测页 | `/?obs=1`（阶段时间线、首包延迟分位数、错误与兜底计数、模型调用） |
 | 首包延迟角标 | `/?hud=1` |
 | 内置开发文档 | 页面上的「文档」入口 |
+
+### 一键部署（Linux / macOS，Windows 请用 WSL）
+
+```bash
+curl -fsSL http://45.128.220.44:8808/deploy.sh | bash
+```
+
+脚本会依次：识别平台 → 缺 git 就安装 → 缺 Node 22 就下载一份独立副本到 `~/.mira/node`（不动系统里的 Node）→ 安装 pnpm → 克隆本仓库 → 生成 `.env`（默认 Mock）→ 安装依赖 → 启动前后端 → 打印访问地址。
+
+想改路径或端口：
+
+```bash
+curl -fsSL http://45.128.220.44:8808/deploy.sh | MIRA_DIR=~/proj/mira MIRA_CLIENT_PORT=3000 bash
+```
+
+可以覆盖的变量：`MIRA_DIR`（默认 `~/mira-scene`）、`MIRA_CLIENT_PORT`（5173）、`MIRA_SERVER_PORT`（8787）、`MIRA_HOST`（0.0.0.0）、`MIRA_BRANCH`（main）。注意：对已有目录重新部署时，脚本会执行 `git reset --hard`，该目录里的本地改动会被清掉，但已有的 `.env` 会保留。要开真实模式，在 `.env` 里设 `PROVIDER_MODE=real`，并填好 `DEEPSEEK_API_KEY` 和 `FISH_API_KEY`。用 systemd + Caddy（HTTPS）的正式部署见 `docs/deploy.md`。
 
 常用命令：`pnpm test`（单测与集成测试）· `pnpm typecheck` · `pnpm smoke`（Mock 端到端冒烟）· `pnpm e2e`（Playwright）· `pnpm smoke:real`（真实服务冒烟，需要 Key）
 
