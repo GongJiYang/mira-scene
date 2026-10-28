@@ -7,6 +7,7 @@
 import type { Media, StoryNode } from "@mira/protocol";
 import { useStore } from "zustand";
 import { intents, reports, useNudgeStore, type Intents, type StageReports } from "../core/controller";
+import { isTurnTtsDegraded } from "../core/scheduler";
 import { useFallbackStore } from "../core/fallback";
 import { usePerformanceStore } from "../core/performanceClock";
 import { useChannelStore } from "../live/channel";
@@ -91,6 +92,8 @@ export type StageView = {
   sessionMode: "mock" | "real" | null;
   /** D49 / S6n §2：各类能力来源（设置面板来源标签用）。 */
   capabilities: { llm: CapabilitySource; voice: CapabilitySource; image: CapabilitySource } | null;
+  /** freeze-fix5 §2.2：本轮 TTS 降级 → 字幕区附近显示一行轻提示。 */
+  ttsDegraded: boolean;
 };
 
 export type StageViewModel = StageView & { intents: Intents; reports: StageReports };
@@ -166,6 +169,7 @@ export function toStageView(input: StageViewInput): StageView {
     settings: input.settings ?? DEFAULT_VIEW_SETTINGS,
     sessionMode: input.sessionMode ?? null,
     capabilities: input.capabilities ?? null,
+    ttsDegraded: isTurnTtsDegraded(stage),
   };
 }
 

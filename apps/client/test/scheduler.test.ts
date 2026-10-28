@@ -49,4 +49,16 @@ describe("pickNextPlayable", () => {
     expect(pickNextPlayable(state, new Set([1]), false)).toBeNull();
     expect(pickNextPlayable(state, new Set([0, 1]), false)).toEqual({ seq: 0, silent: false });
   });
+
+  it("freeze-fix5 §2.2：本轮 TTS 降级 → 未就绪的 beat 也按无声处理（不卡死）", () => {
+    const degraded: ClientState = { ...view({ kind: "speaking", seq: 0 }, [beat(1)]), currentTurnId: 1, ttsDegradedTurnId: 1 };
+    expect(pickNextPlayable(degraded, new Set(), false)).toEqual({ seq: 1, silent: true });
+    // 音频就绪时仍走正常路径（优先真实音频）。
+    expect(pickNextPlayable(degraded, new Set([1]), false)).toEqual({ seq: 1, silent: false });
+  });
+
+  it("freeze-fix5 §2.2：迟到的旧轮降级标记不影响当前轮（只比对 currentTurnId）", () => {
+    const state: ClientState = { ...view({ kind: "thinking" }, [beat(0)]), currentTurnId: 2, ttsDegradedTurnId: 1 };
+    expect(pickNextPlayable(state, new Set(), false)).toBeNull();
+  });
 });

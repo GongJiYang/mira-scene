@@ -5,12 +5,10 @@ import { reactionSfxUrls } from "../live/characters";
 import { currentChannelId } from "../live/channel";
 import { createAnalyserLevelSource, type AudioLevelSource } from "./audioLevel";
 import { dispatchPerformance } from "./performanceClock";
-import { pickNextPlayable } from "./scheduler";
+import { pickNextPlayable, silentBeatMs } from "./scheduler";
 import { dispatch, getStageState, pushEvent, useStageStore } from "./store";
 import { timeline } from "./timeline";
 import { fallbackMouth, levelToMouth, MOUTH_LEVEL_CONFIG } from "../state/mouth";
-
-const SILENT_BEAT_MS = 1_200;
 
 export type TtsAudioMessage = Extract<ServerMessage, { type: "tts_audio" }>;
 
@@ -410,7 +408,8 @@ function schedule(): void {
   const turnId = state.currentTurnId;
 
   if (next.silent) {
-    // 无声 beat 不等音频，停留 1200ms 后结束（D34：交给时间线，带 turnId）。
+    // 无声 beat 不等音频，按可读时长停留（freeze-fix5 §2.1：silentBeatMs，随字数 1.5–6s）后结束
+    // （D34：交给时间线，带 turnId）。
     dispatch({ type: "BEAT_AUDIO_STARTED", turnId, seq: next.seq });
     // §5：本轮开始出真实 beat 了，反应音淡出。
     reactionSfx()?.fadeOut();
@@ -419,10 +418,11 @@ function schedule(): void {
     // §1：无声 beat 没有音频，口型保持闭合。
     dispatchMouth("closed", false);
     const seq = next.seq;
+    const say = state.queue.find((beat) => beat.seq === seq)?.say ?? "";
     silentCommandId = timeline.schedule({
       key: `silent:${turnId}:${seq}`,
       turnId,
-      atMs: timeline.now() + SILENT_BEAT_MS,
+      atMs: timeline.now() + silentBeatMs(say),
       run: () => {
         silentCommandId = null;
         dispatch({ type: "BEAT_AUDIO_ENDED", turnId, seq });
