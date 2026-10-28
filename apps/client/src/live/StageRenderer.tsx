@@ -143,6 +143,8 @@ function Live2dStage({
   orientation: StageOrientation;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // freeze-fix7 §2：渲染器句柄，供 resize 监听在布局变化后重新取画布尺寸。
+  const handleRef = useRef<YunaRendererHandle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const frameRef = useRef({ phase, emotion, performance, visual });
   frameRef.current = { phase, emotion, performance, visual };
@@ -193,7 +195,6 @@ function Live2dStage({
     if (!canvas) return;
     let handle: YunaRendererHandle | null = null;
     let disposed = false;
-
     void createYunaRenderer({
       canvas,
       fitMode: "live",
@@ -342,6 +343,7 @@ function Live2dStage({
           return;
         }
         handle = created;
+        handleRef.current = created;
       })
       .catch((cause: unknown) => {
         if (disposed) return;
@@ -350,8 +352,30 @@ function Live2dStage({
 
     return () => {
       disposed = true;
+      handleRef.current = null;
       handle?.dispose();
     };
+  }, []);
+
+  // freeze-fix7 §2：画布尺寸随布局变化重新取一次——布局变化后
+  // 渲染器的 resize(clientWidth, clientHeight) 必须重算，否则取景与 CSS 尺寸脱节。
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = (): void => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      if (width <= 0 || height <= 0) return;
+      handleRef.current?.resize(width, height, window.devicePixelRatio);
+    };
+    resize();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", resize);
+      return () => window.removeEventListener("resize", resize);
+    }
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    return () => observer.disconnect();
   }, []);
 
   // §4.2：动作表预览的「表情 / 情绪」在全身取景下太小 → 预览期间临时推近（close_up），
