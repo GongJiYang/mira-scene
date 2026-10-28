@@ -37,13 +37,18 @@ def read_json(path):
 # ------------------------------------------------------------------- psd access
 
 class Part:
-    """One pixel layer lifted into an RGBA array with a native-space origin."""
+    """One pixel layer lifted into an RGBA array with a native-space origin.
 
-    def __init__(self, name, img, left, top):
+    `blend` is the compositing mode psd2live will use for this layer ('normal' or 'multiply');
+    util.composite honours it so the pipeline's own flattening matches the exported model.
+    """
+
+    def __init__(self, name, img, left, top, blend='normal'):
         self.name = name
         self.img = np.asarray(img, dtype=np.float32)
         self.left = int(left)
         self.top = int(top)
+        self.blend = blend
 
     @property
     def size(self):
@@ -54,8 +59,9 @@ class Part:
 
     @staticmethod
     def load(layer_dir, name):
+        j = read_json(os.path.join(layer_dir, f'{name}.json'))
         return Part(name, load_rgba(os.path.join(layer_dir, f'{name}.png')),
-                    *read_json(os.path.join(layer_dir, f'{name}.json'))['origin'])
+                    *j['origin'], blend=j.get('blend', 'normal'))
 
 
 def psd_pixel_layers(path):
@@ -98,9 +104,11 @@ def save_parts(parts, layer_dir):
     os.makedirs(layer_dir, exist_ok=True)
     for p in parts:
         p.save(layer_dir)
-        write_json({'origin': [p.left, p.top]}, os.path.join(layer_dir, f'{p.name}.json'))
+        write_json({'origin': [p.left, p.top], 'blend': getattr(p, 'blend', 'normal')},
+                   os.path.join(layer_dir, f'{p.name}.json'))
         index.append({'name': p.name, 'left': p.left, 'top': p.top,
-                      'width': p.size[0], 'height': p.size[1]})
+                      'width': p.size[0], 'height': p.size[1],
+                      'blend': getattr(p, 'blend', 'normal')})
     write_json(index, os.path.join(layer_dir, 'index.json'))
     return index
 
@@ -182,7 +190,12 @@ def composite(parts, size, background=None):
         sub = img[y0c - y0:y1 - y0, x0c - x0:x1 - x0]
         a = sub[..., 3:4] / 255.0
         region = canvas[y0c:y1, x0c:x1]
-        region[..., :3] = sub[..., :3] * a + region[..., :3] * (1.0 - a)
+        if getattr(p, 'blend', 'normal') == 'multiply':
+            # multiply the existing pixels, then take that result by the layer's own alpha
+            src = region[..., :3] * sub[..., :3] / 255.0
+        else:
+            src = sub[..., :3]
+        region[..., :3] = src * a + region[..., :3] * (1.0 - a)
         region[..., 3:4] = a * 255.0 + region[..., 3:4] * (1.0 - a)
     return canvas
 

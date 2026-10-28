@@ -239,6 +239,11 @@ def build_eye(rgb, model_masks, iris_mask_extra, center_hint, cfg, side_mask=Non
     mix = float(c['sclera_neutral_mix'])
     base = (1 - mix) * base + mix * np.full(3, base.mean(), np.float32)
     base = np.clip(base * c['sclera_gain'], 0, 255)
+    if c.get('sclera_tint'):
+        # The artwork's sclera reads as plain white; a light grey-blue with a darker top reads as
+        # an eyeball with volume instead of a flat cut-out.
+        tm = float(c.get('sclera_tint_mix', 0.5))
+        base = np.clip((1 - tm) * base + tm * np.asarray(c['sclera_tint'], np.float32), 0, 255)
     top_shadow = np.clip((v + open_ry) / (2 * open_ry), 0, 1)[..., None]
     gain = 1.0 - c['sclera_top_shadow']
     sclera_rgb = base * (gain + c['sclera_top_shadow'] * top_shadow)
@@ -254,9 +259,22 @@ def build_eye(rgb, model_masks, iris_mask_extra, center_hint, cfg, side_mask=Non
                                             c['lash_blobs'], c['lash_min_speck_area'])
     dark = drop_specks(dark, int(c.get('lash_residual_speck_area', 4)))
 
+    # --- upper-lid shadow: a soft cool band cast by the lid onto the eyeball ----------
+    shadow_rgb = np.zeros((h, w, 3), np.float32)
+    shadow_alpha = np.zeros((h, w), np.float32)
+    sh = c.get('eyelid_shadow') or {}
+    if sh.get('enabled'):
+        # t = 0 on the lid (top of the opening), 1 on the lower rim; the band fades out downwards
+        t = np.clip((v + open_ry) / (2 * open_ry), 0.0, 1.0)
+        fade = max(float(sh.get('fade_at', 0.62)), 1e-3)
+        grad = np.clip(1.0 - t / fade, 0.0, 1.0) ** float(sh.get('gamma', 1.2))
+        shadow_alpha = opening * grad * float(sh.get('opacity', 0.8))
+        shadow_rgb[:] = np.asarray(sh.get('tint', [150, 160, 190]), np.float32)
+
     layers = dict(
         eyewhite=np.concatenate([sclera_rgb, (opening * 255)[..., None]], axis=2),
         irides=np.concatenate([iris_rgb, (iris_alpha * 255)[..., None]], axis=2),
+        eyeshadow=np.concatenate([shadow_rgb, (shadow_alpha * 255)[..., None]], axis=2),
         eyelash=np.concatenate([rgb, (dark * 255)[..., None]], axis=2),
     )
     params = dict(
@@ -284,9 +302,9 @@ def build_eye(rgb, model_masks, iris_mask_extra, center_hint, cfg, side_mask=Non
     return layers, params, dict(opening=opening, art_opening=art_opening, opening_info=opening_info)
 
 
-def make_part(name, arr, origin):
+def make_part(name, arr, origin, blend='normal'):
     """arr is ROI-local; origin is where the ROI sits on the native canvas."""
-    return util.Part(name, arr, origin[0], origin[1])
+    return util.Part(name, arr, origin[0], origin[1], blend=blend)
 
 
 def run(cfg, out_root, log=print):
@@ -410,7 +428,8 @@ def run(cfg, out_root, log=print):
         results[name] = params
         eye_arrays[name] = layers
         for k, arr in layers.items():
-            new_parts.append(make_part(f'{k}-{name}', arr, (x0, y0)))
+            new_parts.append(make_part(f'{k}-{name}', arr, (x0, y0),
+                                       blend=c.get('layer_blend', {}).get(k, 'normal')))
         log(f'  eye {name} ({params["image_side"]} side of image): center={params["center"]} '
             f'r={params["radius"]} residual={params["fit"]["residual_mean"]:.2f}/'
             f'{params["fit"]["residual_max"]:.2f}px tilt={params["lash_angle_deg"]:.1f}deg')

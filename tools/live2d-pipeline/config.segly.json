@@ -112,7 +112,7 @@
     "sclera_bright_percentile": 85.0,
     "sclera_neutral_mix": 0.45,
     "sclera_gain": 1.1,
-    "sclera_top_shadow": 0.2,
+    "sclera_top_shadow": 0.25,
     "lash_lum": 110.0,
     "lash_lum_band": 30.0,
     "lash_radius_ratio": [
@@ -134,6 +134,7 @@
     "eye_order": [
       "eyewhite",
       "irides",
+      "eyeshadow",
       "eyelash"
     ],
     "lash_angle_radius_ratio": 1.6,
@@ -166,7 +167,27 @@
     },
     "iris_clip_to_opening": true,
     "iris_clip_softness": 0.03,
-    "extra_iris_from_source": true
+    "extra_iris_from_source": true,
+    "sclera_tint": [
+      222,
+      228,
+      238
+    ],
+    "sclera_tint_mix": 0.55,
+    "eyelid_shadow": {
+      "enabled": true,
+      "tint": [
+        150,
+        160,
+        192
+      ],
+      "opacity": 0.82,
+      "fade_at": 0.62,
+      "gamma": 1.15
+    },
+    "layer_blend": {
+      "eyeshadow": "multiply"
+    }
   },
   "variant_layers": {
     "eye_close": {
@@ -206,6 +227,7 @@
     "eye_order": [
       "eyewhite",
       "irides",
+      "eyeshadow",
       "eyelash"
     ],
     "brow_layer": "eyebrow-r",

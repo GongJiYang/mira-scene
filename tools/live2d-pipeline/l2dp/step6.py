@@ -5,8 +5,12 @@ import cv2
 import numpy as np
 from PIL import Image
 from psd_tools import PSDImage
+from psd_tools.constants import BlendMode
 
-from . import repair, util, variants
+from . import overrides, repair, util, variants
+
+# Part.blend -> the PSD blend mode psd2live reads back (psd2live maps 'mul ' to Multiply)
+_BLEND_MODES = {'normal': BlendMode.NORMAL, 'multiply': BlendMode.MULTIPLY}
 
 
 def _insert_after_layer(out, anchor, names, avail):
@@ -73,6 +77,14 @@ def run(cfg, out_root, log=print):
     eye_parts = util.load_parts(os.path.join(out_root, 'step5', 'layers'))
     for p in eye_parts:
         parts[p.name] = p
+
+    # ---- hidden-area reference-pack overrides (docs/live2d-ref-pack.md) ------
+    # the mask needs the stack order: an override may be limited to the pixels the layers above
+    # already cover (the parts that are hidden in the artwork)
+    pre_base = [p.name for p in base_parts if p.name not in set(c.get('drop_base_layers') or [])]
+    pre_order = stack_order(cfg, pre_base, [p.name for p in residual], parts.keys())
+    parts, override_metrics = overrides.apply(cfg, parts, orig, out_root,
+                                              order=pre_order, log=log)
 
     # ---- drawn variants: closed eyes, open mouth ----------------------------
     s5 = util.read_json(os.path.join(out_root, 'step5', 'metrics.json'))
@@ -173,7 +185,8 @@ def run(cfg, out_root, log=print):
     for p in stack:
         psd.create_pixel_layer(Image.fromarray(
             np.ascontiguousarray(np.clip(p.img, 0, 255).astype(np.uint8)), 'RGBA'),
-            name=p.name, top=p.top, left=p.left, opacity=255)
+            name=p.name, top=p.top, left=p.left, opacity=255,
+            blend_mode=_BLEND_MODES.get(getattr(p, 'blend', 'normal'), BlendMode.NORMAL))
     psd.save(psd_path)
 
     # ---- verify by reading the PSD back --------------------------------------
@@ -181,7 +194,9 @@ def run(cfg, out_root, log=print):
     reread = []
     for layer in back.descendants():
         if layer.kind == 'pixel':
-            reread.append(util.Part(layer.name, util.layer_rgba(layer), layer.bbox[0], layer.bbox[1]))
+            bm = 'multiply' if layer.blend_mode == BlendMode.MULTIPLY else 'normal'
+            reread.append(util.Part(layer.name, util.layer_rgba(layer),
+                                    layer.bbox[0], layer.bbox[1], blend=bm))
     flat2 = util.composite([p for p in reread if p.name not in rest_hidden], (W, H))
     diff_read, gate_read = util.gated_diff(orig, flat2, c['compare_alpha_gate'])
 
@@ -245,6 +260,7 @@ def run(cfg, out_root, log=print):
         step3_reference_diff=ref_diff,
         passes_self_check=bool(diff_read <= ref_diff),
         variants=variant_metrics,
+        overrides=override_metrics,
         seam=dict(holes=hole_metrics, chin_collar_band=band_metrics,
                   neck=neck_metrics, residue=residue_metrics, face_eyes=eye_metrics,
                   specks=speck_metrics),
