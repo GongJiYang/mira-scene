@@ -39,6 +39,7 @@ import { detectSceneRequest } from "./scene/detect";
 import { resolveReferencePath, type ReferenceDirs } from "./scene/referencePath";
 import { runSceneJob, type SceneRunnerDeps } from "./scene/runner";
 import { initialSceneJobState, admitSceneJob, sceneJobReducer, type SceneJobState } from "./scene/job";
+import { hasWaitingPhoto } from "./scene/waitingPhoto";
 import { createInitialScene } from "./story";
 
 export type SendFn = (message: ServerMessage) => void;
@@ -101,6 +102,10 @@ type Session = {
   turnStartedAt: { turnId: number; at: number } | null;
   /** D27：已投递 / 已排期的剧情媒体事件，按 storyEventId 去重。 */
   mediaSent: Set<string>;
+  /** freeze-fix3 §2：本会话已调度、尚未就绪的剧情照片事件（用于 nudge 轮的 photoWaitingNote）。 */
+  photoScheduled: Set<string>;
+  /** freeze-fix3 §2：连续「nudge + 有未就绪照片」已铺垫的次数（图片就绪 / 新一轮重置）。 */
+  photoWaitingFired: number;
   /** D27：剧情媒体任务独立于轮次取消；dispose 时统一中止。 */
   mediaController: AbortController;
   /** S6b-fix1 §1：本会话角色的 TTS 音色（从 pack.voice.fishVoiceIdEnv 对应的环境变量解析）。 */
@@ -364,6 +369,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
   function scheduleMediaDelivery(session: Session, turnId: number, media_: Media, storyEventId: string): void {
     if (session.mediaSent.has(storyEventId)) return;
     session.mediaSent.add(storyEventId);
+    // freeze-fix3 §2：登记「已调度、未就绪」的剧情照片事件（视频不参与截图等待铺垫）。
+    if (media_.type === "photo") session.photoScheduled.add(storyEventId);
     logFor(session, turnId, "media_scheduled", { storyEventId });
     // S6b-fix1 §4：传入当前角色包与最近对话，让生图提示词用到本轮之前的对话内容。
     // 快照 history：后台任务异步完成时本轮历史已追加，快照保证「本轮之前」的语义。
@@ -372,6 +379,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       try {
         const result = await session.media.preset(media_, ctx, session.mediaController.signal);
         if (session.mediaController.signal.aborted) return;
+        // freeze-fix3 §2：照片就绪或失败（走预置图兜底）→ 不再等待。
+        session.photoScheduled.delete(storyEventId);
         session.send?.(
           buildEnvelope(session, turnId, "media_ready", {
             storyEventId,
@@ -382,6 +391,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         logFor(session, turnId, "media_ready_sent", { storyEventId, status: result.status });
       } catch (error) {
         if (isAbortError(error) || session.mediaController.signal.aborted) return;
+        // 失败：不再等待（走现有预置图兜底路径）。
+        session.photoScheduled.delete(storyEventId);
         logFor(session, turnId, "media_failed", { storyEventId, message: redactSecrets(error instanceof Error ? error.message : String(error)) });
       }
     })();
@@ -540,6 +551,15 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       if (eventNote !== undefined) {
         sceneNotes = sceneNotes === undefined ? eventNote : `${sceneNotes}。${eventNote}`;
       }
+      // freeze-fix3 §2：nudge 轮且本会话仍有「已调度、未就绪」的剧情照片 → 追加等待提示。
+      // 文案来自角色包 `photoWaitingNote`（代码只读字段，不写死文案）。
+      const photoWaiting = isNudge && hasWaitingPhoto({ scheduled: session.photoScheduled, ready: new Set() });
+      const photoWaitingIndex = session.photoWaitingFired;
+      if (photoWaiting) {
+        sceneNotes = sceneNotes === undefined ? session.pack.photoWaitingNote : `${sceneNotes}。${session.pack.photoWaitingNote}`;
+        // freeze-fix3 §3：Mock 按次序循环取 photoWaitingLines；真实 LLM 用同一计数无副作用。
+        session.photoWaitingFired += 1;
+      }
       // S6c-fix1 §1：busy 兜底句用本轮 seq 分配器（在下方 LLM 流开始前发出），不再硬编码 0。
       let sceneBusyBeat: Beat | null = null;
       if (!isNudge && input.type === "text_input" && inputKind === "text") {
@@ -656,7 +676,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
 
       try {
         for await (const raw of session.ports.llm.streamBeats(
-          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge, sceneNotes, kind: inputKind },
+          { history: session.history, scene: session.scene, userText, pack: session.pack, nudge: isNudge, sceneNotes, kind: inputKind, photoWaiting, photoWaitingIndex },
           llmSignal,
         )) {
           // 收到第一个 token 即撤销超时；后续不确定性交给现有取消语义。
@@ -945,6 +965,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         faults,
         turnStartedAt: null,
         mediaSent: new Set(),
+        photoScheduled: new Set(),
+        photoWaitingFired: 0,
         mediaController: new AbortController(),
         // §3：访问者覆盖的音色优先于角色包音色。
         voiceId: plan.voiceIdUser !== "" ? plan.voiceIdUser : resolveVoiceId(pack),

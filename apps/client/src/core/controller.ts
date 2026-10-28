@@ -11,6 +11,7 @@ import { dispatch, getStageState, pushEvent, useConnectionStore } from "./store"
 import { dispatchStoryMedia, installStoryMediaLink } from "./storyMediaLink";
 import { timeline, pushTimelineLog, timelineCountForTurn, timelineStoryCount } from "./timeline";
 import { initialNudgeLimitState, nudgeLimit, type NudgeLimitState } from "../state/nudge";
+import { installPhotoWaiting } from "./photoWaiting";
 import { characterOrDefault } from "../live/characters";
 import { setChannel, useChannelStore } from "../live/channel";
 import { useSettingsStore } from "../live/settings";
@@ -314,10 +315,28 @@ export function recordNudge(at: number): void {
   connection.sendNudge?.();
 }
 
+/**
+ * freeze-fix3 §1：截图等待期的铺垫 nudge。走与 `recordNudge` 相同的通道（A 起一轮 + 服务端 nudge 轮），
+ * 但**不受** `state/nudge.ts` 频率限制约束、也**不计入**它的计数（由截图事件自身的最多 3 次控制）。
+ * 条件不满足（非 idle / 连接未开）时静默跳过。
+ */
+export function recordPhotoWaitingNudge(at: number): void {
+  const stage = getStageState();
+  if (stage.phase.kind !== "idle" || useConnectionStore.getState().status !== "open") {
+    pushEvent(`photo-waiting nudge@${at} · 条件不满足（phase=${stage.phase.kind}），未发送`);
+    return;
+  }
+  pushEvent(`photo-waiting nudge@${at} · 主动开口 t${stage.currentTurnId + 1}`);
+  dispatch({ type: "NUDGE" });
+  connection.sendNudge?.();
+}
+
 export function bootstrapConnection(): void {
   // 表演时钟（B）与剧情媒体（C）的接线都在这里启动：UI 只经由视图模型读状态。
   installPerformanceClock({ onNudge: recordNudge });
   installStoryMediaLink();
+  // freeze-fix3 §1：截图生成期间的「边翻边聊」铺垫（独立于普通 nudge 频率限制）。
+  installPhotoWaiting({ now: () => timeline.now(), onNudge: recordPhotoWaitingNudge });
   // S6c-fix1 §2：换背景失败 / 拒绝的兜底走剧情层——空档播放本地预录 + 字幕。
   installSceneFallback({
     characterId: () => characterOrDefault(useChannelStore.getState().characterId).id,

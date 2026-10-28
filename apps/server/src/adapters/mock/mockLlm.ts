@@ -34,6 +34,16 @@ export function composeBeats(ctx: LLMContext, pack: Pack): LlmBeat[] {
   const intent = classifyIntent(ctx.userText, pack.intentPatterns);
 
   if (ctx.nudge) {
+    // freeze-fix3 §3：截图尚未就绪时，边翻边聊——从 photoWaitingLines 按次序循环取一句。
+    if (ctx.photoWaiting) {
+      const lines = pack.photoWaitingLines;
+      const index = lines.length > 0 ? (ctx.photoWaitingIndex ?? 0) % lines.length : 0;
+      const say = lines[index] ?? "";
+      return [
+        { say: "", emotion: "calm", suggest: null, advance: null, accent: null },
+        { say, emotion: "calm", suggest: null, advance: null, accent: null },
+      ];
+    }
     // S6l §4：沉默时按阶段抛钩子——节点有 hook 就说 hook，否则回退到全局 nudge 台词。
     const hook = pack.nodes[ctx.scene.node].hook;
     if (hook !== "") {
