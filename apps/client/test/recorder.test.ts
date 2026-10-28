@@ -30,7 +30,29 @@ describe("recorder：错误收尾", () => {
     vi.stubGlobal("MediaRecorder", ErroringMediaRecorder);
 
     const recorder = createRecorder();
-    await expect(recorder.start()).resolves.toBe(true);
+    await expect(recorder.start()).resolves.toEqual({ started: true });
     await expect(recorder.stop()).resolves.toBeNull();
+  });
+});
+
+describe("freeze-fix8 §3 recorder：start() 返回失败原因", () => {
+  it("getUserMedia 抛 NotAllowedError → { started:false, reason:'denied' }", async () => {
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: () => Promise.reject(new DOMException("denied", "NotAllowedError")) },
+    });
+    vi.stubGlobal("MediaRecorder", ErroringMediaRecorder);
+
+    const recorder = createRecorder();
+    await expect(recorder.start()).resolves.toEqual({ started: false, reason: "denied" });
+  });
+
+  it("getUserMedia 抛其他错误 → { started:false, reason:'unavailable' }", async () => {
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: () => Promise.reject(new Error("boom")) },
+    });
+    vi.stubGlobal("MediaRecorder", ErroringMediaRecorder);
+
+    const recorder = createRecorder();
+    await expect(recorder.start()).resolves.toEqual({ started: false, reason: "unavailable" });
   });
 });

@@ -100,6 +100,14 @@ export const UI_TEXT = {
   // ---- S6u §3：手机录音面板 ----
   /** 录音面板的松开发送提示。 */
   recordingSend: "松开发送",
+
+  // ---- freeze-fix8 §2/§3：麦克风轻提示 ----
+  /** freeze-fix8 §2：短按（<300ms）麦克风时的轻提示。 */
+  pttHoldHint: "按住麦克风说话，松开发送",
+  /** freeze-fix8 §3：非 HTTPS / 浏览器不支持录音时的提示。 */
+  micUnavailableHint: "当前页面不是 HTTPS，浏览器不允许录音；可以先发弹幕聊天",
+  /** freeze-fix8 §3：录音权限被拒（NotAllowedError）时的提示。 */
+  micDeniedHint: "麦克风权限被拒绝了，可以在浏览器设置里打开，或者先发弹幕",
 } as const;
 
 /**

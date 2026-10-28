@@ -1,14 +1,26 @@
 import { useMicStore } from "./store";
 import { rmsFromTimeDomain } from "./audioLevel";
+import { isPermissionDenied } from "../live/micHints";
 
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/mp4"] as const;
 const MIN_RECORDING_MS = 300;
 
 export type Recording = { blob: Blob; mime: string; durationMs: number };
 
+/** freeze-fix8 §3：start() 失败的原因，供外壳决定显示哪条提示。 */
+export type StartFailure = "denied" | "unavailable";
+
+/** freeze-fix8 §3：start() 结果——成功，或失败 + 原因。 */
+export type StartResult =
+  | { started: true }
+  | { started: false; reason: StartFailure };
+
 export type Recorder = {
-  /** 开始录音；权限被拒绝或不可用时返回 false，并把原因写入 micError slice。 */
-  start(): Promise<boolean>;
+  /**
+   * 开始录音；权限被拒绝或不可用时返回 false / 原因，并把原因写入 micError slice。
+   * freeze-fix8 §3：`StartResult` 携带失败原因（`denied` = NotAllowedError，`unavailable` = 其他）。
+   */
+  start(): Promise<StartResult>;
   /** 停止录音；不足 300ms（误触）、没有数据或录音器出错时返回 null。 */
   stop(): Promise<Recording | null>;
   /** S6f §2：当前输入音量（RMS 0–1），未录音时返回 0。倾听声波据此跳动。 */
@@ -30,7 +42,7 @@ export function createRecorder(): Recorder {
   let stream: MediaStream | null = null;
   let chunks: Blob[] = [];
   let startedAt = 0;
-  let starting: Promise<boolean> | null = null;
+  let starting: Promise<StartResult> | null = null;
   // MediaRecorder 的 error 事件：本轮录音不可用，stop() 一律返回 null。
   let failed = false;
   // stop() 早于 getUserMedia 完成时置位：避免用户松开后才开始录音。
@@ -64,18 +76,18 @@ export function createRecorder(): Recorder {
     analyserBuffer = null;
   }
 
-  function begin(): Promise<boolean> {
+  function begin(): Promise<StartResult> {
     if (starting) {
       cancelled = false;
       return starting;
     }
     cancelled = false;
-    const attempt = (async () => {
+    const attempt = (async (): Promise<StartResult> => {
       try {
         const nextStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         if (cancelled) {
           nextStream.getTracks().forEach((track) => track.stop());
-          return false;
+          return { started: false, reason: "unavailable" };
         }
         stream = nextStream;
         attachAnalyser(nextStream);
@@ -92,13 +104,14 @@ export function createRecorder(): Recorder {
         mediaRecorder.start();
         startedAt = performance.now();
         useMicStore.setState({ micError: null });
-        return true;
+        return { started: true };
       } catch (error) {
         useMicStore.setState({ micError: error instanceof Error ? error.message : "麦克风权限被拒绝" });
         stream?.getTracks().forEach((track) => track.stop());
         stream = null;
         mediaRecorder = null;
-        return false;
+        // freeze-fix8 §3：NotAllowedError（用户拒绝 / 非安全上下文）单独标记，外壳显示权限提示。
+        return { started: false, reason: isPermissionDenied(error) ? "denied" : "unavailable" };
       } finally {
         starting = null;
       }
@@ -109,10 +122,10 @@ export function createRecorder(): Recorder {
 
   return {
     start() {
-      if (mediaRecorder) return Promise.resolve(true);
+      if (mediaRecorder) return Promise.resolve<StartResult>({ started: true });
       if (typeof navigator === "undefined" || !navigator.mediaDevices) {
         useMicStore.setState({ micError: "当前环境不支持麦克风" });
-        return Promise.resolve(false);
+        return Promise.resolve<StartResult>({ started: false, reason: "unavailable" });
       }
       return begin();
     },

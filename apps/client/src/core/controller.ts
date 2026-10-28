@@ -18,6 +18,9 @@ import { useSettingsStore } from "../live/settings";
 import { resetSceneStatus } from "../live/scene/status";
 import { installSceneFallback, resetSceneFallback } from "../live/scene/sceneFallback";
 import { initialPerformanceState } from "../state/performance";
+import { blocksMic, readMicEnv } from "../live/micHints";
+import { showMicHint } from "../live/micHintStore";
+import { UI_TEXT } from "../live/uiText";
 
 export type Intents = {
   pttDown(): void;
@@ -116,6 +119,14 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
 
   return {
     pttDown() {
+      // freeze-fix8 §3：启动时（每次按下）检测录音能力——非 HTTPS / 无 getUserMedia 时不进入 listening，
+      // 显示可读提示，避免「按了没反应」。
+      const env = readMicEnv();
+      if (blocksMic(env)) {
+        pushEvent("ptt down · 麦克风不可用，未进入倾听");
+        showMicHint(UI_TEXT.micUnavailableHint);
+        return;
+      }
       const { currentTurnId, phase } = getStageState();
       const wasActive = phase.kind !== "idle";
       pushEvent(`ptt down t${currentTurnId}`);
@@ -127,10 +138,11 @@ export function createController({ connection, recorder }: ControllerDeps): Inte
         dispatch({ type: "PTT_DOWN" });
       }
       const turnId = getStageState().currentTurnId;
-      void recorder.start().then((started) => {
-        if (started) return;
-        // 麦克风被拒绝 / 不可用：本轮没有上行输入，回到 idle，否则会卡在 listening。
-        pushEvent(`ptt down · 麦克风不可用，取消 t${turnId}`);
+      void recorder.start().then((result) => {
+        if (result.started) return;
+        // freeze-fix8 §3：权限被拒 / 不可用：本轮没有上行输入，回到 idle，否则会卡在 listening。
+        pushEvent(`ptt down · 麦克风不可用（${result.reason}），取消 t${turnId}`);
+        showMicHint(result.reason === "denied" ? UI_TEXT.micDeniedHint : UI_TEXT.micUnavailableHint);
         dispatch({ type: "INPUT_CANCELLED", turnId });
       });
     },

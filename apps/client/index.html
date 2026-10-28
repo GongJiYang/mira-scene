@@ -4,13 +4,8 @@
     <meta charset="UTF-8" />
     <!-- S5 §3：viewport-fit=cover，配合 safe-area-inset 适配刘海/圆角屏。 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- S6u §1：Noto Sans SC（正文）+ VT323（系统数字 / 英文标签）。加载失败回落 system-ui / monospace。 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=VT323&display=swap"
-      rel="stylesheet"
-    />
+    <!-- freeze-fix8 §1：不再引用 Google Fonts（国内无法访问，会阻塞渲染）。
+         正文字体走系统字体栈；VT323 自托管（见 live.css 的 @font-face）。 -->
     <title>忧奈直播间 · 深夜推流</title>
   </head>
   <body>
