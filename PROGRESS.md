@@ -1,11 +1,13 @@
-# PROGRESS（更新于 2026-10-28 10:00，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
+# PROGRESS（更新于 2026-10-28 11:20，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
 【冻结期 · freeze-fix1 验收】
 1. 先看 cmd 是否跑完：`pgrep -fl command-code`；`ls /Users/gjy/mira-wt-ff1/docs/tasks/freeze-fix1-report.md`。还在跑就等；进程没了但没有报告 → 同一 worktree 续跑，提示「先 git diff 核对已完成部分，不要推倒重来」。
 2. 跑完后：worktree 里自己跑 `pnpm test` + `pnpm typecheck`；审核心（`director/forcedAdvance.ts`、`adapters/deepseek/llmRetry.ts`、`scene/runner.ts` 错误分类、动作表参数实测表与处理），再提交 → 合并 → 推送。
 3. **重启用户的真实模式 dev server**（被 cmd 的 `pkill -f vite` 杀掉了）：在 main 后台跑 `PROVIDER_MODE=real PORT=8791 MIRA_CLIENT_PORT=5181 MIRA_SERVER_PORT=8791 pnpm dev`。然后在 5181 复测：动作表逐项、剧情能否走到 ending、第二次换背景。
-4. 然后按 `docs/tasks/delivery.md` 执行：冷启动验证 → README / AI_USAGE / 仓库清理（给用户审） → 录屏（ScreenCaptureKit 小工具；用户需给终端授权屏幕录制一次）。
+4. 然后按 `docs/tasks/delivery.md` 执行：冷启动验证（结果填进 README「冷启动实测」）→ README「已知问题」按 freeze-fix1 实测更新 → 写 AI_USAGE.md → 录屏（ScreenCaptureKit 小工具；用户需给终端授权屏幕录制一次）。
+   - 已做（3634bdf）：README 初稿（八项 + 可选扩展，⏳ 标记待填）、`docs/README.md` 文档地图、导读更新到冻结点、checklist 并入导读、roadmap 标历史、`.env.example` 改 IMAGE_*、cmd 日志移出仓库、删 shot-tmp.mjs。
+   - 推送前：`tools/live2d-pipeline/config.refpack.json` 有 16 处 `/Users/gjy` 绝对路径（7c8a596 提交，用户让提交），问用户是否改相对路径。
 
 ## 当前位置
 - 功能已冻结（D48）。main 含 S6c-fix1 到 S6u 全部批次，969 个单测全绿。
@@ -43,7 +45,7 @@
 
 ## 待用户处理
 - 录屏前给终端授权「屏幕录制」。
-- 审 README / AI_USAGE。
+- 审 README 初稿（已提交 3634bdf，未推送）/ AI_USAGE（未写）。
 - 试听 `assets/voice/yuna/clips/` 和 `characters/yuna/sfx/`。
 - 部署（可选，服务器在用户手里）。
 
