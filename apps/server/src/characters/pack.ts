@@ -156,6 +156,13 @@ export const contentFileSchema = z.object({
   intents: z.record(intentSlotSchema, z.string()),
   nodes: z.record(storyNodeSchema, nodeSchema),
   nudge: z.array(nudgeBeatSchema).min(1),
+  /**
+   * freeze-fix3 §2：本会话有「已调度、未就绪」的剧情照片时，nudge 轮追加到 `scene_notes` 的提示。
+   * 代码只读该字段，不写死文案。
+   */
+  photoWaitingNote: z.string().min(1),
+  /** freeze-fix3 §3：Mock 在 nudge + 未就绪照片时按次序循环取用的铺垫台词。 */
+  photoWaitingLines: z.array(z.string().min(1)).min(1),
   /** S6l §5：戳一下 / 送礼物时 Mock 的情景回应。 */
   events: eventsSchema,
   /** 五类兜底台词（键为 FALLBACK_CATEGORIES；完整性由 crossCheck 保证）。 */
@@ -209,6 +216,10 @@ export type Pack = {
   /** 剧情节点脚本（label / guidance / look / lines）。 */
   nodes: Record<StoryNode, NodeScript>;
   nudge: readonly NudgeBeat[];
+  /** freeze-fix3 §2：截图未就绪时 nudge 轮追加的提示（只读，文案来自 content.json）。 */
+  photoWaitingNote: string;
+  /** freeze-fix3 §3：Mock 在 nudge + 未就绪照片时按次序循环取用的铺垫台词。 */
+  photoWaitingLines: readonly string[];
   /** S6l §5：戳一下 / 送礼物时 Mock 的情景回应台词。 */
   events: EventLines;
   fallback: Record<FallbackCategory, string>;
@@ -337,6 +348,8 @@ export function parsePack(input: {
       dynamicTemplate: input.dynamicTemplate,
       nodes,
       nudge: contentParsed.data.nudge,
+      photoWaitingNote: contentParsed.data.photoWaitingNote,
+      photoWaitingLines: contentParsed.data.photoWaitingLines,
       events: contentParsed.data.events,
       fallback: contentParsed.data.fallback as Record<FallbackCategory, string>,
       intentPatterns,

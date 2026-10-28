@@ -38,6 +38,13 @@ export type LLMContext = {
    * poke / gift 时 Mock 走 `pack.events` 情景回应；真实 LLM 由 `sceneNotes` 描述。
    */
   kind?: "text" | "poke" | "gift";
+  /**
+   * freeze-fix3 §3：本会话存在「已调度、未就绪」的剧情照片（仅 nudge 轮有意义）。
+   * Mock 据此从 `pack.photoWaitingLines` 取铺垫台词。
+   */
+  photoWaiting?: boolean;
+  /** freeze-fix3 §3：已铺垫次数，Mock 按此次序循环取 `photoWaitingLines`。 */
+  photoWaitingIndex?: number;
 };
 
 /** 音频端口：方法都必须接收 AbortSignal。 */
