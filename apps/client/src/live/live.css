@@ -1137,6 +1137,21 @@ body,
   z-index: 20;
 }
 
+/*
+ * freeze-fix4 §2：倾听声波的固定宽度槽位。
+ * 声波只用 listening 时出现，槽位始终占位——出现 / 消失都不改变输入条布局，
+ * PTT 按钮不会被挤动（否则指针落到按钮外触发 pointerleave，录音被提前结束）。
+ */
+.live-wave-slot {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  width: 76px;
+  flex-shrink: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
 /* S6f §2：倾听声波（随输入音量跳动；--level 由 JS 每帧写入） */
 .live-wave {
   display: inline-flex;
