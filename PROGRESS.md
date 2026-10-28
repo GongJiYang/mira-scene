@@ -1,7 +1,7 @@
 # PROGRESS（更新于 2026-10-28 04:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【S6u · 关卡 8/9】S6n 已合并（964 测试，Key 脱敏已独立核查）。S6u（深夜推流 UI，`docs/tasks/s6u.md`，设计稿 `docs/design/s6u/`）已在 `/Users/gjy/mira-wt-s6u` 派发。跑完：简单检测 + testid 只增不减核对 → 合并 → 用户浏览器看效果 → 进入冻结点（统一深审 + e2e 一次 + 真实模式走查）。
+【冻结期 · freeze-fix1】S6u 已合并（969 测试）。冻结点检查已做：e2e 全量 44 过 / 5 败（全是测试断言写错）、真实模式走查、动作表量化。发现汇总进 `docs/tasks/freeze-fix1.md`（剧情保底推进、换背景超时与原因、LLM 重试、动作表实测与修正、S6u 三处、smoke 固定 Mock、e2e 修正），已在 `/Users/gjy/mira-wt-ff1` 派发。跑完：检测 + 审 + 浏览器复测 → 合并；然后冷启动验证 → 文档 → 录屏。
 
 ## 当前位置
 main 已经包含 S6c-fix1（换背景旁路修复 + 4 个界面问题）和 S6k（语境表情 accent，D47），共 787 个单测全绿，已推送。**路线已冻结（D48）**，依据是题目原文 `/Users/gjy/Downloads/0912-candidate(1) (1).pdf`。
