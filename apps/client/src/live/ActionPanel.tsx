@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { usePreviewStore, previewDisabled, previewDurationSec, type PreviewItem } from "./previewStore";
+import { useDanceStore } from "./danceStore";
 import { ACTION_LABELS, UI_TEXT } from "./uiText";
 import type { StagePhase } from "../view/useStageViewModel";
 import type { Accent, Emotion } from "@mira/protocol";
@@ -64,6 +65,10 @@ export function ActionButtons({ phase, onPick }: { phase: StagePhase; onPick: (i
   const previewItem = usePreviewStore((state) => state.item);
   const previewStartedAtMs = usePreviewStore((state) => state.startedAtMs);
   const { value: activeValue, remaining } = usePreviewCountdown(previewItem, previewStartedAtMs);
+  const dancing = useDanceStore((state) => state.active);
+  const startDance = useDanceStore((state) => state.start);
+  const stopDance = useDanceStore((state) => state.stop);
+  const endPreview = usePreviewStore((state) => state.endPreview);
 
   const groups: Array<{ title: string; items: PreviewItem[]; grid?: string }> = [
     { title: UI_TEXT.actionGroupEmotion, items: EMOTIONS.map(emotionItem) },
@@ -100,6 +105,25 @@ export function ActionButtons({ phase, onPick }: { phase: StagePhase; onPick: (i
                 </button>
               );
             })}
+            {group.title === UI_TEXT.actionGroupLocal && (
+              <button
+                type="button"
+                className="action-button"
+                data-testid="action-dance"
+                data-preview={dancing ? "1" : "0"}
+                disabled={disabled && !dancing}
+                onClick={() => {
+                  if (dancing) {
+                    stopDance();
+                    return;
+                  }
+                  endPreview();
+                  startDance();
+                }}
+              >
+                {dancing ? UI_TEXT.actionDanceStop : UI_TEXT.actionDance}
+              </button>
+            )}
           </div>
         </div>
       ))}

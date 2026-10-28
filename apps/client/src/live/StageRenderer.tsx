@@ -24,6 +24,7 @@ import { ACCENT_FADE_SEC, accentBlend, type AccentTiming } from "../render/live2
 import { composePreview, previewDurationSec, usePreviewStore, type PreviewItem } from "./previewStore";
 import { SILENT_ACTION_TABLE } from "../render/live2d/yunaParams";
 import { LOCAL_ACTION_DURATION_SEC } from "../render/live2d/localActions";
+import { DanceLayer } from "./DanceLayer";
 import { toYunaEmotion } from "./emotionMap";
 import { StoryVideo } from "../stage/StoryVideo";
 import {
@@ -413,6 +414,8 @@ function Live2dStage({
       {/* S6b §3：脚下柔和的椭圆接触阴影（宽约人物宽度 70%，半透明深紫），避免人物悬空。 */}
       <div className="live-contact-shadow" data-testid="contact-shadow" aria-hidden />
       <canvas ref={canvasRef} className="live-live2d-canvas" data-testid="yuna-canvas" />
+      {/* 动作表「跳舞」：Live2D ⇄ AI 舞蹈视频（与首帧配准）。她开口 / 有新输入即切回。 */}
+      <DanceLayer canvasRef={canvasRef} busy={phase === "thinking" || phase === "speaking" || phase === "listening"} />
       <FxLayers fx={visual.fx as Fx | null} />
       {error !== null && (
         <p className="live-error" data-testid="yuna-error">

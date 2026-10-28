@@ -1895,3 +1895,22 @@ body,
 .settings-save:hover {
   background: #d9beff;
 }
+
+/* 动作表「跳舞」：AI 舞蹈视频层（与 Live2D 首帧配准，盖在画布之上），切回时的扫描线。 */
+.live-dance-video {
+  position: absolute;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  object-fit: fill;
+}
+
+.live-dance-scan {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 6px);
+  mix-blend-mode: screen;
+}

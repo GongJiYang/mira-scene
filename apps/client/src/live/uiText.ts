@@ -64,6 +64,9 @@ export const UI_TEXT = {
   actionGroupAccent: "表情",
   actionGroupAction: "动作",
   actionGroupLocal: "新动作",
+  /** 动作表「跳舞」：Live2D 无缝切到 AI 舞蹈视频。 */
+  actionDance: "跳舞",
+  actionDanceStop: "停止",
 
   // ---- S6u §2/§3：状态牌（读 phase） ----
   /** 待机。 */
