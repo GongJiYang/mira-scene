@@ -5,6 +5,19 @@
  * 旧的 --live-* 变量保留为别名，指向新 token，原有 class 自动换色。
  */
 
+/*
+ * freeze-fix8 §1：VT323 自托管（原从 Google Fonts 加载，国内无法访问会阻塞渲染）。
+ * 文件来源：npm 包 @fontsource/vt323@5.0.13（files/vt323-latin-400-normal.woff2），
+ * 许可证 SIL Open Font License 1.1（见 public/fonts/VT323-LICENSE.txt）。
+ */
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/vt323-latin-400-normal.woff2") format("woff2");
+}
+
 :root {
   /* §1 设计 token */
   --ink: #120e1c;
@@ -22,7 +35,8 @@
   --think: #ffc27a;
   --ok: #9ef0c2;
 
-  --font-body: "Noto Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* freeze-fix8 §1：正文走系统字体栈（Noto 仅作本机已装时的候选，不再下载）。 */
+  --font-body: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "VT323", ui-monospace, "Menlo", "Courier New", monospace;
 
   --radius-panel: 10px;
@@ -484,6 +498,49 @@ body,
   /* 手机字幕贴在 bottom: calc(96px + safe-area)；提示放在字幕正上方。 */
   bottom: calc(134px + env(safe-area-inset-bottom));
   z-index: 26;
+}
+
+/*
+ * freeze-fix8 续修：手机端输入栏不预留声波槽位。
+ * freeze-fix4 §2 的固定宽度槽位（76px）在手机上即使空闲也占位，把麦克风按钮往左挤、输入框变窄。
+ * 手机端改为绝对定位叠放（不参与 flex 布局）：声波浮在麦克风按钮上方，空闲 / 录音时输入栏布局完全一致。
+ * 桌面端仍用 .live-wave-slot 的固定槽位（行为不变）。
+ */
+.live-mobile-compose .live-wave-slot {
+  position: absolute;
+  /* 贴麦克风按钮（60px 圆形）上方居中；不占位、不接收指针事件。 */
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: auto;
+  height: auto;
+  justify-content: flex-end;
+}
+
+.live-mobile-compose .live-wave {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(18, 14, 28, 0.86);
+  border: 1px solid var(--line);
+  height: auto;
+  align-items: center;
+}
+
+/* freeze-fix8 §2/§3：麦克风轻提示（短按 / 不可用 / 权限被拒，复用琥珀色一行样式）。 */
+.live-mic-hint {
+  margin-top: 6px;
+  text-align: center;
+  color: var(--think);
+  font-size: 12px;
+}
+
+.live-mobile .live-mic-hint {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  /* 手机：贴在底部输入胶囊上方。 */
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  z-index: 27;
+  margin-top: 0;
 }
 
 /* S6u §2/§3：状态牌（右上角）。 */

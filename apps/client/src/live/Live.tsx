@@ -15,6 +15,8 @@ import { LiveEntries, MobileMenu } from "./entries";
 import { ActionPanelDesktop } from "./ActionPanel";
 import { ModeBadge, SettingsDialogDesktop } from "./SettingsPanel";
 import { formatHms, UI_TEXT } from "./uiText";
+import { isShortPress } from "./micHints";
+import { showMicHint, useMicHintStore } from "./micHintStore";
 import { stateChipFor } from "./stateChip";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
@@ -211,6 +213,8 @@ export function Live() {
   const [danmaku, dispatchDanmaku] = useReducer(danmakuReducer, initialDanmakuState);
   const [draft, setDraft] = useState("");
   const holding = useRef(false);
+  // freeze-fix8 §2：记录按下的时刻，松开时判定是否为短按（<300ms）。
+  const holdStartedAt = useRef(0);
 
   const orientation = layout === "desktop" ? "landscape" : "portrait";
   // S6c §5：换背景 ready 后换成新背景；否则用角色包默认背景（D43：只有忧奈）。
@@ -244,12 +248,15 @@ export function Live() {
   const startPtt = useCallback(() => {
     if (holding.current) return;
     holding.current = true;
+    holdStartedAt.current = performance.now();
     vm.intents.pttDown();
   }, [vm.intents]);
 
   const endPtt = useCallback(() => {
     if (!holding.current) return;
     holding.current = false;
+    // freez-fix8 §2：短按（<300ms）录音会被丢弃 → 显示「按住说话」轻提示，用户才明白怎么用。
+    if (isShortPress(performance.now() - holdStartedAt.current)) showMicHint(UI_TEXT.pttHoldHint);
     vm.intents.pttUp();
   }, [vm.intents]);
 
@@ -498,6 +505,9 @@ export function Live() {
             </span>
           </form>
 
+          {/* freeze-fix8 §2/§3：麦克风轻提示（输入条下方）。 */}
+          <MicHint />
+
           {/* 弹幕窗口（占两行） */}
           <aside className="live-chat">
             <div className="live-chat-bar">
@@ -599,6 +609,20 @@ function SceneStatusBar() {
   return (
     <div className="live-scene-status" data-testid="scene-status" data-kind={display.kind}>
       {text}
+    </div>
+  );
+}
+
+/**
+ * freeze-fix8 §2/§3：麦克风轻提示（短按 / 不可用 / 权限被拒）。
+ * 复用现有轻提示样式（`.live-mic-hint`，琥珀色一行）；显示由 `useMicHintStore` 控制，2s 后自动消失。
+ */
+function MicHint() {
+  const hint = useMicHintStore((state) => state.hint);
+  if (hint === null) return null;
+  return (
+    <div className="live-mic-hint" data-testid="mic-hint" data-no-stage-tap>
+      {hint}
     </div>
   );
 }
@@ -832,6 +856,9 @@ function MobileLive(props: MobileProps) {
             )}
           </span>
         </form>
+
+        {/* freeze-fix8 §2/§3：麦克风轻提示（输入区上方）。 */}
+        <MicHint />
 
         {vm.error && vm.debugMode && <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>}
         <span className="live-status" data-testid="status">

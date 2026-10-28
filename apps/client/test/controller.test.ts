@@ -25,7 +25,7 @@ function fakeConnection(events: string[], overrides: Partial<Connection> = {}): 
 
 function fakeRecorder(recording: Recording | null): Recorder {
   return {
-    start: () => Promise.resolve(true),
+    start: () => Promise.resolve({ started: true } as const),
     stop: () => Promise.resolve(recording),
     level: () => 0,
   };
@@ -132,7 +132,7 @@ describe("controller：PTT", () => {
     const denied: Recorder = {
       start() {
         useMicStore.setState({ micError: "NotAllowedError" });
-        return Promise.resolve(false);
+        return Promise.resolve({ started: false, reason: "denied" } as const);
       },
       stop: () => Promise.resolve(null),
       level: () => 0,
