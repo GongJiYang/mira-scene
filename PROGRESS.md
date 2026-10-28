@@ -1,73 +1,51 @@
-# PROGRESS（更新于 2026-10-28 04:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
+# PROGRESS（更新于 2026-10-28 10:00，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【冻结期 · freeze-fix1】S6u 已合并（969 测试）。冻结点检查已做：e2e 全量 44 过 / 5 败（全是测试断言写错）、真实模式走查、动作表量化。发现汇总进 `docs/tasks/freeze-fix1.md`（剧情保底推进、换背景超时与原因、LLM 重试、动作表实测与修正、S6u 三处、smoke 固定 Mock、e2e 修正），已在 `/Users/gjy/mira-wt-ff1` 派发。跑完：检测 + 审 + 浏览器复测 → 合并；然后冷启动验证 → 文档 → 录屏。
+【冻结期 · freeze-fix1 验收】
+1. 先看 cmd 是否跑完：`pgrep -fl command-code`；`ls /Users/gjy/mira-wt-ff1/docs/tasks/freeze-fix1-report.md`。还在跑就等；进程没了但没有报告 → 同一 worktree 续跑，提示「先 git diff 核对已完成部分，不要推倒重来」。
+2. 跑完后：worktree 里自己跑 `pnpm test` + `pnpm typecheck`；审核心（`director/forcedAdvance.ts`、`adapters/deepseek/llmRetry.ts`、`scene/runner.ts` 错误分类、动作表参数实测表与处理），再提交 → 合并 → 推送。
+3. **重启用户的真实模式 dev server**（被 cmd 的 `pkill -f vite` 杀掉了）：在 main 后台跑 `PROVIDER_MODE=real PORT=8791 MIRA_CLIENT_PORT=5181 MIRA_SERVER_PORT=8791 pnpm dev`。然后在 5181 复测：动作表逐项、剧情能否走到 ending、第二次换背景。
+4. 然后按 `docs/tasks/delivery.md` 执行：冷启动验证 → README / AI_USAGE / 仓库清理（给用户审） → 录屏（ScreenCaptureKit 小工具；用户需给终端授权屏幕录制一次）。
 
 ## 当前位置
-main 已经包含 S6c-fix1（换背景旁路修复 + 4 个界面问题）和 S6k（语境表情 accent，D47），共 787 个单测全绿，已推送。**路线已冻结（D48）**，依据是题目原文 `/Users/gjy/Downloads/0912-candidate(1) (1).pdf`。
+- 功能已冻结（D48）。main 含 S6c-fix1 到 S6u 全部批次，969 个单测全绿。
+- 冻结点检查已做：e2e 全量（44 过 / 5 败，失败的都是测试断言写错）、真实模式走查、动作表逐项量化。
+- 发现的问题都写进 `docs/tasks/freeze-fix1.md`，已派发到 `/Users/gjy/mira-wt-ff1`（10:00 时已跑 66 分钟，正在做 §4 参数探针）。要修的是：
+  - 剧情保底推进（真实模式 9 轮卡在 probe）
+  - 换背景单张图片 60s 超时，失败原因被报成 aborted
+  - LLM 遇到 `fetch failed` 时重试
+  - 动作表：挥手无效；爱心眼 / 脸黑 / 黑眼圈 / 哭看不出；平静、中性、惊讶看起来一样
+  - S6u 三处：时长写死 02:14:37、手机端标题条压住头、手机端 ⇅ 按钮
+  - smoke 固定走 Mock
+  - 修正 3 个 e2e 用例
 
-## 冻结路线（D48；一次只跑一批；冻结点之后只修 bug）
-1. ✅ S6c-fix1、S6k
-2. **S6l 剧情可感知**：
-   - 修 arrive→probe 卡死（`advanceRule` 在 arrive 只写「允许进入 reveal」，`story.ts` 只放行 arrive→probe）
-   - 顶部显示剧情阶段 + 进度点
-   - **观众弹幕引导**：按阶段刷话题弹幕，点一下就作为自己的话发出（用户点名喜欢这个）
-   - 沉默时按阶段抛钩子；戳忧奈触发表情反应；送礼物（love + heart）
-   - 点击打断
-   - 设定为成年：22 岁、刚毕业的个人势主播
-   - 输入框文案「发条弹幕，或按住麦克风说话」
-2b. **S6l-fix1**（`docs/tasks/s6l-fix1.md`，已写好）：①第二次换背景必失败（参考图路径映射到了不存在的 client/public/generated，实际在 var/generated；且失败不记日志）；②刷新后生成背景和用户弹幕丢失（服务端 `session` 消息只回 snapshot）；③思考时的反应音是 Fish 默认音色（「男声」），改为按角色用忧奈音色重录；④预录声音叠加：兜底语音走 `playLocalAudio` 独立 AudioContext，不受打断、不让位，改为统一单通道。S6l 合并后立即派发（两批都改 `session.ts`/`messages.ts`，不能并行）。
-2c. **S6l-fix2**（`docs/tasks/s6l-fix2.md`，已写好）：Claude 独立审查发现的 8 条——手机点任何东西都算戳一下、accent 被动作建议吃掉、表情轮次结束不清、点击打断卡在倾听、当前背景名用一次就清、poke/gift 服务端不限流、钩子/戳/礼物算用户轮、accent 切换瞬变。S6l-fix1 合并后立即派发。
-3. **S6m 动作表面板（用户 2026-10-28 要求，取代单独的动作对比页）**：主界面放一个可收起的「动作表」（桌面在弹幕窗口顶部做可展开标签，手机收进右上角菜单，默认收起），列出情绪 6 种、accent 表情 10 种、现有动作 4 种（drink/glance/phone/show_item）、新动作（挥手 / 摇尾 / 抖耳 / 身体晃，**只做一版：参数法**，用户 2026-10-28 说不需要 A/B 对比；效果不好就砍）。点一下忧奈在舞台上演一遍；**只在本地预览**，不发服务端、不算一轮、不影响剧情；说话中置灰。样式按 S6u 设计稿，S6u 时在设计稿里补一张面板图。
-3b. **S6n 设置面板（D49）**：界面切换 Mock / 真实模式（每个会话自己选，切换即新会话；默认有可用 Key 走真实否则 Mock）+ 三类 Key（聊天 DeepSeek、语音 Fish〔可选音色 ID〕、生图〔Key + Base URL + 模型〕）浏览器自带、只在会话内存使用、可清除；音色不可用要报错不得回落默认音色。S6u 统一样式，设计稿补一张设置面板。
-4. **S6u Web UI 重设计**：用户不喜欢 DeepSeek 的界面风格。**设计稿用户已批准（2026-10-28）**：https://claude.ai/artifact/JW9iubkP3j5wQQuxpZuqgA（「深夜推流」4 张：桌面说话中 / 手机说话中 / 手机按住说话 / 设计规范）。写 `docs/tasks/s6u.md` 时先用 Artifact read 取回源文件，把 token、布局、四态状态牌、字幕名牌、引导弹幕样式逐条抄进任务说明，cmd 按稿实现。
-5. **冻结点**
-6. 真实模式全流程走查 + 统一深审（`/code-review high`），然后出 fix 批。
-7. 冷启动验证（新克隆、无 Key、一条命令跑通 Mock）——必须等所有功能结束后再做。
-8. 文档收尾（最后统一改）：
-   - README 八项（含第三方来源、「已完成的可选扩展」一节、打断方式的理由）
-   - AI_USAGE.md
-   - 重写 checklist
-   - 导读注明夏凛 → 忧奈的变更
-   - cmd 日志移出仓库（目前已有 44 份提交到了公开仓库）
-9. 录屏：Claude 先尝试自动录（Playwright + 屏幕录制）并出分镜，不行再由用户录。
+## 交付（`docs/tasks/delivery.md`）
+- 六项交付的方案、录屏分镜都在这个文件里。
+- 投入时间估算：人工约 30–35h、AI 后台约 20h（用户说「大约估算」，已写入，可改）。
 
-**可选（全部做完再看）**：D44 透明结局视频（用户想看效果）；部署（最后做）。
-**不做，写进 README「两周演进」**：VAD、@ 指令（S6i 取消）、剧情分支、生成内容缓存、物理覆盖、运行时换配色、手机人物满屏、Live2D 自动化 AI 制作流水线、Drama3 本地部署（30B）。
-
-## 测试策略（用户 2026-10-28 决定）
-- cmd 每批只跑 `pnpm test` + `pnpm typecheck`（+ Mock smoke），**不跑 e2e**；任务说明里写明。e2e 用例可以写但不运行。
-- e2e 只在冻结点后统一跑一遍（Claude 跑，看结果再出 fix 批）。
-
-## 待统一深审（用户要求：现在只做简单检测，功能做完后统一深审）
-- 范围：S6g-A、S6c-fix1、S6k 以及之后的各批。
-- 方式：核心代码逐行审 + `/code-review high` + 浏览器实测（打断、剧情层不作废、turnId 过滤）。
-- 专项要确认：
-  - 「平静」情绪下耳朵是否可见（S6c-fix1 只是把 `ParamEarOFF` 写成 0，根因未证实）
-  - accent 在真实对话里的效果
-  - `pnpm smoke` 在 S6k 里走的是真实模式（`.env` 里设了 `PROVIDER_MODE=real`），要核实 smoke 是否应该固定用 Mock
+## 测试策略
+- 各批 cmd 不跑 e2e，冻结后统一跑。freeze-fix1 例外，只跑它改过的 3 个 spec。
+- 每批合并前，Claude 独立审核心和易错部分，不能只看测试（用户要求）。
 
 ## 执行环境（重要）
-- cmd 派发命令：`cd <worktree> && cmd -p "…" -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 800 < /dev/null > <worktree绝对路径>/docs/tasks/.<批>-cmd.log 2>&1`，后台跑。
-  - 必须和 `cd` 写在同一条命令里，单独一条 `cd` 会被重置回 main。
-  - 派发后用 `lsof -a -p <pid> -d cwd` 核对工作目录。
-  - 停 cmd 要停 **`command-code` 进程本身**，只杀外层 zsh 它会继续跑（这次因此在 main 上误改了 30 分钟；改动已备份并还原）。
-  - 任务说明里写明「不要打开图片；长命令显式 timeout」。用户已授权直接派发。
-- worktree 建法：`git worktree add -b <批> /Users/gjy/mira-wt-<批> main`，再拷 `.env`、跑 `pnpm install --offline`。旧 worktree `mira-wt-s6cfix1`、`mira-wt-s6k` 可以删。
-- 真实模式 dev server：http://localhost:5181（`PROVIDER_MODE=real PORT=8791 MIRA_CLIENT_PORT=5181 MIRA_SERVER_PORT=8791 pnpm dev`）。5180/8790 是旧的 Mock 服务器，用户可以 `kill 49797 77336` 停掉。
-- 和用户讨论只问技术、体验和 UI 的问题，设定类细节由 Claude 自己定。
+- cmd 派发命令：`cd <worktree> && cmd -p "…" -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 800 < /dev/null > <worktree>/docs/tasks/.<批>-cmd.log 2>&1`，后台跑。
+- 派发后用 `lsof -a -p <pid> -d cwd` 核对工作目录。停 cmd 要停 `command-code` 进程本身。
+- 会撞 Command Code 的 5 小时额度（退出码 5）：在同一 worktree 续跑，只提醒用户。
+- 任务说明里必须写明：不要打开图片；长命令显式 timeout；**只准停自己启动的进程，禁止 `pkill -f vite` 这类宽匹配**（这次因此杀掉了用户的 dev server）。
+- worktree 建法：`git worktree add -b <批> /Users/gjy/mira-wt-<批> main` → 拷 `.env` → `pnpm install --offline`。旧 worktree（s6cfix1、s6k、s6l、s6lfix1、s6lfix2、s6m、s6n、s6u）可以删。
+- 和用户只讨论技术、体验、UI 方面的问题，设定类细节自己定。
 
-## 关键决策（完整见 decisions.md D1–D48）
-- D43 只做忧奈
-- D44 透明结局视频
-- D46 物理覆盖
-- D47 accent 表情
-- D48 路线冻结
-- Live2D 商用模型按用户的选择原样公开
+## 关键决策（完整见 decisions.md D1–D49）
+- D47：accent 表情。
+- D48：路线冻结，只修 bug；不做的写进「两周演进」（含 Live2D 自动化 AI 流水线、Drama3 本地部署 30B）。
+- D49：浏览器自带 Key + 每个会话自己选模式（铁律已同步修改 CLAUDE.md）。
+- 设计稿：https://claude.ai/artifact/JW9iubkP3j5wQQuxpZuqgA ，源文件在 `docs/design/s6u/`。
 
 ## 待用户处理
-- 试听 `assets/voice/yuna/clips/`
-- 换生图 Key
+- 录屏前给终端授权「屏幕录制」。
+- 审 README / AI_USAGE。
+- 试听 `assets/voice/yuna/clips/` 和 `characters/yuna/sfx/`。
+- 部署（可选，服务器在用户手里）。
 
 ## 不要碰
 - `skills/live2d-auto/SKILL.md`、`tools/live2d-pipeline/*`。
