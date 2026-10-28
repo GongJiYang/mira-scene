@@ -17,7 +17,7 @@ pnpm i && pnpm dev          # 打开 http://localhost:5173
 - **不需要任何 Key**：没有 `.env` 时默认 Mock 模式，本地剧本加上预录的忧奈语音，可以完整走完 arrive → probe → reveal → ending。
 - **真实模式**：复制 `.env.example` 为 `.env`，填好 `DEEPSEEK_API_KEY`、`FISH_API_KEY`（生图可选 `IMAGE_API_KEY`），设置 `PROVIDER_MODE=real` 后重启。也可以不改 `.env`，直接在页面的「设置」面板里填自己的 Key，切到真实模式。这些 Key 只保存在你的浏览器里，服务端只在本次会话的内存中使用（D49）。
 - 环境：Node 22、pnpm、Chrome / Safari 最新版。麦克风需要 `localhost` 或 HTTPS。
-- 冷启动实测：⏳ 待验证（全新克隆、不放 `.env`，计时跑通 Mock 全流程）
+- 冷启动实测（2026-10-28）：从 GitHub 全新克隆，不放 `.env`，依次执行 `pnpm i` → `pnpm smoke`（Mock 端到端冒烟，通过）→ `pnpm dev`，页面返回 200，共 19 秒。本机已有 pnpm 缓存，新机器上还要加上下载依赖的时间，通常 1–3 分钟。
 
 | 入口 | 地址 |
 |---|---|
