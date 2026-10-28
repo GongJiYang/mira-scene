@@ -208,6 +208,6 @@
     "scene_rejected": "这个不行哦，换一个别的吧。",
     "scene_busy": "等等，上一个还没换完呢。"
   },
-  "sceneTriggers": "换背景|换场景|换个地方|换个背景|背景换成|背景改成|场景换成|带我去|想看你在|去.{0,6}(吧|呀|看看)",
+  "sceneTriggers": "换背景|换场景|换个地方|换个背景|背景换成|背景改成|场景换成|带我去|想看你在|去(?!睡|休息|吃饭|洗澡|忙|倒|上班|工作|上(?:班|学)|下(?:班|课)|买|吃|喝|洗|刷|收拾|打扫|散).{1,6}(?:吧|呀|看看)",
   "imagePrompt": "Anime illustration, no people, no readable text, no logos. A slightly blurry, low-resolution old webcam screenshot from a beginner girl streamer's very first stream years ago: the same small bedroom but much plainer and tidier, a single cheap desk lamp, bare walls, one plush bunny, a lavender drink can with a small white heart, soft nostalgic color grading. Details inspired by the recent conversation: {{conversation}}"
 }

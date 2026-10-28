@@ -5,6 +5,7 @@ import {
   SLOW_DELAY_MS,
   parseFaults,
   readFirstTokenTimeoutMs,
+  shouldResume,
   withFaults,
 } from "../src/adapters/faults";
 import { createMockLlm } from "../src/adapters/mock/mockLlm";
@@ -299,6 +300,32 @@ describe("故障配置解析", () => {
     expect(readFirstTokenTimeoutMs({ LLM_FIRST_TOKEN_TIMEOUT_MS: "2500" })).toBe(2_500);
     expect(() => readFirstTokenTimeoutMs({ LLM_FIRST_TOKEN_TIMEOUT_MS: "abc" })).toThrow();
     expect(() => readFirstTokenTimeoutMs({ LLM_FIRST_TOKEN_TIMEOUT_MS: "0" })).toThrow();
+  });
+});
+
+describe("shouldResume：faults 集合相等才恢复（freeze-fix2 §2）", () => {
+  it("相同 → 恢复", () => {
+    expect(shouldResume(["tts"], ["tts"])).toBe(true);
+    expect(shouldResume([], [])).toBe(true);
+    expect(shouldResume(["tts", "slow"], ["tts", "slow"])).toBe(true);
+  });
+
+  it("顺序不同 → 恢复（与顺序无关）", () => {
+    expect(shouldResume(["tts", "slow"], ["slow", "tts"])).toBe(true);
+  });
+
+  it("重复项不影响集合比较 → 恢复", () => {
+    expect(shouldResume(["tts", "tts"], ["tts"])).toBe(true);
+  });
+
+  it("新增故障 → 不恢复", () => {
+    expect(shouldResume([], ["tts"])).toBe(false);
+    expect(shouldResume(["tts"], ["tts", "slow"])).toBe(false);
+  });
+
+  it("清空故障 → 不恢复", () => {
+    expect(shouldResume(["tts"], [])).toBe(false);
+    expect(shouldResume(["tts", "slow"], ["tts"])).toBe(false);
   });
 });
 

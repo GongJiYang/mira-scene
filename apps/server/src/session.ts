@@ -21,7 +21,7 @@ import {
   type StateSnapshotPayload,
   type ErrorPayload,
 } from "@mira/protocol";
-import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, withFaults, type Fault } from "./adapters/faults";
+import { DEFAULT_FIRST_TOKEN_TIMEOUT_MS, WS_DROP_AFTER_BEAT, parseFaults, shouldResume, withFaults, type Fault } from "./adapters/faults";
 import { isFishApiError } from "./adapters/fish/errors";
 import { isAbortError, throwIfAborted } from "./abort";
 import { clientPublicRoot, defaultCharacterId, type FallbackCategory, type Pack } from "./characters/pack";
@@ -855,7 +855,14 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
     }
 
     const resumedId = message.payload.resumeSessionId;
-    const existing = resumedId ? sessions.get(resumedId) : undefined;
+    // freeze-fix2 §2：恢复会话时只有 faults 集合（与顺序、重复无关）与旧会话相等才恢复；
+    // 否则按新会话处理，让本次请求的 faults 生效（旧会话的 faults 不混入）。
+    const requestedFaults = parseFaults(message.payload.faults ?? deps.defaultFaults);
+    const candidate = resumedId ? sessions.get(resumedId) : undefined;
+    const existing = candidate && shouldResume(candidate.faults, requestedFaults) ? candidate : undefined;
+    if (candidate && !existing) {
+      logFor(candidate, candidate.lastTurnId, "resume_skipped", { reason: "faults_changed" });
+    }
     let session: Session;
     if (existing) {
       // §2：恢复会话沿用该会话原来的模式与 Key，不重新读 hello 里的 mode / keys。
@@ -908,7 +915,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         return;
       }
 
-      const faults = parseFaults(message.payload.faults ?? deps.defaultFaults);
+      const faults = requestedFaults;
       // §1：mock 复用全局共享的无状态适配器；real 且访问者自带 Key → 为该会话单独构建。
       const built = resolveBuilt(plan);
       const ports = faults.length === 0 ? built.ports : {
