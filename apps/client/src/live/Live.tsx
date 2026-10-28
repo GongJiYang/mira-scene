@@ -170,7 +170,7 @@ function DanmakuItem({ item, onGuideClick, style }: { item: Danmaku; onGuideClic
  * 逐字进度：现状没有该状态，整句亮显示（不为视觉改字幕逻辑）。
  * 说话时下方显示一行小字「点画面任意位置可以打断她」。
  */
-function SubtitleBox({ subtitle, fallback, thinking, speaking }: { subtitle: string; fallback: boolean; thinking: boolean; speaking: boolean }) {
+function SubtitleBox({ subtitle, fallback, thinking, speaking, ttsDegraded }: { subtitle: string; fallback: boolean; thinking: boolean; speaking: boolean; ttsDegraded: boolean }) {
   if (subtitle === "" && !thinking) return null;
   return (
     <div className="live-subtitle-box" data-no-stage-tap>
@@ -192,6 +192,12 @@ function SubtitleBox({ subtitle, fallback, thinking, speaking }: { subtitle: str
       {speaking && (
         <div className="live-interrupt-hint" data-testid="interrupt-hint">
           {UI_TEXT.interruptHint}
+        </div>
+      )}
+      {/* freeze-fix5 §2.2：本轮 TTS 降级 → 字幕区附近的一行轻提示（琥珀色，复用兜底字幕色调）。 */}
+      {ttsDegraded && (
+        <div className="live-tts-degraded-hint" data-testid="tts-degraded-hint">
+          {UI_TEXT.ttsDegradedHint}
         </div>
       )}
     </div>
@@ -404,7 +410,7 @@ export function Live() {
                 <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>
               )}
               {/* S6u §2：字幕对话框（底部居中）。 */}
-              <SubtitleBox subtitle={subtitle} fallback={vm.subtitle === null && vm.fallbackSubtitle !== null} thinking={vm.phase === "thinking"} speaking={vm.phase === "speaking"} />
+              <SubtitleBox subtitle={subtitle} fallback={vm.subtitle === null && vm.fallbackSubtitle !== null} thinking={vm.phase === "thinking"} speaking={vm.phase === "speaking"} ttsDegraded={vm.ttsDegraded} />
             </div>
           </section>
 
@@ -711,6 +717,13 @@ function MobileLive(props: MobileProps) {
             </span>
           )}
         </p>
+
+        {/* freeze-fix5 §2.2：本轮 TTS 降级 → 字幕附近的一行轻提示。 */}
+        {vm.ttsDegraded && (
+          <div className="live-tts-degraded-hint live-tts-degraded-hint-mobile" data-testid="tts-degraded-hint" data-no-stage-tap>
+            {UI_TEXT.ttsDegradedHint}
+          </div>
+        )}
 
         {/* S6u §3：按住说话时底部录音面板（声波随音量、计时、松开发送）。无「上滑取消」。 */}
         {listening && (

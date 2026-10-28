@@ -82,6 +82,8 @@ export const UI_TEXT = {
   viewerCount: "1 viewer",
   /** 说话时字幕下方的打断提示。 */
   interruptHint: "点画面任意位置可以打断她",
+  /** freeze-fix5 §2.2：本轮 TTS 降级（语音暂时出不来）时字幕区附近的轻提示。 */
+  ttsDegradedHint: "语音暂时出不来，先看字幕吧",
   /** 兜底台词的名牌（琥珀样式）。 */
   fallbackSpeaker: "忧奈 · 网络卡了",
   /** 主播名牌（说话中）。 */

@@ -469,6 +469,23 @@ body,
   font-size: 12px;
 }
 
+/* freeze-fix5 §2.2：本轮 TTS 降级的轻提示（复用兜底字幕的琥珀色调）。 */
+.live-tts-degraded-hint {
+  margin-top: 6px;
+  text-align: center;
+  color: var(--think);
+  font-size: 12px;
+}
+
+.live-tts-degraded-hint-mobile {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  /* 手机字幕贴在 bottom: calc(96px + safe-area)；提示放在字幕正上方。 */
+  bottom: calc(134px + env(safe-area-inset-bottom));
+  z-index: 26;
+}
+
 /* S6u §2/§3：状态牌（右上角）。 */
 .live-state-chip {
   position: absolute;

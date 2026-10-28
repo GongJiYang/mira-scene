@@ -11,6 +11,7 @@ export const initialState: ClientState = {
   media: null,
   audioStopToken: 0,
   node: "arrive",
+  ttsDegradedTurnId: null,
 };
 
 /**
@@ -28,6 +29,8 @@ function beginTurn(state: ClientState, phase: Phase): ClientState {
     // S6l-fix2 §3：打断后表情立即清除（渲染端按「结束」渐出 0.4s，不留到下一句）。
     visual: { ...state.visual, accent: null },
     audioStopToken: state.audioStopToken + 1,
+    // freeze-fix5 §2.2：新一轮开始 → 上一轮的 tts 降级提示消失。
+    ttsDegradedTurnId: null,
   };
 }
 
@@ -51,6 +54,8 @@ function toIdle(state: ClientState): ClientState {
     subtitle: null,
     // S6l-fix2 §3：轮次结束回 idle 时清除表情（不再挂到下一句）。
     visual: { ...state.visual, accent: null },
+    // freeze-fix5 续修：本轮真正播完回 idle 时，降级提示才消失。
+    ttsDegradedTurnId: null,
   };
 }
 
@@ -60,6 +65,11 @@ function toIdle(state: ClientState): ClientState {
  * - speaking：只置 turnEnded，等最后一个 BEAT_AUDIO_ENDED 再回 idle；
  *   最后一个 beat 在 STARTED 时已出队，但音频还在播放。
  * - 其他 phase：只置 turnEnded。
+ *
+ * freeze-fix5 续修：**不清** `ttsDegradedTurnId`。服务端 TTS 失败很快，`turn_end` 常在本轮
+ * 第一句无声 beat 还在播时就到达；若此时清掉降级标记，`pickNextPlayable` 会对剩余降级句
+ * 返回 null，整轮卡在 speaking。标记只在 `beginTurn` / `toIdle` 清除——即提示到本轮真正
+ * 播完回 idle 时才消失。
  */
 function markTurnEnded(state: ClientState): ClientState {
   if (state.phase.kind === "thinking" && state.queue.length === 0) {
@@ -125,6 +135,11 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
     case "turn_end":
       return markTurnEnded(state);
     case "error":
+      // freeze-fix5 §2.2：tts_degraded 是非致命降级（服务端已把该句降级为无声 beat，本轮继续）。
+      // 不进入错误态、不清空本轮，只记下「本轮已降级」——无声 beat 改按可读时长停留 + 显示轻提示。
+      if (message.payload.code === "tts_degraded") {
+        return { ...state, ttsDegradedTurnId: message.turnId };
+      }
       return {
         ...toIdle(state),
         phase: {
