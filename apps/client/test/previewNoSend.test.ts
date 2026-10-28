@@ -49,7 +49,7 @@ describe("S6m §4：预览不发网络、不算一轮", () => {
     const items = [
       { kind: "emotion", value: "warm" },
       { kind: "accent", value: "love" },
-      { kind: "action", value: "wave" },
+      { kind: "action", value: "tail_wag" },
       { kind: "action", value: "sway" },
       { kind: "action", value: "drink" },
     ] as const;

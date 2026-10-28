@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import type { Media } from "@mira/protocol";
 import { createAbortError, isAbortError, throwIfAborted } from "../../abort";
 import type { MediaContext, MediaPort, PresetMediaResult } from "../../ports";
+import { resolveClientAssetPath } from "../../characters/pack";
 import { buildImagePrompt } from "./imagePrompt";
 
 export type ImageGenOptions = {
@@ -156,6 +157,21 @@ export async function generateImage(options: ImageGenOptions): Promise<PresetMed
 }
 
 /**
+ * freeze-fix9 §2：剧情**照片**的参考图（角色包 `appearanceRef` → 本地文件路径）。
+ * 只对 `photo` 生效（视频不走生图）；参考图文件不存在时返回 undefined（退回无参考图路径）。
+ */
+export function photoReferenceFor(
+  media: Media,
+  ctx: Pick<MediaContext, "pack">,
+): { path: string } | undefined {
+  if (media.type !== "photo") return undefined;
+  const ref = ctx.pack.appearanceRef;
+  if (typeof ref !== "string" || ref.trim() === "") return undefined;
+  const path = resolveClientAssetPath(ref);
+  return existsSync(path) ? { path } : undefined;
+}
+
+/**
  * `MediaPort` 形态的生图适配器：把 `preset(media, ctx)` 映射到一次 `generateImage`。
  * S6b-fix1 §4：提示词由 `buildImagePrompt(ctx.pack, ctx.history)` 组装（用到本轮之前的对话）。
  */
@@ -171,6 +187,9 @@ export function createImageGenMedia(options: {
   return {
     async preset(media: Media, ctx: MediaContext, signal: AbortSignal): Promise<PresetMediaResult> {
       throwIfAborted(signal);
+      // freeze-fix9 §2：生成剧情照片时带角色包外观参考图（走 edits），保证画出的女孩是本角色。
+      // 参考图缺失 / 读取失败则退回无参考图的 generations（不因参考图问题让整张图失败）。
+      const reference = photoReferenceFor(media, ctx);
       const result = await generateImage({
         baseUrl: options.baseUrl,
         apiKey: options.apiKey,
@@ -181,6 +200,7 @@ export function createImageGenMedia(options: {
         outDir: options.outDir,
         fetchImpl: options.fetchImpl,
         signal,
+        reference,
         log: options.log,
       });
       throwIfAborted(signal);

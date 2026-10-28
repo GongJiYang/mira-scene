@@ -90,12 +90,12 @@ export const UI_TEXT = {
   speakerName: "忧奈",
   /** 用户自己的弹幕昵称。 */
   you: "你",
+  /** freeze-fix9 §3：语音输入识别出的弹幕昵称（样式沿用 user，仅标记来源为语音）。 */
+  youVoice: "你 · 语音",
   /** 弹幕窗口副标题（系统数字）。 */
   chatOnline: (n: number) => `CHAT · ${n} online`,
   /** 引导弹幕的小前缀。 */
   guidePrefix: "↳ ",
-  /** 系统弹幕（居中、暗色）。 */
-  systemDanmaku: (text: string) => `— ${text} —`,
 
   // ---- S6u §3：手机录音面板 ----
   /** 录音面板的松开发送提示。 */
@@ -182,8 +182,7 @@ export const ACTION_LABELS = {
   glance: "瞄弹幕",
   phone: "看手机",
   show_item: "抱熊",
-  // 新动作
-  wave: "挥手",
+  // 新动作（freeze-fix9 §1：挥手已移除）
   tail_wag: "摇尾巴",
   ear_flick: "抖耳朵",
   sway: "身体晃",

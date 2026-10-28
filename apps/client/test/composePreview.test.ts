@@ -46,7 +46,7 @@ describe("S6m §3：previewDurationSec", () => {
   it("情绪 3s、表情 2s、新动作按各自时长、现有动作按 SILENT_ACTION_TABLE", () => {
     expect(previewDurationSec({ kind: "emotion", value: "warm" })).toBe(PREVIEW_EMOTION_SEC);
     expect(previewDurationSec({ kind: "accent", value: "love" })).toBe(PREVIEW_ACCENT_HOLD_SEC);
-    expect(previewDurationSec({ kind: "action", value: "wave" })).toBe(LOCAL_ACTION_DURATION_SEC.wave);
+    expect(previewDurationSec({ kind: "action", value: "tail_wag" })).toBe(LOCAL_ACTION_DURATION_SEC.tail_wag);
     expect(previewDurationSec({ kind: "action", value: "show_item" })).toBe(3);
   });
 });
@@ -109,15 +109,15 @@ describe("S6m §3：composePreview", () => {
     expect(after.params).toEqual({});
   });
 
-  it("动作预览（wave）：给物理后覆盖，权重随时间渐入", () => {
-    const preview = { item: { kind: "action", value: "wave" } as const, startedAtMs: 0 };
+  it("动作预览（tail_wag）：给物理后覆盖，权重随时间渐入", () => {
+    const preview = { item: { kind: "action", value: "tail_wag" } as const, startedAtMs: 0 };
     const early = composePreview(base(), preview, 50);
     expect(early.postPhysics?.weight).toBeGreaterThan(0);
     expect(early.postPhysics?.weight).toBeLessThan(1);
-    const mid = composePreview(base(), preview, (LOCAL_ACTION_DURATION_SEC.wave / 2) * 1000);
+    const mid = composePreview(base(), preview, (LOCAL_ACTION_DURATION_SEC.tail_wag / 2) * 1000);
     expect(mid.postPhysics?.weight).toBe(1);
     // 到期 → 无覆盖。
-    const ended = composePreview(base(), preview, LOCAL_ACTION_DURATION_SEC.wave * 1000);
+    const ended = composePreview(base(), preview, LOCAL_ACTION_DURATION_SEC.tail_wag * 1000);
     expect(ended.postPhysics).toBeUndefined();
   });
 

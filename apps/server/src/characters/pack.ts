@@ -101,6 +101,11 @@ export const packFileSchema = z.object({
   displayName: z.string().min(1),
   renderer: rendererSchema,
   voice: voiceSchema,
+  /**
+   * freeze-fix9 §2：角色外观参考图的公开 URL（如 `/characters/yuna/avatar.png`）。
+   * 生成剧情截图（reveal 的老截图）时作为参考图上传，保证画出的女孩是本角色本人。
+   */
+  appearanceRef: z.string().min(1),
   /** 相对角色包目录的提示词文件名，例如 `prompt.v1.md`。 */
   prompt: z.string().min(1),
   /** 相对角色包目录的内容文件名，例如 `content.json`。 */
@@ -202,6 +207,8 @@ export type Pack = {
   displayName: string;
   renderer: z.infer<typeof rendererSchema>;
   voice: z.infer<typeof voiceSchema>;
+  /** freeze-fix9 §2：角色外观参考图的公开 URL（生图时作为参考图上传）。 */
+  appearanceRef: string;
   revealIntents: readonly IntentSlot[];
   media: { reveal: Media; ending: Media };
   /** S6g-A §2：剧情节点视觉配置（缺省为空表 → 该节点不下发任何视觉）。 */
@@ -338,6 +345,7 @@ export function parsePack(input: {
       displayName: packParsed.data.displayName,
       renderer: packParsed.data.renderer,
       voice: packParsed.data.voice,
+      appearanceRef: packParsed.data.appearanceRef,
       revealIntents: packParsed.data.revealIntents,
       media: packParsed.data.media,
       nodeVisuals: normalizeNodeVisuals(packParsed.data.nodes),
@@ -446,6 +454,22 @@ export function loadPacks(root: string = charactersRoot()): Map<string, Pack> {
   }
   if (packs.size === 0) throw new Error(`角色包目录下没有任何 pack.json：${root}`);
   return packs;
+}
+
+/**
+ * freeze-fix9 §4：按角色包 `voice.fishVoiceIdEnv` 解析 Fish 音色 ID（纯函数）。
+ * 取不到（缺失 / 空 / 纯空白）**抛错**，绝不静默回落到通用 `FISH_VOICE_ID`（D49 铁律）。
+ * 只读角色包指定的变量名，不读通用变量。
+ */
+export function resolveFishVoiceId(pack: Pack, env: NodeJS.ProcessEnv | Record<string, string | undefined>): string {
+  const envName = pack.voice.fishVoiceIdEnv;
+  const value = (env[envName] ?? "").trim();
+  if (value === "") {
+    throw new Error(
+      `角色 ${pack.id} 缺少 TTS 音色环境变量 ${envName}：请在 .env 里配置该角色的 Fish 音色（不使用默认音色）`,
+    );
+  }
+  return value;
 }
 
 /** D43：缺省角色 = 目录里第一个角色（只排序确定顺序；现在只有忧奈）。 */

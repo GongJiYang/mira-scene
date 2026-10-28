@@ -62,6 +62,18 @@ describe("buildImagePrompt（S6b §5.5 纯函数）", () => {
     expect(out).not.toContain("你".repeat(81));
     expect(out).toContain("主播：短答");
   });
+
+  // freeze-fix9 §2：开播截图必须画出忧奈本人，不能是陌生红发女生。
+  it("freeze-fix9 §2：含忧奈外观关键词，且不含自相矛盾的 no people", () => {
+    const pack = testPack("yuna");
+    const out = buildImagePrompt(pack, []);
+    expect(out.toLowerCase()).not.toContain("no people");
+    // 外观关键词（黑紫双马尾 / 女仆头饰 / 猫耳 / 紫色饮料罐）。
+    expect(out).toContain("twin tails");
+    expect(out).toContain("maid headdress");
+    expect(out).toContain("cat ears");
+    expect(out).toContain("purple drink can");
+  });
 });
 
 describe("imageGen 适配器（假 fetch）", () => {
@@ -108,7 +120,9 @@ describe("imageGen 适配器（假 fetch）", () => {
   it("prompt 用到本轮之前的对话（S6b-fix1 §4）", async () => {
     let captured = "";
     const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
-      captured = JSON.parse(String(init?.body)).prompt as string;
+      // freeze-fix9 §2：剧情照片现在走 edits（multipart），prompt 从表单里取。
+      const form = init?.body as FormData;
+      captured = String(form.get("prompt"));
       const png = Buffer.from("x").toString("base64");
       return new Response(JSON.stringify({ data: [{ b64_json: png }] }), { status: 200 });
     }) as typeof fetch;
@@ -126,8 +140,27 @@ describe("imageGen 适配器（假 fetch）", () => {
     expect(captured).not.toContain("{{conversation}}");
   });
 
+  // freeze-fix9 §2：开播截图带忧奈参考图（multipart 里有 image 字段）。
+  it("freeze-fix9 §2：生成剧情照片时带角色包参考图（edits multipart 含 image）", async () => {
+    let uploaded: { type: string; name: string } | null = null;
+    let usedEdits = false;
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      usedEdits = String(url).includes("/images/edits");
+      const form = init?.body as FormData;
+      const image = form.get("image") as File | null;
+      if (image) uploaded = { type: image.type, name: image.name };
+      const png = Buffer.from("x").toString("base64");
+      return new Response(JSON.stringify({ data: [{ b64_json: png }] }), { status: 200 });
+    }) as typeof fetch;
+    const port = createImageGenMedia({ ...base, fetchImpl, outDir: "/tmp/mira-imagegen-test" });
+    await port.preset({ type: "photo", id: "photo_first_stream" }, { pack: testPack("yuna"), history: [] }, new AbortController().signal);
+    expect(usedEdits).toBe(true);
+    expect(uploaded).not.toBeNull();
+    expect((uploaded as unknown as { name: string }).name).toBe("avatar.png");
+  });
+
   it("外层 signal 中止进行中的 fetch（S6b-fix1 §4）", async () => {
-    const fetchImpl = (( _url: unknown, init?: RequestInit) =>
+    const fetchImpl = ((_url: unknown, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
       })) as unknown as typeof fetch;

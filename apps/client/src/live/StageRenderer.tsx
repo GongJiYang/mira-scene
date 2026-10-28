@@ -332,7 +332,7 @@ function Live2dStage({
           params,
           emotion: yunaEmotion,
           manualBlink: blinkOpen,
-          // S6m §1：动作预览的物理后覆盖（wave / tail_wag / ear_flick）。
+          // S6m §1：动作预览的物理后覆盖（tail_wag / ear_flick）。
           postPhysics: composition.postPhysics,
         };
       },

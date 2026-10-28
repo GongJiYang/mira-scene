@@ -1,12 +1,15 @@
 /**
  * S6m §2：客户端本地新动作的纯函数曲线（参数法一版）。
  *
- * 新动作不进协议、不给 LLM，只在客户端「动作表」里点一下预览。四种动作：
- * - `wave`（挥手）：物理**后覆盖** `ParamHandR` 抬到上限附近、`ParamHandTurnR` 正弦摆动；
+ * 新动作不进协议、不给 LLM，只在客户端「动作表」里点一下预览。三个动作：
  * - `tail_wag`（摇尾巴）：物理**后覆盖** `ParamTailX1/X2/X3` 依次相位差的正弦；
  * - `ear_flick`（抖耳朵）：物理**后覆盖** `ParamEarsLY2/RY2` 两次快速弹动；
  * - `sway`（身体晃）：写物理**输入** `ParamBodyAngleZ` / `ParamAngleZ`（经 `clampParam`），
  *   让物理带动头发 / 耳朵 / 尾巴。
+ *
+ * freeze-fix9 §1：「挥手」已移除——`ParamBoomR` / `ParamForeamR` / `ParamHandR` 在这套皮套里
+ * 都是物理输出，实测物理后覆盖也无法把右臂抬起（臂区竖直重心 / 顶边变化 < 1px，见
+ * `docs/tasks/freeze-fix9-report.md` 的实测表）。动作表改用摇尾巴。
  *
  * 为什么手 / 尾 / 耳要「物理后覆盖」：它们在 `yuna.physics3.json` 里全是物理**输出**，
  * 在物理之前写会被物理覆盖掉（D46③）。外层在物理更新后、模型 update 前按权重混合写入。
@@ -16,29 +19,14 @@
  */
 import { clampParam } from "./yunaParams";
 
-export type LocalActionId = "wave" | "tail_wag" | "ear_flick" | "sway";
+export type LocalActionId = "tail_wag" | "ear_flick" | "sway";
 
-/** 四种本地动作的时长（秒）。 */
+/** 本地动作的时长（秒）。 */
 export const LOCAL_ACTION_DURATION_SEC: Record<LocalActionId, number> = {
-  wave: 2.0,
   tail_wag: 2.5,
   ear_flick: 0.8,
   sway: 2.5,
 };
-
-/**
- * 挥手时抬手到的目标（模型范围 [-1,1]）。
- * §4：`ParamHandR`（手R）只是**手的姿态**，抬手要同时抬**整条手臂**——
- * `ParamBoomR`（大臂R）+ `ParamForeamR`（小臂R）都在 physics3 里是物理输出，
- * 必须经物理后覆盖才有效。三者一起驱动，挥手才看得出「抬起手臂在挥」。
- */
-export const WAVE_HAND_RAISE = 0.95;
-export const WAVE_BOOM_RAISE = 0.9;
-export const WAVE_FOREARM_RAISE = 0.9;
-/** 挥手幅度（取范围的 60%）。 */
-export const WAVE_TURN_AMPLITUDE = 0.6;
-/** 挥手摆动频率（Hz）。 */
-export const WAVE_FREQ_HZ = 2.5;
 
 /** 摇尾幅度（范围的 70%）与频率（Hz）。 */
 export const TAIL_AMPLITUDE = 0.7;
@@ -89,18 +77,6 @@ export function localActionSample(action: LocalActionId, elapsedSec: number): Lo
   const progress = duration > 0 ? t / duration : 0;
 
   switch (action) {
-    case "wave":
-      return {
-        postPhysics: {
-          // §4：整条手臂一起抬（大臂 + 小臂 + 手），手掌再左右摆动。
-          ParamBoomR: WAVE_BOOM_RAISE,
-          ParamForeamR: WAVE_FOREARM_RAISE,
-          ParamHandR: WAVE_HAND_RAISE,
-          ParamHandTurnR: WAVE_TURN_AMPLITUDE * Math.sin(TWO_PI * WAVE_FREQ_HZ * t),
-        },
-        input: {},
-        progress,
-      };
     case "tail_wag":
       return {
         postPhysics: {

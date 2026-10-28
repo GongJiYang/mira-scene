@@ -4,6 +4,7 @@
   "displayName": "忧奈",
   "renderer": { "kind": "live2d", "model": "/models/yuna/yuna.model3.json" },
   "voice": { "fishVoiceIdEnv": "FISH_VOICE_ID_YUNA" },
+  "appearanceRef": "/characters/yuna/avatar.png",
   "prompt": "prompt.v1.md",
   "content": "content.json",
   "revealIntents": ["ask_core", "comfort"],

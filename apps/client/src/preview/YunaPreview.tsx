@@ -17,17 +17,26 @@ import "./preview.css";
  * §4.1：开发探针——`?preview=yuna&param=<id>&value=<v>` 把单个参数强制置为该值。
  * 用于逐参数实测（min / max 下的画面变化），只在带 query 时生效，不影响正常预览页。
  * 物理**输出**类参数（手 / 尾 / 耳）在物理之后会被覆盖，故对这些参数同时走物理后覆盖。
+ *
+ * freeze-fix9 §1：新增 `window.__setProbeCombo(map)`，一次强制**多个**参数（验证挥手所需的
+ * 「大臂 + 小臂 + 手」组合），避免逐参数探针无法反映真实组合效果。
  */
 const PROBE_PHYSICS_OUTPUT = /^Param(Hand|HandHold|HandTurn|Boom|Foream|Tail|Ears(L|R))/;
 
-type Probe = { param: string; value: number } | null;
+type Probe = { params: Record<string, number> } | null;
 
-/** 探针状态：既可来自 URL query，也可由 e2e 通过 `window.__setProbe` 运行时改写（免去反复重载模型）。 */
+/** 探针状态：既可来自 URL query，也可由 e2e 通过 `window.__setProbe` / `__setProbeCombo` 运行时改写。 */
 let runtimeProbe: Probe = null;
+
+/** freeze-fix9 §1：动画帧冻结的固定 tSec（null = 不冻结，按真实时钟）。 */
+const frozenRef: { current: number | null } = { current: null };
 
 declare global {
   interface Window {
     __setProbe?: (param: string | null, value?: number) => void;
+    __setProbeCombo?: (params: Record<string, number> | null) => void;
+    /** freeze-fix9 §1：冻结动画帧到固定 tSec（null = 解冻）。探针实测用。 */
+    __freezeFrame?: (tSec: number | null) => void;
     __probeReady?: boolean;
   }
 }
@@ -41,7 +50,7 @@ function readProbe(): Probe {
   if (param === null || valueRaw === null) return null;
   const value = Number.parseFloat(valueRaw);
   if (!Number.isFinite(value)) return null;
-  return { param, value };
+  return { params: { [param]: value } };
 }
 
 const PHASES: StagePhaseKind[] = ["idle", "listening", "thinking", "speaking"];
@@ -79,30 +88,50 @@ export function YunaPreview() {
 
     // §4.1：e2e 可在运行时改探针（免去反复重载模型）。
     window.__setProbe = (param: string | null, value?: number) => {
-      runtimeProbe = param === null ? null : { param, value: value ?? 0 };
+      runtimeProbe = param === null ? null : { params: { [param]: value ?? 0 } };
+    };
+    // freeze-fix9 §1：一次改多个参数（挥手组合验证用）。
+    window.__setProbeCombo = (params: Record<string, number> | null) => {
+      runtimeProbe = params === null ? null : { params: { ...params } };
+    };
+    // freeze-fix9 §1：冻结 / 解冻动画帧（探针实测时消除呼吸 / 眨眼噪声）。
+    window.__freezeFrame = (tSec: number | null) => {
+      frozenRef.current = tSec;
     };
     createYunaRenderer({
       canvas,
       frame: () => {
         const { phase: p, emotion: e, mouth: m, manualBlink } = stateRef.current;
+        // freeze-fix9 §1：冻结帧——探针实测时把动画钉在固定 tSec、关闭随机小动作，
+        // 使「连续两帧」完全相同（静止噪声≈0），参数差异只来自被探测的参数。
+        const tSec = frozenRef.current ?? (performance.now() - startedAt) / 1000;
         const params = yunaParams({
           phase: p,
           emotion: e,
           mouth: m,
           // blinkOpen 只用于纯函数算出基准睁眼值；实际自动眨眼由外壳里的 EyeBlink 叠加。
           blinkOpen: 1,
-          tSec: (performance.now() - startedAt) / 1000,
+          tSec,
+          // 冻结时禁止待机小动作（否则 idleSinceSec 会引入随机视线）。
+          idleSinceSec: frozenRef.current !== null ? 0 : undefined,
+          seed: 0,
         });
         // §4.1：探针强制覆盖单参数（物理输出类参数同时走物理后覆盖）。
         const probe = readProbe();
         if (probe !== null) {
-          params[probe.param] = probe.value;
-          if (PROBE_PHYSICS_OUTPUT.test(probe.param)) {
+          const names = Object.keys(probe.params);
+          Object.assign(params, probe.params);
+          const physicsTargets: Record<string, number> = {};
+          for (const name of names) {
+            if (PROBE_PHYSICS_OUTPUT.test(name)) physicsTargets[name] = probe.params[name] as number;
+          }
+          if (Object.keys(physicsTargets).length > 0) {
             return {
               params,
               emotion: e,
+              // 冻结时也关掉自动眨眼（固定 manualBlink=1，仍会被 EyeBlink 叠加随机眨眼）。
               manualBlink,
-              postPhysics: { target: { [probe.param]: probe.value }, weight: 1 },
+              postPhysics: { target: physicsTargets, weight: 1 },
             };
           }
         }

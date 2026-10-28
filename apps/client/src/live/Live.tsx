@@ -23,6 +23,7 @@ import { OBS_TEXT } from "../obs/obsText";
 import { useSceneStatusStore } from "./scene/status";
 import { useConnectionStore } from "../core/store";
 import { drainRestoredUserLines, useSessionRestoreStore } from "./sessionRestore";
+import { drainTranscripts, useTranscriptStore } from "./transcriptStore";
 import { progressDots } from "./storyProgress";
 import { useGuideScheduler, useInteractionCooldowns, resolveTap } from "./interactionHooks";
 import { isStageTapTarget, resolveStageTap } from "./interaction";
@@ -153,8 +154,9 @@ function DanmakuItem({ item, onGuideClick, style }: { item: Danmaku; onGuideClic
   }
   if (item.kind === "transcript") {
     return (
-      <p className="live-danmaku live-danmaku-system" data-kind="transcript" style={style}>
-        {UI_TEXT.systemDanmaku(item.text)}
+      <p className="live-danmaku" data-kind="transcript" style={style}>
+        <span className="live-danmaku-nick live-danmaku-nick-user">{UI_TEXT.youVoice}</span>
+        <span className="live-danmaku-text">{item.text}</span>
       </p>
     );
   }
@@ -234,6 +236,14 @@ export function Live() {
     const lines = drainRestoredUserLines();
     if (lines.length > 0) dispatchDanmaku({ type: "RESTORE_USER", texts: lines });
   }, [restoreLines]);
+
+  // freeze-fix9 §3：语音识别结果（当前轮）进弹幕区，像用户弹幕一样显示；旧轮的丢弃（D3）。
+  const pendingTranscripts = useTranscriptStore((state) => state.pending);
+  useEffect(() => {
+    if (pendingTranscripts.length === 0) return;
+    const lines = drainTranscripts(vm.debug.turnId);
+    for (const text of lines) dispatchDanmaku({ type: "APPEND", kind: "transcript", text });
+  }, [pendingTranscripts, vm.debug.turnId]);
 
   // 用户自己发的文字进弹幕；语音转写同理（transcript 走 subtitle 之外的独立通道，这里用 subtitle 兜底）。
   const submit = useCallback(() => {
