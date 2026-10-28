@@ -1,10 +1,11 @@
 # PROGRESS（更新于 2026-10-28 14:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【冻结期 · 收尾】用户已在提交（邮件 `~/Desktop/提交邮件.md`，录像 `e2e/out/acceptance/final.mp4`，5:57、200MB）。
-1. **freeze-fix9 未完成**：Command Code 周额度用尽（退出码 5，周三 1:18 重置）。改动留在 `/Users/gjy/mira-wt-ff9`（未提交，无报告）。等用户选：`/extra` 按量 / BYOK / 等重置。续跑时提示「先 git diff 核对已完成部分，不要推倒重来」，跑 e2e 带 `E2E_SERVER_PORT=8907 E2E_CLIENT_PORT=5294`。内容：挥手（带噪声对照实测，无效则移除）、开播截图带忧奈参考图、语音识别文字进弹幕、录音脚本按角色 `fishVoiceIdEnv` 取音色。
-2. 用户待做：服务器重新跑 `curl -fsSL http://45.128.220.44:8808/deploy.sh | bash` 拿到手机修复；HTTPS（sslip.io + Caddy）与生产构建可选。
-3. 后议：结局视频在真实模式被送去生图（HTTP 400）——用户说「后续再讨论」，并要 Claude 在一切做完后根据人物做结尾动画（时间 Claude 定）。
+【冻结期之后 · 待用户选方向】main 已含 freeze-fix1～9 + D50 跳舞（`2553464`，1103 单测绿，已推送）。
+1. 用户待做：服务器重新部署（拿到手机修复、跳舞、重录语音）；邮件已发 / 录屏链接。
+2. 候选（等用户挑）：结局演出改用跳舞片段（顺带修真实模式结局视频 400）；reveal 推进规则是否收紧；HTTPS + 生产构建；宣传片放 README；以及「好玩的」清单（见本次会话末尾的建议）。
+3. 素材：`~/Desktop/忧奈舞蹈素材/`（9 宫格、Grok 三段、配乐、Remotion 工程、宣传片 `忧奈_深夜推流_MotionReel.mp4`）。
+4. Command Code 周额度周三 1:18 重置；之前 Claude 直接写代码属铁律例外（D50），新批次恢复走 cmd。
 
 ## 当前位置
 - main 含 freeze-fix1～8，1091 单测绿，已推送（`922578d` 之后）。真实模式 dev server 在 5181/8791 后台跑。
