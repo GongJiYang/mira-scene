@@ -7,15 +7,12 @@ import {
   SWAY_BODY_AMPLITUDE,
   SWAY_HEAD_AMPLITUDE,
   TAIL_AMPLITUDE,
-  WAVE_BOOM_RAISE,
-  WAVE_FOREARM_RAISE,
-  WAVE_TURN_AMPLITUDE,
   type LocalActionId,
 } from "../src/render/live2d/localActions";
 import { COMFORT_RANGES, DEFAULT_RANGE } from "../src/render/live2d/yunaParams";
 import { postPhysicsParams } from "../src/render/live2d/postPhysics";
 
-const ACTIONS: LocalActionId[] = ["wave", "tail_wag", "ear_flick", "sway"];
+const ACTIONS: LocalActionId[] = ["tail_wag", "ear_flick", "sway"];
 
 /**
  * 测试替身：模型里手 / 尾 / 耳参数范围为 [-1,1]（实测见 s6m-report.md）；
@@ -37,15 +34,15 @@ const MOCK_RANGES: Record<string, readonly [number, number]> = {
 const rangeOf = (name: string): readonly [number, number] => MOCK_RANGES[name] ?? DEFAULT_RANGE;
 
 describe("S6m §2：新动作时长符合表", () => {
-  it("wave 2.0 / tail_wag 2.5 / ear_flick 0.8 / sway 2.5", () => {
-    expect(LOCAL_ACTION_DURATION_SEC.wave).toBe(2.0);
+  it("tail_wag 2.5 / ear_flick 0.8 / sway 2.5（freeze-fix9 §1：挥手已移除）", () => {
     expect(LOCAL_ACTION_DURATION_SEC.tail_wag).toBe(2.5);
     expect(LOCAL_ACTION_DURATION_SEC.ear_flick).toBe(0.8);
     expect(LOCAL_ACTION_DURATION_SEC.sway).toBe(2.5);
+    expect("wave" in LOCAL_ACTION_DURATION_SEC).toBe(false);
   });
 });
 
-describe("S6m §2：四个动作曲线起止为 0、峰值在范围内", () => {
+describe("S6m §2：动作曲线起止为 0、峰值在范围内", () => {
   it("越界时间（负 / 时长及以后）不写任何参数", () => {
     for (const action of ACTIONS) {
       const dur = LOCAL_ACTION_DURATION_SEC[action];
@@ -64,15 +61,6 @@ describe("S6m §2：四个动作曲线起止为 0、峰值在范围内", () => {
       expect(postPhysicsParams(action, 0).target).toEqual({});
       expect(postPhysicsParams(action, dur).target).toEqual({});
     }
-  });
-
-  it("§4：wave 抬起整条手臂（大臂 + 小臂 + 手），手掌摆动 ≤ 60% 范围", () => {
-    const mid = localActionSample("wave", LOCAL_ACTION_DURATION_SEC.wave / 2);
-    // 只抬「手」看不出挥手，必须同时抬大臂 / 小臂（都是物理输出，经 postPhysics 才有效）。
-    expect(mid.postPhysics.ParamBoomR).toBeCloseTo(WAVE_BOOM_RAISE);
-    expect(mid.postPhysics.ParamForeamR).toBeCloseTo(WAVE_FOREARM_RAISE);
-    expect(mid.postPhysics.ParamHandR).toBeGreaterThan(0.9);
-    expect(Math.abs(mid.postPhysics.ParamHandTurnR as number)).toBeLessThanOrEqual(WAVE_TURN_AMPLITUDE + 1e-9);
   });
 
   it("tail_wag：三节相位差，幅度 ≤ 70% 范围", () => {

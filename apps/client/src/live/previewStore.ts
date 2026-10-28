@@ -86,7 +86,7 @@ export const usePreviewStore = create<PreviewSlice>()((set) => ({
  * 返回：
  * - `emotion`：最终情绪（预览情绪优先，否则用 `base.emotion`）；
  * - `params`：额外叠加参数（表情 accent 的渐入渐出、sway 的物理输入），键值已截断；
- * - `postPhysics`：动作类预览的物理后覆盖（wave / tail_wag / ear_flick）；无则 undefined。
+ * - `postPhysics`：动作类预览的物理后覆盖（tail_wag / ear_flick）；无则 undefined。
  *
  * `speaking` 时拒绝预览（返回原样）；预览到期（`now - startedAtMs ≥ 时长`）也返回原样（恢复到待机）。
  * **不改 `base.visual`**（A 状态机不受影响）。
@@ -129,7 +129,7 @@ export function composePreview(
   }
 
   // 动作类：现有动作（drink/glance/phone/show_item）走 yunaParams 的 silentAction；
-  // 新动作（wave/tail_wag/ear_flick/sway）走本地曲线 + 物理后覆盖。
+  // 新动作（tail_wag/ear_flick/sway）走本地曲线 + 物理后覆盖。
   const action = item.value;
   if (action in LOCAL_ACTION_DURATION_SEC) {
     const sample = localActionSample(action as LocalActionId, elapsedSec);

@@ -5,7 +5,8 @@
  * 把每一句台词用真实 Fish TTS 合成，写入 `assets/voice/clips/<voiceKey>.mp3`，
  * 并把 `{text, emotion, file, durationMs}` 写进 `assets/voice/manifest.json`。
  *
- * 用法：`pnpm voices:record`（仓库根 `.env` 里要有可用的 `FISH_API_KEY`）。
+ * 用法：`pnpm voices:record [--character <id>]`（仓库根 `.env` 里要有可用的 `FISH_API_KEY`
+ * 与**该角色包指定的音色变量**，如忧奈的 `FISH_VOICE_ID_YUNA`；取不到音色直接报错退出）。
  * 已存在的 key 直接跳过，因此可以重复运行、增量补录。
  *
  * 注意：本脚本会消耗 Fish 额度，**不在任何测试里运行**。
@@ -26,7 +27,7 @@ import { applyRepoEnv, loadConfig, resolveVoiceManifestPath } from "../src/confi
 import { buildTtsText } from "../src/director/vocab";
 import type { Intent } from "../src/intent";
 import { createInitialScene } from "../src/story";
-import { defaultCharacterId, loadPacks, type Pack } from "../src/characters/pack";
+import { defaultCharacterId, loadPacks, resolveFishVoiceId, type Pack } from "../src/characters/pack";
 
 /** 能稳定命中每种意图的代表文本（与各角色 content.json 的关键词表一致）。 */
 const TEXT_BY_INTENT: ReadonlyArray<[Intent, string]> = [
@@ -106,10 +107,13 @@ async function main(): Promise<void> {
   mkdirSync(clipsDir, { recursive: true });
 
   const manifest: VoiceManifest = loadVoiceManifest(manifestPath);
+  // freeze-fix9 §4：音色按角色包指定的变量解析（忧奈 → FISH_VOICE_ID_YUNA）。
+  // 取不到直接抛错退出，绝不静默回落到通用 FISH_VOICE_ID 的默认男声。
+  const voiceId = resolveFishVoiceId(pack, process.env);
   const tts = createFishTts({
     baseUrl: fish.baseUrl,
     apiKey: fish.apiKey,
-    voiceId: fish.voiceId,
+    voiceId,
     model: fish.ttsModel,
     log: (record) => console.log(JSON.stringify(record)),
   });

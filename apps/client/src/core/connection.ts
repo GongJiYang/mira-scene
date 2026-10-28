@@ -4,6 +4,7 @@ import { HEARTBEAT_INTERVAL_MS, isHeartbeatExpired, jitteredDelay } from "./hear
 import { handleMediaReady, handleMediaRequest } from "./storyMediaLink";
 import { handleSceneStatus } from "../live/scene/status";
 import { applySessionRestore } from "../live/sessionRestore";
+import { recordTranscript } from "../live/transcriptStore";
 import { dispatch, getStageState, pushEvent, useConnectionStore, type ConnectionStatus } from "./store";
 import { currentChannelId } from "../live/channel";
 import { currentSettings, helloKeysFrom, resolveRequestedMode, SETTINGS_TEXT, useSettingsStore } from "../live/settings";
@@ -288,6 +289,8 @@ export function createConnection(): Connection {
     // S6c §5：scene_status 也是剧情层消息，不经过 A 的 turnId 过滤。
     if (message.type === "scene_status") handleSceneStatus(message.payload);
     if (message.type === "pong") lastPongAt = Date.now();
+    // freeze-fix9 §3：语音识别结果进弹幕区（只记当前轮的，旧轮 D3 丢弃 —— Live 排空时再校验轮次）。
+    if (message.type === "transcript") recordTranscript(message.turnId, message.payload.text);
     pushEvent(`recv ${message.type} t${message.turnId}`);
   }
 

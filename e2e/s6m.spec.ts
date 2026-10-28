@@ -1,11 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * S6m §4 / freeze-fix1 §7：动作表 —— 打开 → 点挥手 → 截图（本批运行）。
+ * S6m §4 / freeze-fix1 §7 / freeze-fix9 §1：动作表 —— 打开 → 点摇尾巴 → 截图（本批运行）。
  *
  * - 桌面：点弹幕窗口顶部的「动作表」标签展开面板；
  * - 手机：**从右上角菜单打开**（动作表在菜单抽屉里）→ 底部抽屉；
- * - 点「挥手」→ 只在本地预览（不发网络、不算一轮），`data-phase` 仍是 idle → 截图。
+ * - 点「摇尾巴」→ 只在本地预览（不发网络、不算一轮），`data-phase` 仍是 idle → 截图。
+ *
+ * freeze-fix9 §1：原「挥手」已移除（这套皮套右臂抬不起来），改用摇尾巴验证动作表。
  */
 
 async function openLive(page: Page): Promise<void> {
@@ -18,7 +20,7 @@ const layoutOf = (testInfo: { project: { name: string } }): "desktop" | "mobile"
   testInfo.project.name === "desktop" ? "desktop" : "mobile";
 
 test.describe("S6m §3 动作表", () => {
-  test("打开动作表 → 点挥手 → 仍是 idle → 截图", async ({ page }, testInfo) => {
+  test("打开动作表 → 点摇尾巴 → 仍是 idle → 截图", async ({ page }, testInfo) => {
     await openLive(page);
     await expect(page.getByTestId("live")).toHaveAttribute("data-phase", "idle", { timeout: 30_000 });
 
@@ -35,8 +37,8 @@ test.describe("S6m §3 动作表", () => {
     const panel = page.getByTestId("action-panel");
     await expect(panel).toBeVisible();
 
-    // 点「挥手」→ 只在本地预览。
-    await page.getByTestId("action-wave").click();
+    // 点「摇尾巴」→ 只在本地预览。
+    await page.getByTestId("action-tail_wag").click();
     // 预览不发网络、不算一轮：phase 仍为 idle。
     await expect(page.getByTestId("live")).toHaveAttribute("data-phase", "idle");
 

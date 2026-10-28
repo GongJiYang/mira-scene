@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createFishTts } from "../src/adapters/fish/fishTts";
-import { defaultCharacterId, loadPacks, type Pack } from "../src/characters/pack";
+import { defaultCharacterId, loadPacks, resolveFishVoiceId, type Pack } from "../src/characters/pack";
 import { normalizeV1, readRepoEnvFile } from "../src/config";
 
 /** 三条反应音（文本保持 S3 原样不变）。 */
@@ -39,16 +39,11 @@ function findRepoRoot(start: string): string {
 }
 
 /**
- * S6l-fix1 §5：按角色包解析反应音音色（与会话层 `resolveVoiceId` 同一规则）。
- * 取该角色 `pack.voice.fishVoiceIdEnv` 对应的环境变量值；为空则抛错（不可用 Fish 默认音色）。
+ * S6l-fix1 §5：按角色包解析反应音音色（与会话层 / 录音脚本同一规则）。
+ * freeze-fix9 §4：逻辑收敛到 `characters/pack.ts` 的纯函数 `resolveFishVoiceId`（唯一出处）。
  */
 export function resolveSfxVoiceId(pack: Pack, env: Record<string, string | undefined>): string {
-  const envName = pack.voice.fishVoiceIdEnv;
-  const value = (env[envName] ?? "").trim();
-  if (value === "") {
-    throw new Error(`缺少 TTS 音色环境变量 ${envName}（角色 ${pack.id} 需要，请在 .env 配置）`);
-  }
-  return value;
+  return resolveFishVoiceId(pack, env);
 }
 
 /** `--character <id>` 解析（缺省 undefined）。 */

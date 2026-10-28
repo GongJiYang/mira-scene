@@ -41,8 +41,8 @@ describe("S6m §1：postPhysicsParams 不影响现有参数（无动作时）", 
   });
 
   it("越界时间 → 空目标", () => {
-    expect(postPhysicsParams("wave", -1).target).toEqual({});
-    expect(postPhysicsParams("wave", 10).weight).toBe(0);
+    expect(postPhysicsParams("tail_wag", -1).target).toEqual({});
+    expect(postPhysicsParams("tail_wag", 10).weight).toBe(0);
   });
 });
 
@@ -55,9 +55,9 @@ describe("S6m §1/§2：混合公式 value = phys*(1-w) + target*w", () => {
     expect(mix(0.5, 1, 0.5)).toBeCloseTo(0.75);
   });
 
-  it("wave 中途权重为 1，目标带 ParamHandR 抬起值", () => {
-    const out = postPhysicsParams("wave", LOCAL_ACTION_DURATION_SEC.wave / 2);
+  it("tail_wag 中途权重为 1，目标带 ParamTailX 参数", () => {
+    const out = postPhysicsParams("tail_wag", LOCAL_ACTION_DURATION_SEC.tail_wag / 2);
     expect(out.weight).toBe(1);
-    expect(out.target.ParamHandR).toBeGreaterThan(0.9);
+    expect(out.target.ParamTailX1).toBeDefined();
   });
 });

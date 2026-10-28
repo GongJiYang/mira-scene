@@ -33,7 +33,8 @@ const ACCENTS = [
   "fly_pet",
 ] as const satisfies readonly Accent[];
 const EXISTING_ACTIONS = ["drink", "glance", "phone", "show_item"] as const;
-const LOCAL_ACTIONS = ["wave", "tail_wag", "ear_flick", "sway"] as const satisfies readonly LocalActionId[];
+// freeze-fix9 §1：「挥手」已移除（这套皮套右臂抬不起来，实测见报告）；动作表改用摇尾巴。
+const LOCAL_ACTIONS = ["tail_wag", "ear_flick", "sway"] as const satisfies readonly LocalActionId[];
 
 const emotionItem = (value: Emotion): PreviewItem => ({ kind: "emotion", value });
 const accentItem = (value: Accent): PreviewItem => ({ kind: "accent", value });
