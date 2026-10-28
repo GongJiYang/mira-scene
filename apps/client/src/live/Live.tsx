@@ -247,6 +247,25 @@ export function Live() {
     vm.intents.pttUp();
   }, [vm.intents]);
 
+  /**
+   * freeze-fix4 §2：按下即捕获指针（setPointerCapture）。
+   * 否则按下后布局位移（「正在听」/声波）会让指针落到按钮外触发 pointerleave，
+   * 导致录音瞬间被 pttUp 结束。捕获后 pointerup / pointercancel 仍会命中本元素。
+   */
+  const onPttDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      const target = event.currentTarget;
+      const pointerId = event.pointerId;
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        // 合成事件（pointerId 缺失）无法捕获；结束仍靠 pointerup / pointercancel。
+      }
+      startPtt();
+    },
+    [startPtt],
+  );
+
   useEffect(() => {
     window.addEventListener("pointerup", endPtt);
     window.addEventListener("pointercancel", endPtt);
@@ -447,9 +466,8 @@ export function Live() {
               data-testid="ptt"
               data-active={vm.phase === "listening"}
               aria-label={UI_TEXT.mic}
-              onPointerDown={startPtt}
+              onPointerDown={onPttDown}
               onPointerUp={endPtt}
-              onPointerLeave={endPtt}
               onPointerCancel={endPtt}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -458,15 +476,20 @@ export function Live() {
               </svg>
               {UI_TEXT.mic}
             </button>
-            {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
-            {listening && (
-              <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
-                <i />
-                <i />
-                <i />
-                <span className="live-wave-label">{UI_TEXT.listening}</span>
-              </span>
-            )}
+            {/*
+             * S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。
+             * freeze-fix4 §2：外层固定宽度槽位——声波出现 / 消失都不得挤动 PTT 按钮。
+             */}
+            <span className="live-wave-slot">
+              {listening && (
+                <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                  <span className="live-wave-label">{UI_TEXT.listening}</span>
+                </span>
+              )}
+            </span>
           </form>
 
           {/* 弹幕窗口（占两行） */}
@@ -497,7 +520,7 @@ export function Live() {
       draft={draft}
       setDraft={setDraft}
       submit={submit}
-      startPtt={startPtt}
+      onPttDown={onPttDown}
       endPtt={endPtt}
       stage={stage}
       listening={listening}
@@ -582,7 +605,7 @@ type MobileProps = {
   draft: string;
   setDraft: (value: string) => void;
   submit: () => void;
-  startPtt: () => void;
+  onPttDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   endPtt: () => void;
   stage: React.ReactNode;
   listening: boolean;
@@ -594,7 +617,7 @@ type MobileProps = {
 
 /** 手机布局：竖屏全屏 + 左下浮层弹幕 + 底部胶囊输入。 */
 function MobileLive(props: MobileProps) {
-  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, stage, listening, level, onStageTap, onGuideClick, onGift } = props;
+  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, onPttDown, endPtt, stage, listening, level, onStageTap, onGuideClick, onGift } = props;
   const character = characterOrDefault(characterId);
   // S6l §5/§6：短按（无明显位移）才当作点击交给 tap 层。
   const tap = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -724,7 +747,7 @@ function MobileLive(props: MobileProps) {
               <i />
               <i />
             </div>
-            <button type="button" className="live-recording-send" aria-label={UI_TEXT.recordingSend} onPointerUp={endPtt} onPointerCancel={endPtt} onPointerLeave={endPtt}>
+            <button type="button" className="live-recording-send" aria-label={UI_TEXT.recordingSend} onPointerUp={endPtt} onPointerCancel={endPtt}>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <rect x="9" y="3" width="6" height="11" rx="3" />
                 <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
@@ -772,9 +795,8 @@ function MobileLive(props: MobileProps) {
             data-testid="ptt"
             data-active={vm.phase === "listening"}
             aria-label={UI_TEXT.mic}
-            onPointerDown={startPtt}
+            onPointerDown={onPttDown}
             onPointerUp={endPtt}
-            onPointerLeave={endPtt}
             onPointerCancel={endPtt}
           >
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -782,15 +804,20 @@ function MobileLive(props: MobileProps) {
               <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
             </svg>
           </button>
-          {/* S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。 */}
-          {listening && (
-            <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
-              <i />
-              <i />
-              <i />
-              <span className="live-wave-label">{UI_TEXT.listening}</span>
-            </span>
-          )}
+          {/*
+           * S6f §2：倾听声波（随输入音量跳动）；文字输入时也显示「正在听」。
+           * freeze-fix4 §2：同桌面——固定宽度槽位，避免声波挤动 PTT 按钮。
+           */}
+          <span className="live-wave-slot">
+            {listening && (
+              <span className="live-wave" data-testid="listening-wave" style={{ ["--level" as never]: level }} aria-hidden>
+                <i />
+                <i />
+                <i />
+                <span className="live-wave-label">{UI_TEXT.listening}</span>
+              </span>
+            )}
+          </span>
         </form>
 
         {vm.error && vm.debugMode && <p className="live-error">{`${vm.error.code}: ${vm.error.message}`}</p>}
