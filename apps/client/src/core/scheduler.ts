@@ -33,6 +33,8 @@ export function isTurnTtsDegraded(state: ClientState): boolean {
  * - 没有待播 beat → null
  * - 无声 beat 不等音频
  * - 本轮 TTS 降级（freeze-fix5 §2.2）：音频不会再来，未就绪的 beat 也按无声处理（不卡死）
+ * - 本轮已收到 turn_end（freeze-fix6 §2.1）：服务端保证 turn_end 之前发完全部 tts_audio，
+ *   故此时无音频就绪即「不会再来」，按无声 beat 处理（防止兜底 beat 永久卡在 think）
  * - 有音频就绪才播，否则继续等待（保证 seq 顺序）
  */
 export function pickNextPlayable(
@@ -47,6 +49,6 @@ export function pickNextPlayable(
   if (!next) return null;
   if (next.say === "") return { seq: next.seq, silent: true };
   if (readySeqs.has(next.seq)) return { seq: next.seq, silent: false };
-  // 本轮已降级：这句不会有音频，按无声 beat 停留可读时长后结束。
-  return isTurnTtsDegraded(state) ? { seq: next.seq, silent: true } : null;
+  // 音频不会再来（本轮已降级 / 已 turn_end）：按无声 beat 停留可读时长后结束。
+  return isTurnTtsDegraded(state) || state.turnEnded ? { seq: next.seq, silent: true } : null;
 }

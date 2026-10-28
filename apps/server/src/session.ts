@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   isTurnIdAcceptable,
   parseLlmBeatLenient,
@@ -174,6 +176,11 @@ export type SessionDeps = Ports & {
    */
   referenceDirs?: ReferenceDirs;
   /**
+   * freeze-fix6 §2.2：兜底预录语音的静态根目录（`<root>/characters/<id>/voice/fallback/<category>.mp3`）。
+   * 缺省为客户端静态目录 `clientPublicRoot()`；测试可注入空目录来覆盖「文件缺失」分支。
+   */
+  fallbackVoiceRoot?: string;
+  /**
    * D49 / S6n §2：把 hello 的 `mode` / `keys` 解析成模式与 capabilities（纯函数）。
    * 缺省时一律按 mock 处理（旧测试无需提供）。
    */
@@ -280,6 +287,28 @@ async function synthesizeWithRetry(
 }
 
 /**
+ * freeze-fix6 §2.2：兜底预录语音的公开 URL（与客户端 `fallbackVoiceUrl` 同一约定）。
+ * 服务端解析成客户端静态目录下的真实文件路径。
+ */
+function fallbackVoiceUrl(characterId: string, category: FallbackCategory): string {
+  return `/characters/${characterId}/voice/fallback/${category}.mp3`;
+}
+
+/**
+ * freeze-fix6 §2.2：读取兜底预录语音（`<root>/characters/<id>/voice/fallback/<category>.mp3`）。
+ * 文件不存在 / 读取失败 → null（调用方按无声兜底，不发 tts_audio）。
+ */
+function readFallbackAudio(root: string, characterId: string, category: FallbackCategory): { data: Buffer } | null {
+  const path = join(root, fallbackVoiceUrl(characterId, category).replace(/^\/+/, ""));
+  try {
+    if (!existsSync(path)) return null;
+    return { data: readFileSync(path) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 降级兜底 beat（D10 / S6b §2）：只带台词与情绪，视觉沿用当前场景。
  * 台词从角色包的 fallback 表按类别取，不在此处硬编码（铁律 6）。
  */
@@ -330,6 +359,8 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       generatedDir: deps.sceneImageGen?.outDir ?? defaultOutDir(),
       clientPublicRoot: clientPublicRoot(),
     };
+  // freeze-fix6 §2.2：兜底预录语音的静态根（缺省 = 客户端静态目录）。
+  const fallbackVoiceRoot = deps.fallbackVoiceRoot ?? clientPublicRoot();
   // 全站每日计数：内存保存，跨自然日重置。
   const daily = { day: localDayKey(clock()), count: 0 };
 
@@ -436,6 +467,17 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       session.send?.(buildEnvelope(session, turnId, type, payload));
       return true;
     };
+    /**
+     * freeze-fix6 §2.2：兜底 beat 的预录语音。发兜底 beat 后、turn_end 之前调用：
+     * 文件存在 → 下发 `tts_audio { beatSeq: 0, mime, dataBase64 }`；不存在 → 不发（客户端按无声兜底）。
+     * 日志 `fallback_audio { category, found }`（不含路径以外的敏感信息）。
+     */
+    const emitFallbackAudio = (category: FallbackCategory): void => {
+      const audio = readFallbackAudio(fallbackVoiceRoot, session.pack.id, category);
+      logTurn("fallback_audio", { category, found: audio !== null });
+      if (audio === null) return;
+      emitFinal("tts_audio", { beatSeq: 0, mime: "audio/mpeg", dataBase64: audio.data.toString("base64") });
+    };
 
     logTurn("turn_start", { input: input.type });
 
@@ -455,6 +497,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
           // 不再走 turn_failed（不显示技术报错）。
           logTurn("fallback_used", { category: "stt_failed" });
           if (!emitFinal("beat", { beat: fallbackBeat(session, "stt_failed") })) return;
+          emitFallbackAudio("stt_failed");
           closed = true;
           if (!emitFinal("turn_end", { reason: "done" })) return;
           logTurn("turn_end", { reason: "done" });
@@ -466,6 +509,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
           // STT 空结果：不跑 LLM，给一句「没听清」后正常结束本轮。
           logTurn("fallback_used", { category: "stt_empty" });
           if (!emit("beat", { beat: fallbackBeat(session, "stt_empty") })) return;
+          emitFallbackAudio("stt_empty");
           closed = true;
           if (!emitFinal("turn_end", { reason: "done" })) return;
           logTurn("turn_end", { reason: "done" });
@@ -836,6 +880,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
         // LLM 首 token 超时（D10）：兜底台词 → error{llm_timeout} → turn_end{error}。
         logTurn("fallback_used", { category: "llm_timeout" });
         if (!emitFinal("beat", { beat: fallbackBeat(session, "llm_timeout") })) return;
+        emitFallbackAudio("llm_timeout");
         if (!emitFinal("error", { code: "llm_timeout", message: "LLM 首 token 超时，已使用兜底台词", retryable: true })) return;
         if (!emitFinal("turn_end", { reason: "error" })) return;
         logTurn("turn_end", { reason: "error" });
@@ -852,6 +897,7 @@ export function createSessionManager(deps: SessionDeps): SessionManager {
       logTurn("turn_failed", { message });
       logTurn("fallback_used", { category: "turn_failed" });
       if (!emitFinal("beat", { beat: fallbackBeat(session, "turn_failed") })) return;
+      emitFallbackAudio("turn_failed");
       if (!emitFinal("error", { code: "turn_failed", message, retryable: true })) return;
       if (!emitFinal("turn_end", { reason: "error" })) return;
       logTurn("turn_end", { reason: "error" });

@@ -52,6 +52,15 @@ const errorMsg = (turnId: number, scope?: "session" | "turn"): ServerMessage => 
   payload: { code: "llm_timeout", message: "超时", retryable: true, ...(scope ? { scope } : {}) },
 });
 
+/** freeze-fix6 §2.1：带具体 code 的 error（scope 缺省 = 轮次级）。 */
+const errorMsgWithCode = (turnId: number, code: string, scope?: "session" | "turn"): ServerMessage => ({
+  ...envelope,
+  type: "error",
+  turnId,
+  seq: 0,
+  payload: { code, message: `${code} 详情`, retryable: true, ...(scope ? { scope } : {}) },
+});
+
 const makeSnapshot = (overrides: Partial<SceneState> = {}): SceneState => ({
   node: "probe",
   trust: 2,
@@ -138,25 +147,42 @@ describe("turnId 过滤（D3）", () => {
   it("会话级 error 不按 turnId 过滤：必须进入错误态", () => {
     const state = thinkingWithTurn();
     expect(state.currentTurnId).toBe(1);
-    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(0, "session") });
+    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsgWithCode(0, "real_unavailable", "session") });
     expect(next.phase).toEqual({
       kind: "error",
-      code: "llm_timeout",
-      message: "超时",
+      code: "real_unavailable",
+      message: "real_unavailable 详情",
       retryable: true,
     });
   });
 
-  it("当前轮的轮次级 error 进入错误态", () => {
+  it("当前轮的非兜底轮次级 error 进入错误态", () => {
     const state = thinkingWithTurn();
     expect(state.currentTurnId).toBe(1);
-    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(1) });
+    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsgWithCode(1, "quota_exceeded") });
     expect(next.phase).toEqual({
       kind: "error",
-      code: "llm_timeout",
-      message: "超时",
+      code: "quota_exceeded",
+      message: "quota_exceeded 详情",
       retryable: true,
     });
+  });
+
+  // freeze-fix6 §2.1：llm_timeout / turn_failed 是「兜底」轮次级错误——服务端已下发兜底 beat
+  // （且现在带预录语音），客户端不得把它当致命错误清空本轮，否则兜底台词永远不显示。
+  it.each(["llm_timeout", "turn_failed"])("当前轮的兜底 error（%s）不清空本轮、不进错误态", (code) => {
+    const state = run(
+      thinkingWithTurn(),
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "兜底台词" })) },
+    );
+    expect(state.phase.kind).toBe("thinking");
+    expect(state.queue.map((beat) => beat.seq)).toEqual([0]);
+
+    const next = reducer(state, { type: "SERVER_MESSAGE", message: errorMsgWithCode(1, code) });
+    // 非致命：保留本轮 queue 与相位，只标记本轮已结束（兜底 beat 会按无声 / 预录语音播完回 idle）。
+    expect(next.phase.kind).toBe("thinking");
+    expect(next.queue.map((beat) => beat.seq)).toEqual([0]);
+    expect(next.turnEnded).toBe(true);
   });
 
   it("fast-check：任意非当前轮的轮次级 error 都不改变状态", () => {
@@ -248,19 +274,19 @@ describe("打断与输入", () => {
   it("RETRY 只在 error 时回到 idle", () => {
     const errorState = reducer(
       reducer(initialState, { type: "SUBMIT_TEXT" }),
-      { type: "SERVER_MESSAGE", message: errorMsg(1) },
+      { type: "SERVER_MESSAGE", message: errorMsgWithCode(1, "quota_exceeded") },
     );
     expect(errorState.phase).toEqual({
       kind: "error",
-      code: "llm_timeout",
-      message: "超时",
+      code: "quota_exceeded",
+      message: "quota_exceeded 详情",
       retryable: true,
     });
     expect(reducer(initialState, { type: "RETRY" })).toBe(initialState);
     expect(reducer(errorState, { type: "RETRY" }).phase).toEqual({ kind: "idle" });
   });
 
-  it("error 清空 queue 与 subtitle，并让 audioStopToken +1", () => {
+  it("非兜底 error 清空 queue 与 subtitle，并让 audioStopToken +1", () => {
     let state = run(
       initialState,
       { type: "SUBMIT_TEXT" },
@@ -274,16 +300,40 @@ describe("打断与输入", () => {
     expect(state.subtitle).toBe("第一句");
     const tokenBefore = state.audioStopToken;
 
-    state = reducer(state, { type: "SERVER_MESSAGE", message: errorMsg(1) });
+    state = reducer(state, { type: "SERVER_MESSAGE", message: errorMsgWithCode(1, "stale_turn") });
     expect(state.phase).toEqual({
       kind: "error",
-      code: "llm_timeout",
-      message: "超时",
+      code: "stale_turn",
+      message: "stale_turn 详情",
       retryable: true,
     });
     expect(state.queue).toEqual([]);
     expect(state.subtitle).toBeNull();
     expect(state.audioStopToken).toBe(tokenBefore + 1);
+  });
+
+  // freeze-fix6 §2.1：兜底整轮 —— beat → error(兜底) → turn_end。error 不清空本轮；
+  // 兜底 beat 按无声播完后回 idle（对应 §3 的 e2e 路径）。
+  it("兜底整轮：beat → error(llm_timeout) → turn_end → 播完回 idle", () => {
+    let state = run(
+      thinkingWithTurn(),
+      { type: "SERVER_MESSAGE", message: beatMsg(1, makeBeat(0, { say: "……抱歉，刚刚发呆了。" })) },
+      { type: "SERVER_MESSAGE", message: errorMsg(1) },
+      { type: "SERVER_MESSAGE", message: turnEndMsg(1) },
+    );
+    // 兜底 beat 仍在队列，未进错误态。
+    expect(state.phase.kind).toBe("thinking");
+    expect(state.queue.map((beat) => beat.seq)).toEqual([0]);
+    expect(state.turnEnded).toBe(true);
+
+    // 无声播放（无音频就绪）→ BEAT_AUDIO_STARTED 出队并显示字幕。
+    state = reducer(state, { type: "BEAT_AUDIO_STARTED", turnId: 1, seq: 0 });
+    expect(state.subtitle).toBe("……抱歉，刚刚发呆了。");
+    expect(state.phase).toEqual({ kind: "speaking", seq: 0 });
+
+    // 播完 → 队列空且 turnEnded → 回 idle。
+    state = reducer(state, { type: "BEAT_AUDIO_ENDED", turnId: 1, seq: 0 });
+    expect(state.phase.kind).toBe("idle");
   });
 });
 

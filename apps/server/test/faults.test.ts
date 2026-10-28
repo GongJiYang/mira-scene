@@ -330,7 +330,7 @@ describe("shouldResume：faults 集合相等才恢复（freeze-fix2 §2）", () 
 });
 
 describe("降级路径：llm_timeout", () => {
-  it("下发兜底台词（guarded）→ error{llm_timeout,retryable:true} → turn_end{error}", async () => {
+  it("下发兜底台词（guarded）→ tts_audio → error{llm_timeout,retryable:true} → turn_end{error}", async () => {
     const harness = setup({ firstTokenTimeoutMs: 1_000, base: { llm: createMockLlm() } });
     await harness.hello(["llm_timeout"]);
 
@@ -338,7 +338,8 @@ describe("降级路径：llm_timeout", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await turn;
 
-    expect(messagesOf(harness, 1).map((message) => message.type)).toEqual(["beat", "error", "turn_end"]);
+    // freeze-fix6 §2.2：兜底 beat 配预录语音（文件存在 → beatSeq 0 的 tts_audio 在 turn_end 之前）。
+    expect(messagesOf(harness, 1).map((message) => message.type)).toEqual(["beat", "tts_audio", "error", "turn_end"]);
     expect(beatsOf(harness, 1)[0]?.payload.beat).toMatchObject({
       seq: 0,
       say: FALLBACK.llm_timeout,
@@ -446,7 +447,8 @@ describe("降级路径：STT 空结果", () => {
     await harness.hello(["stt"]);
     await harness.audio(1);
 
-    expect(messagesOf(harness, 1).map((message) => message.type)).toEqual(["beat", "turn_end"]);
+    // freeze-fix6 §2.2：兜底 beat 配预录语音（文件存在 → tts_audio 在 turn_end 之前）。
+    expect(messagesOf(harness, 1).map((message) => message.type)).toEqual(["beat", "tts_audio", "turn_end"]);
     expect(beatsOf(harness, 1)[0]?.payload.beat).toMatchObject({
       seq: 0,
       say: FALLBACK.stt_empty,
