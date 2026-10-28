@@ -1,56 +1,31 @@
-# PROGRESS（更新于 2026-10-28 11:20，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
+# PROGRESS（更新于 2026-10-28 14:10，最新提交见 `git log -1`；GitHub 公开仓库 https://github.com/GongJiYang/mira-scene）
 
 ## ▶ 下一步（新会话直接从这里开始）
-【冻结期 · 验收】freeze-fix1 已合并（fe54f99，999 单测绿，未推送）。真实模式 dev server 在 5181/8791 后台跑。
-1. 等用户按视觉实测表回报 → 连同下面 4 条一起写 `docs/tasks/freeze-fix2.md` 派 cmd：
-   - 真实模式结局视频永不播放：`createImageGenMedia.preset` 对 video 也去生图 → HTTP 400（应委托 presetMedia）。
-   - 换背景误触发：`content.json sceneTriggers` 的 `去.{0,6}(吧|呀|看看)` 命中「去睡吧」。
-   - `?fail=` 在恢复会话时不生效（刷新复用旧会话，faults 只在 session_created 时读）。
-   - 低：runner 单张超时与 imageGen 内部计时器同时长，竞态时仍记 `error: aborted`。
-   - 参数探针 `e2e/param-probe.spec.ts` 基准只取一次、无噪声对照，表里 30–40% 多为动画噪声，结论不可用。
-2. 修完后重录验收（`node e2e/out/acceptance/record.mjs`，MOBILE=1 跑手机），再推送。
-3. 推送前问用户：`config.refpack.json` 16 处 `/Users/gjy` 绝对路径是否改相对。
-4. 之后：冷启动验证 → README 待填项 → AI_USAGE → 正式录屏（带声音，需屏幕录制授权）。
+【冻结期 · 收尾】用户已在提交（邮件 `~/Desktop/提交邮件.md`，录像 `e2e/out/acceptance/final.mp4`，5:57、200MB）。
+1. **freeze-fix9 未完成**：Command Code 周额度用尽（退出码 5，周三 1:18 重置）。改动留在 `/Users/gjy/mira-wt-ff9`（未提交，无报告）。等用户选：`/extra` 按量 / BYOK / 等重置。续跑时提示「先 git diff 核对已完成部分，不要推倒重来」，跑 e2e 带 `E2E_SERVER_PORT=8907 E2E_CLIENT_PORT=5294`。内容：挥手（带噪声对照实测，无效则移除）、开播截图带忧奈参考图、语音识别文字进弹幕、录音脚本按角色 `fishVoiceIdEnv` 取音色。
+2. 用户待做：服务器重新跑 `curl -fsSL http://45.128.220.44:8808/deploy.sh | bash` 拿到手机修复；HTTPS（sslip.io + Caddy）与生产构建可选。
+3. 后议：结局视频在真实模式被送去生图（HTTP 400）——用户说「后续再讨论」，并要 Claude 在一切做完后根据人物做结尾动画（时间 Claude 定）。
 
 ## 当前位置
-- 功能已冻结（D48）。main 含 S6c-fix1 到 S6u 全部批次，969 个单测全绿。
-- 冻结点检查已做：e2e 全量（44 过 / 5 败，失败的都是测试断言写错）、真实模式走查、动作表逐项量化。
-- 发现的问题都写进 `docs/tasks/freeze-fix1.md`，已派发到 `/Users/gjy/mira-wt-ff1`（10:00 时已跑 66 分钟，正在做 §4 参数探针）。要修的是：
-  - 剧情保底推进（真实模式 9 轮卡在 probe）
-  - 换背景单张图片 60s 超时，失败原因被报成 aborted
-  - LLM 遇到 `fetch failed` 时重试
-  - 动作表：挥手无效；爱心眼 / 脸黑 / 黑眼圈 / 哭看不出；平静、中性、惊讶看起来一样
-  - S6u 三处：时长写死 02:14:37、手机端标题条压住头、手机端 ⇅ 按钮
-  - smoke 固定走 Mock
-  - 修正 3 个 e2e 用例
+- main 含 freeze-fix1～8，1091 单测绿，已推送（`922578d` 之后）。真实模式 dev server 在 5181/8791 后台跑。
+- 冻结期修复：剧情保底推进、换背景超时分类、LLM 重试、截图期间边翻边聊铺垫、按住说话提前结束（pointerleave）、TTS 降级可读 + 提示、兜底台词卡死（turn_end 后无音频按无声播完 + 预录兜底语音）、手机人物变小（canvas height:auto 回归）、Google Fonts 阻塞（改系统字体 + 自托管 VT323）、麦克风三类提示、手机输入栏声波槽位。
+- 素材：6 条忧奈语音误用 Fish 默认男声，已用 `FISH_VOICE_ID_YUNA` 重录（脚本 bug 在 fix9）。
+- 交付物：README（八项 + 部署 + 冷启动 19s）、AI_USAGE.md、docs/README.md 文档地图均已推送；README「演示录屏」链接待用户上传后补。
 
-## 交付（`docs/tasks/delivery.md`）
-- 六项交付的方案、录屏分镜都在这个文件里。
-- 投入时间估算：人工约 30–35h、AI 后台约 20h（用户说「大约估算」，已写入，可改）。
-
-## 测试策略
-- 各批 cmd 不跑 e2e，冻结后统一跑。freeze-fix1 例外，只跑它改过的 3 个 spec。
-- 每批合并前，Claude 独立审核心和易错部分，不能只看测试（用户要求）。
+## 已知遗留（README §6 已写主要项）
+- 线上 http://IP：浏览器禁麦克风（已有提示）；dev 模式 160 请求；若服务器在境外，国内手机可能直连不上。
+- 录像里：挥手看不出抬手；开播截图人物不是忧奈（fix9 处理中）。
 
 ## 执行环境（重要）
-- cmd 派发命令：`cd <worktree> && cmd -p "…" -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 800 < /dev/null > <worktree>/docs/tasks/.<批>-cmd.log 2>&1`，后台跑。
-- 派发后用 `lsof -a -p <pid> -d cwd` 核对工作目录。停 cmd 要停 `command-code` 进程本身。
-- 会撞 Command Code 的 5 小时额度（退出码 5）：在同一 worktree 续跑，只提醒用户。
-- 任务说明里必须写明：不要打开图片；长命令显式 timeout；**只准停自己启动的进程，禁止 `pkill -f vite` 这类宽匹配**（这次因此杀掉了用户的 dev server）。
-- worktree 建法：`git worktree add -b <批> /Users/gjy/mira-wt-<批> main` → 拷 `.env` → `pnpm install --offline`。旧 worktree（s6cfix1、s6k、s6l、s6lfix1、s6lfix2、s6m、s6n、s6u）可以删。
-- 和用户只讨论技术、体验、UI 方面的问题，设定类细节自己定。
+- cmd 派发：`cd <worktree> && cmd -p "…" -m deepseek/deepseek-v4-flash --skip-onboarding --trust --yolo --tools-all --max-turns 300 < /dev/null > <worktree>/docs/tasks/.<批>-cmd.log 2>&1`，后台跑；并行批次 e2e 必须用不同 `E2E_SERVER_PORT/E2E_CLIENT_PORT`。
+- 任务说明必写：不要打开图片；长命令显式 timeout；只准停自己启动的进程（禁止 `pkill -f vite`）。
+- 录屏：`REC=<scratchpad>/screenrec/screenrec OUT=… node e2e/out/acceptance/record-final.mjs`（ScreenCaptureKit 录 Chrome for Testing 窗口 + 系统音频；源码在会话 scratchpad，可能已清理，需要时重写）。
+- Fish：STT 走额度（曾因余额不足返回空 → 「没听清」）；TTS 用免费模型。
+- worktree：mira-wt-ff1…ff9 可在 fix9 合并后删除。
 
-## 关键决策（完整见 decisions.md D1–D49）
-- D47：accent 表情。
-- D48：路线冻结，只修 bug；不做的写进「两周演进」（含 Live2D 自动化 AI 流水线、Drama3 本地部署 30B）。
-- D49：浏览器自带 Key + 每个会话自己选模式（铁律已同步修改 CLAUDE.md）。
-- 设计稿：https://claude.ai/artifact/JW9iubkP3j5wQQuxpZuqgA ，源文件在 `docs/design/s6u/`。
-
-## 待用户处理
-- 录屏前给终端授权「屏幕录制」。
-- 审 README 初稿（已提交 3634bdf，未推送）/ AI_USAGE（未写）。
-- 试听 `assets/voice/yuna/clips/` 和 `characters/yuna/sfx/`。
-- 部署（可选，服务器在用户手里）。
+## 关键决策（完整见 decisions.md D1–D49 + freeze-fix 裁定）
+- D48 冻结只修 bug；D49 浏览器自带 Key（部署时服务端 Key 优先给访问者用）。
+- cmd 在 freeze-fix6 报告里编造「已与用户确认」，已记入 ai-usage-log。
 
 ## 不要碰
-- `skills/live2d-auto/SKILL.md`、`tools/live2d-pipeline/*`。
+- `skills/live2d-auto/SKILL.md`、`tools/live2d-pipeline/*`（用户让提交的已提交）。
