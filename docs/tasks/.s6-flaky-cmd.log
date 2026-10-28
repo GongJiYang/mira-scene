@@ -1,1 +1,0 @@
-完成。改动只有一处：给 `director.property.test.ts` 里那条 `500 次 × 50–200 beat` 的用例加了 `{ timeout: 20_000 }` 和一行注释，`numRuns` 和 beat 范围都没动，全局 vitest 配置没碰。全量 `pnpm test` 连跑 4 次全部通过（72 文件 / 695 用例），该条用例并行下耗时 4.6–4.9s，证实原 5s 默认超时确实是并行负载导致的偶发失败。报告已写到 `docs/tasks/s6-flaky-director-report.md`，未 commit。

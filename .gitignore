@@ -13,3 +13,6 @@ playwright-report/
 var/generated/
 apps/client/public/generated/
 assets/raw/_backup/
+
+# Command Code 执行日志（本地留存，不入库）
+docs/tasks/.*-cmd.log
