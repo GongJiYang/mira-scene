@@ -9,16 +9,17 @@ import { useStageViewModel } from "../view/useStageViewModel";
 import { micInputLevel } from "../core/controller";
 import { characterOrDefault, VISIBLE_CHARACTERS } from "./characters";
 import { danmakuReducer, initialDanmakuState, MAX_MOBILE_DANMAKU, visibleDanmaku, danmakuOpacity, type Danmaku } from "./danmaku";
-import { cycleChannel, pickLayout, swipeDecision, type LiveLayout } from "./layout";
+import { pickLayout, type LiveLayout } from "./layout";
 import { StageRenderer } from "./StageRenderer";
 import { LiveEntries, MobileMenu } from "./entries";
 import { ActionPanelDesktop } from "./ActionPanel";
 import { ModeBadge, SettingsDialogDesktop } from "./SettingsPanel";
-import { UI_TEXT } from "./uiText";
+import { formatHms, UI_TEXT } from "./uiText";
 import { stateChipFor } from "./stateChip";
 import { hudEnabled, useHudStore } from "../obs/hud";
 import { OBS_TEXT } from "../obs/obsText";
 import { useSceneStatusStore } from "./scene/status";
+import { useConnectionStore } from "../core/store";
 import { drainRestoredUserLines, useSessionRestoreStore } from "./sessionRestore";
 import { progressDots } from "./storyProgress";
 import { useGuideScheduler, useInteractionCooldowns, resolveTap } from "./interactionHooks";
@@ -26,6 +27,26 @@ import { isStageTapTarget, resolveStageTap } from "./interaction";
 import type { StagePhase } from "../view/useStageViewModel";
 import "./live.css";
 import "../obs/obs.css";
+
+/**
+ * §5.1：顶栏真实开播时长（`HH:MM:SS`，每秒刷新）。
+ * 起点是服务端下发的会话创建时刻 `startedAt`；恢复会话时沿用原值（从会话开始继续）。
+ * 尚未收到 startedAt 时显示 `00:00:00`（短暂）。
+ */
+function LiveDuration() {
+  const startedAt = useConnectionStore((s) => s.startedAt);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const elapsed = startedAt === null ? 0 : Date.now() - startedAt;
+  return (
+    <span className="live-stage-meta" data-testid="live-duration">
+      {`${UI_TEXT.viewerCount} · ${formatHms(elapsed)}`}
+    </span>
+  );
+}
 
 /** S6h §3：?hud=1 时显示上一轮「首包 xxx ms」角标（数据来自客户端自测，不依赖服务端）。 */
 function FirstAudioHud() {
@@ -357,9 +378,8 @@ export function Live() {
                 {character.displayName}
               </span>
               <span className="live-badge">{UI_TEXT.live}</span>
-              <span className="live-stage-meta">
-                {`${UI_TEXT.viewerCount} · ${UI_TEXT.durationPlaceholder}`}
-              </span>
+              {/* §5.1：真实开播时长（每秒刷新），替换原写死的 02:14:37。 */}
+              <LiveDuration />
               <span className="live-stage-spacer" />
               {/* S6l §2：剧情标题 + 进度点（移入标题栏）。 */}
               <StoryHeader characterId={character.id} node={vm.node} />
@@ -479,7 +499,6 @@ export function Live() {
       submit={submit}
       startPtt={startPtt}
       endPtt={endPtt}
-      switchTo={switchTo}
       stage={stage}
       listening={listening}
       level={level}
@@ -565,7 +584,6 @@ type MobileProps = {
   submit: () => void;
   startPtt: () => void;
   endPtt: () => void;
-  switchTo: (characterId: string) => void;
   stage: React.ReactNode;
   listening: boolean;
   level: number;
@@ -574,13 +592,11 @@ type MobileProps = {
   onGift: () => void;
 };
 
-/** 手机布局：竖屏全屏 + 左下浮层弹幕 + 底部胶囊输入 + 上下滑切主播。 */
+/** 手机布局：竖屏全屏 + 左下浮层弹幕 + 底部胶囊输入。 */
 function MobileLive(props: MobileProps) {
-  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, switchTo, stage, listening, level, onStageTap, onGuideClick, onGift } = props;
+  const { vm, characterId, subtitle, danmaku, draft, setDraft, submit, startPtt, endPtt, stage, listening, level, onStageTap, onGuideClick, onGift } = props;
   const character = characterOrDefault(characterId);
-  const [slide, setSlide] = useState(0);
-  const touch = useRef<{ y: number; t: number } | null>(null);
-  // S6l §5/§6：滑动切频道与点击打架——短按（无明显位移）才当作点击交给 tap 层。
+  // S6l §5/§6：短按（无明显位移）才当作点击交给 tap 层。
   const tap = useRef<{ x: number; y: number; t: number } | null>(null);
 
   // S6u §3：录音面板计时（连续 0 起的本地计时，VT323 显示 mm:ss）。无上滑取消功能。
@@ -603,37 +619,19 @@ function MobileLive(props: MobileProps) {
   const onTouchStart = (event: React.TouchEvent): void => {
     const point = event.touches[0];
     if (!point) return;
-    touch.current = { y: point.clientY, t: performance.now() };
     tap.current = { x: point.clientX, y: point.clientY, t: performance.now() };
   };
 
   const onTouchEnd = (event: React.TouchEvent): void => {
-    const start = touch.current;
-    touch.current = null;
     const point = event.changedTouches[0];
     const startTap = tap.current;
     tap.current = null;
-    if (!start || !point) return;
-    const dy = point.clientY - start.y;
-    const dt = Math.max(1, performance.now() - start.t);
-    const direction = swipeDecision(dy, dy / dt);
-    if (direction !== null) {
-      const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, direction);
-      // 整屏滑动过渡：先滑出，再切换，再滑回。
-      setSlide(direction === "next" ? -1 : 1);
-      window.setTimeout(() => {
-        switchTo(next);
-        setSlide(0);
-      }, 180);
-      return;
-    }
-    // S6l §5/§6：短按（无明显位移、<300ms）→ 当点击处理。
-    if (startTap) {
-      const moved = Math.abs(point.clientX - startTap.x) + Math.abs(point.clientY - startTap.y);
-      if (moved < 12 && performance.now() - startTap.t < 300) {
-        // S6l-fix2 §1：由 resolveStageTap 统一判定——落在交互元素内（输入框 / 引导弹幕 / 字幕 / 菜单 / 卡片按钮）忽略。
-        onStageTap(hitCharacterAt(point.clientX, point.clientY), event.target);
-      }
+    if (!point || !startTap) return;
+    // §5.3：删除上下滑切频道手势（D43 只剩忧奈），只保留短按点击。
+    const moved = Math.abs(point.clientX - startTap.x) + Math.abs(point.clientY - startTap.y);
+    if (moved < 12 && performance.now() - startTap.t < 300) {
+      // S6l-fix2 §1：由 resolveStageTap 统一判定——落在交互元素内（输入框 / 引导弹幕 / 字幕 / 菜单 / 卡片按钮）忽略。
+      onStageTap(hitCharacterAt(point.clientX, point.clientY), event.target);
     }
   };
 
@@ -663,11 +661,7 @@ function MobileLive(props: MobileProps) {
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        <div
-          className="live-mobile-stage"
-          data-testid="live-stage"
-          style={{ transform: `translateY(${slide * 100}%)` }}
-        >
+        <div className="live-mobile-stage" data-testid="live-stage">
           {stage}
           {/* S6c §5：换背景转场状态条（右上角，手机同样显示）。 */}
           <SceneStatusBar />
@@ -691,18 +685,7 @@ function MobileLive(props: MobileProps) {
             <span className="live-mobile-spacer" />
             {/* D49 / S6n §5：手机顶栏模式小标签。 */}
             <ModeBadge vm={vm} />
-            <button
-              type="button"
-              className="live-mobile-mic"
-              data-testid="switch-channel"
-              aria-label={UI_TEXT.switchChannel}
-              onClick={() => {
-                const next = cycleChannel(VISIBLE_CHARACTERS.map((item) => item.id), characterId, "next");
-                switchTo(next);
-              }}
-            >
-              ⇅
-            </button>
+            {/* §5.3：D43 只剩忧奈——删除「⇅」切频道按钮（桌面已删频道栏）。 */}
             {/* S6g-A §5：手机端可展开菜单（文档 / 观测入口 + S6m §3 动作表 + 设置）。 */}
             <MobileMenu phase={vm.phase} vm={vm} />
           </div>

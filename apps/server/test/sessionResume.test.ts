@@ -139,6 +139,15 @@ describe("刷新恢复：session 带 background / transcript（S6l-fix1 §1）",
     expect(session.payload.transcript).toEqual([]);
   });
 
+  it("§5.1：session 带 startedAt；恢复会话沿用原值", async () => {
+    const harness = setup([[{ say: "嗯。" }]]);
+    const first = await harness.hello();
+    expect(typeof first.payload.startedAt).toBe("number");
+    const startedAt = first.payload.startedAt;
+    const resumed = await harness.hello(first.sessionId);
+    expect(resumed.payload.startedAt).toBe(startedAt);
+  });
+
   it("transcript 超过 40 条时只保留最近 40 条（纯函数）", async () => {
     const history = Array.from({ length: 50 }, (_, index) => ({
       role: (index % 2 === 0 ? "user" : "assistant") as "user" | "assistant",

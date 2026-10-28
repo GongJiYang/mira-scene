@@ -34,6 +34,13 @@ export type PreviewItem =
 export const PREVIEW_EMOTION_SEC = 3;
 /** 表情预览「保持」时长（秒）；前后各有 `ACCENT_FADE_SEC` 渐入 / 渐出。 */
 export const PREVIEW_ACCENT_HOLD_SEC = 2;
+/** §4.3：哭的预览「保持」时长（秒）——眼泪 0.58s 起、2.2s 才流到底，需要更长时间。 */
+export const PREVIEW_CRY_HOLD_SEC = 4;
+
+/** 某一表情预览的「保持」时长（秒）：cry 用 4s，其余用默认 2s。 */
+export function accentHoldSec(accent: Accent): number {
+  return accent === "cry" ? PREVIEW_CRY_HOLD_SEC : PREVIEW_ACCENT_HOLD_SEC;
+}
 
 /** 预览项时长（秒）。动作按各自时长。 */
 export function previewDurationSec(item: PreviewItem): number {
@@ -41,7 +48,8 @@ export function previewDurationSec(item: PreviewItem): number {
     case "emotion":
       return PREVIEW_EMOTION_SEC;
     case "accent":
-      return PREVIEW_ACCENT_HOLD_SEC;
+      // 时长 = 保持 + 渐入 0.4 + 渐出 0.4；调用方按此判断是否仍在预览。
+      return accentHoldSec(item.value);
     case "action":
       return item.value in LOCAL_ACTION_DURATION_SEC
         ? LOCAL_ACTION_DURATION_SEC[item.value as LocalActionId]
@@ -110,12 +118,13 @@ export function composePreview(
   if (elapsedSec < 0) return neutral;
 
   if (item.kind === "accent") {
-    // 渐入 0.4s → 保持 → 渐出 0.4s（总保持 PREVIEW_ACCENT_HOLD_SEC）。
-    const hold = PREVIEW_ACCENT_HOLD_SEC;
+    // 渐入 0.4s → 保持 → 渐出 0.4s。
+    // §4.5：整段时间轴上计算——`sinceSec = elapsedSec`（从预览起点算），`untilSec = hold`
+    //（保持结束时刻）。这样渐出阶段 `accentWeight` 在 [hold, hold+FADE] 上从 1 线性降到 0，
+    // 不会像旧实现那样把 `sinceSec` 重置为 `elapsed - hold` 导致权重先跳 0 再重新渐入。
+    const hold = accentHoldSec(item.value);
     if (elapsedSec >= hold + ACCENT_FADE_SEC) return neutral;
-    const until = elapsedSec >= hold ? ACCENT_FADE_SEC : undefined;
-    const sinceSec = elapsedSec >= hold ? elapsedSec - hold : elapsedSec;
-    const contribution = accentParams(item.value, sinceSec, until);
+    const contribution = accentParams(item.value, elapsedSec, hold);
     return { emotion: base.emotion, params: contribution };
   }
 

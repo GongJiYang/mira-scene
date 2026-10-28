@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * S6m §4：动作表 —— 打开 → 点挥手 → 截图。**只写不跑**（铁律：不运行 e2e）。
+ * S6m §4 / freeze-fix1 §7：动作表 —— 打开 → 点挥手 → 截图（本批运行）。
  *
  * - 桌面：点弹幕窗口顶部的「动作表」标签展开面板；
- * - 手机：打开右上角菜单 → 点「动作表」→ 底部抽屉；
+ * - 手机：**从右上角菜单打开**（动作表在菜单抽屉里）→ 底部抽屉；
  * - 点「挥手」→ 只在本地预览（不发网络、不算一轮），`data-phase` 仍是 idle → 截图。
  */
 
@@ -26,8 +26,9 @@ test.describe("S6m §3 动作表", () => {
       // 桌面：展开弹幕窗口顶部的「动作表」。
       await page.getByTestId("action-toggle").click();
     } else {
-      // 手机：打开右上角菜单 → 「动作表」。
+      // 手机：打开右上角菜单 → 动作表（菜单抽屉里的入口）→ 底部抽屉。
       await page.getByTestId("mobile-menu-toggle").click();
+      await expect(page.getByTestId("mobile-menu-panel")).toBeVisible();
       await page.getByTestId("action-toggle").click();
     }
 

@@ -39,29 +39,25 @@ test.describe("S6l-fix1 §3 刷新恢复", () => {
     await expect(page.getByTestId("scene-status")).toHaveAttribute("data-kind", "ready", { timeout: 30_000 });
     await expect(page.getByTestId("live")).toHaveAttribute("data-phase", "idle", { timeout: 30_000 });
 
-    // 记录当前背景（生成图 URL）。
-    const backgroundBefore = await page.evaluate(() => {
-      const el = document.querySelector('[data-bg-layer="base"]') as HTMLElement | null;
-      return el?.style.backgroundImage ?? "";
-    });
-    expect(backgroundBefore).toContain("/generated/");
+    // 记录当前背景。Mock 模式换背景用的是角色包预置测试图（/characters/yuna/test-scene-*.jpg），
+    // 而非真实生成图 /generated/。顶层 `data-bg-layer="top"` 是当前显示的那张。
+    const bgImage = (): Promise<string> =>
+      page.evaluate(() => {
+        const el = document.querySelector('[data-bg-layer="top"]') as HTMLElement | null;
+        return el?.style.backgroundImage ?? "";
+      });
+    await expect.poll(bgImage, { timeout: 20_000 }).not.toContain("/characters/yuna/bg-desktop.jpg");
+    const backgroundBefore = await bgImage();
+    expect(backgroundBefore).not.toBe("");
+    expect(backgroundBefore).not.toContain("/characters/yuna/bg-desktop.jpg");
 
     // 刷新。
     await page.reload();
     await page.mouse.click(4, 4);
     await expect(page.getByTestId("live")).toHaveAttribute("data-connection", "open", { timeout: 20_000 });
 
-    // 背景仍是生成图（刷新恢复直接显示，不播淡入）。
-    await expect
-      .poll(
-        async () =>
-          page.evaluate(() => {
-            const el = document.querySelector('[data-bg-layer="base"]') as HTMLElement | null;
-            return el?.style.backgroundImage ?? "";
-          }),
-        { timeout: 20_000 },
-      )
-      .toContain("/generated/");
+    // 背景仍是换过的那张（刷新恢复直接显示，不播淡入）。
+    await expect.poll(bgImage, { timeout: 20_000 }).toBe(backgroundBefore);
 
     // 用户弹幕仍在（恢复进弹幕列表）。
     await expect(page.getByTestId("danmaku-list")).toContainText("你好");

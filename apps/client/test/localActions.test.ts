@@ -7,6 +7,8 @@ import {
   SWAY_BODY_AMPLITUDE,
   SWAY_HEAD_AMPLITUDE,
   TAIL_AMPLITUDE,
+  WAVE_BOOM_RAISE,
+  WAVE_FOREARM_RAISE,
   WAVE_TURN_AMPLITUDE,
   type LocalActionId,
 } from "../src/render/live2d/localActions";
@@ -23,6 +25,8 @@ const MOCK_RANGES: Record<string, readonly [number, number]> = {
   ...COMFORT_RANGES,
   ParamHandR: [-1, 1],
   ParamHandTurnR: [-1, 1],
+  ParamBoomR: [-1, 1],
+  ParamForeamR: [-1, 1],
   ParamTailX1: [-1, 1],
   ParamTailX2: [-1, 1],
   ParamTailX3: [-1, 1],
@@ -62,8 +66,11 @@ describe("S6m §2：四个动作曲线起止为 0、峰值在范围内", () => {
     }
   });
 
-  it("wave：中途 ParamHandR 抬起、ParamHandTurnR 摆幅 ≤ 60% 范围", () => {
+  it("§4：wave 抬起整条手臂（大臂 + 小臂 + 手），手掌摆动 ≤ 60% 范围", () => {
     const mid = localActionSample("wave", LOCAL_ACTION_DURATION_SEC.wave / 2);
+    // 只抬「手」看不出挥手，必须同时抬大臂 / 小臂（都是物理输出，经 postPhysics 才有效）。
+    expect(mid.postPhysics.ParamBoomR).toBeCloseTo(WAVE_BOOM_RAISE);
+    expect(mid.postPhysics.ParamForeamR).toBeCloseTo(WAVE_FOREARM_RAISE);
     expect(mid.postPhysics.ParamHandR).toBeGreaterThan(0.9);
     expect(Math.abs(mid.postPhysics.ParamHandTurnR as number)).toBeLessThanOrEqual(WAVE_TURN_AMPLITUDE + 1e-9);
   });

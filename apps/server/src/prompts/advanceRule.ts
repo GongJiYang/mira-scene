@@ -14,8 +14,25 @@
  * 用 `scene.revealTurn`（进入 reveal 时的轮次）计算；没有 revealTurn 时不允许 ending。
  */
 import type { SceneState, StoryNode } from "@mira/protocol";
-import type { Intent } from "../intent";
+import { classifyIntent, type Intent } from "../intent";
 import { nextStoryNode } from "../story";
+
+/**
+ * 「那杯咖啡」在提示词里算作温和地直接问起（§2 的示例）。
+ * 提示词渲染与 §1 的保底推进共用同一意图判定，避免两处脱节。
+ */
+const COFFEE_PATTERN = /咖啡|那杯/;
+
+/** 意图判定的最小角色信息（只需要关键词表）。 */
+export type IntentPack = { intentPatterns: ReadonlyArray<readonly [Intent, RegExp]> };
+
+/**
+ * 纯函数：按角色关键词表 + 「那杯咖啡」规则判定意图。
+ * `renderPrompt` 与 §1 的保底推进都调它，保证一致性。
+ */
+export function resolveIntent(pack: IntentPack, text: string): Intent {
+  return COFFEE_PATTERN.test(text) ? "ask_core" : classifyIntent(text, pack.intentPatterns);
+}
 
 /** 「进入 reveal 两轮之后」允许 ending（s3-fix §2）。 */
 export const REVEAL_TO_ENDING_AFTER_TURNS = 2;
@@ -49,31 +66,49 @@ export const ADVANCE_ALLOW_ENDING = advanceAllowText("ending");
  * 允许的目标恒等于 `NEXT_NODE[scene.node]`（由 `nextStoryNode` 提供）。
  * `userTurns` 是历史里用户侧的轮数（含本轮），由调用方传入。
  */
+export function advanceAllowance(
+  scene: SceneState,
+  intent: Intent,
+  turnCount: number,
+  userTurns = 1,
+): StoryNode | null {
+  const next = nextStoryNode(scene.node);
+  if (next === null) return null;
+
+  switch (scene.node) {
+    case "arrive":
+      return userTurns >= PROBE_AFTER_USER_TURNS ? next : null;
+    case "probe": {
+      const asksDirectly = intent === "ask_core";
+      if (scene.trust >= REVEAL_AFTER_TRUST || asksDirectly || turnCount >= REVEAL_AFTER_TURNS) return next;
+      return null;
+    }
+    case "reveal": {
+      const revealTurn = scene.revealTurn;
+      if (revealTurn === undefined) return null;
+      return turnCount - revealTurn >= REVEAL_TO_ENDING_AFTER_TURNS ? next : null;
+    }
+    case "ending":
+      return null;
+  }
+}
+
+/**
+ * 纯函数：当前节点 + 意图 + 轮次 + 用户说话轮数 → advance_rule 文本。
+ *
+ * - arrive：用户说过至少 1 轮 → 允许进入 probe；否则不推进。
+ * - probe：trust≥2、被温和地直接问起，或聊够 8 轮 → 允许进入 reveal。
+ * - reveal：进入两轮之后 → 允许进入 ending。
+ * - ending：总是 hold。
+ *
+ * 与 `advanceAllowance` 共用同一套阈值，保证「允许进入」文本与结构化允许目标永不脱节。
+ */
 export function advanceRule(
   scene: SceneState,
   intent: Intent,
   turnCount: number,
   userTurns = 1,
 ): string {
-  const next = nextStoryNode(scene.node);
-  if (next === null) return ADVANCE_HOLD;
-
-  switch (scene.node) {
-    case "arrive":
-      return userTurns >= PROBE_AFTER_USER_TURNS ? advanceAllowText(next) : ADVANCE_HOLD;
-    case "probe": {
-      const asksDirectly = intent === "ask_core";
-      if (scene.trust >= REVEAL_AFTER_TRUST || asksDirectly || turnCount >= REVEAL_AFTER_TURNS) {
-        return advanceAllowText(next);
-      }
-      return ADVANCE_HOLD;
-    }
-    case "reveal": {
-      const revealTurn = scene.revealTurn;
-      if (revealTurn === undefined) return ADVANCE_HOLD;
-      return turnCount - revealTurn >= REVEAL_TO_ENDING_AFTER_TURNS ? advanceAllowText(next) : ADVANCE_HOLD;
-    }
-    case "ending":
-      return ADVANCE_HOLD;
-  }
+  const allowed = advanceAllowance(scene, intent, turnCount, userTurns);
+  return allowed === null ? ADVANCE_HOLD : advanceAllowText(allowed);
 }

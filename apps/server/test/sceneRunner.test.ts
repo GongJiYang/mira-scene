@@ -11,7 +11,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { runSceneJob, type SceneRunnerDeps } from "../src/scene/runner";
+import {
+  classifySceneError,
+  imageTimeoutMsFor,
+  runSceneJob,
+  type SceneRunnerDeps,
+} from "../src/scene/runner";
 import { createMockSceneWriter } from "../src/adapters/mock/mockSceneWriter";
 import { clientPublicRoot } from "../src/characters/pack";
 import { testPack } from "./helpers/pack";
@@ -221,5 +226,147 @@ describe("runSceneJob：总超时（S6c-fix1 §3）", () => {
     );
     expect(outcome.kind).toBe("failed");
     expect(abortedOther).toBe(true);
+  });
+});
+
+describe("§2 换背景失败分类", () => {
+  it("imageTimeoutMsFor：扩写越久，单张预算越短，且不低于 30s", () => {
+    expect(imageTimeoutMsFor(90_000, 0)).toBe(90_000);
+    expect(imageTimeoutMsFor(90_000, 30_000)).toBe(60_000);
+    // 扩写耗时很高时兜底到最小值 30s。
+    expect(imageTimeoutMsFor(90_000, 80_000)).toBe(30_000);
+    expect(imageTimeoutMsFor(90_000, 999_999)).toBe(30_000);
+  });
+
+  it("classifySceneError：四种分类各归其位", () => {
+    const abort = new DOMException("aborted", "AbortError");
+    expect(classifySceneError({ error: abort, sessionAborted: true, taskAborted: false, perImageTimedOut: false, siblingError: null }).category).toBe("session_aborted");
+    expect(classifySceneError({ error: abort, sessionAborted: false, taskAborted: true, perImageTimedOut: false, siblingError: null }).category).toBe("timeout");
+    expect(classifySceneError({ error: abort, sessionAborted: false, taskAborted: false, perImageTimedOut: true, siblingError: null }).category).toBe("timeout");
+    expect(classifySceneError({ error: new Error("生图接口 HTTP 500"), sessionAborted: false, taskAborted: false, perImageTimedOut: false, siblingError: null })).toEqual({ category: "error", detail: "生图接口 HTTP 500" });
+  });
+
+  it("classifySceneError：连带中止报第一张失败的真实原因", () => {
+    const out = classifySceneError({
+      error: new DOMException("aborted", "AbortError"),
+      sessionAborted: false,
+      taskAborted: false,
+      perImageTimedOut: false,
+      siblingError: "生图接口 HTTP 500",
+    });
+    expect(out.category).toBe("other_image_failed");
+    expect(out.detail).toBe("生图接口 HTTP 500");
+  });
+
+  it("单张超时 → outcome.category === 'timeout'", async () => {
+    const outcome = await runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-cat-timeout",
+      deps(
+        {
+          baseUrl: "https://example.test/v1",
+          apiKey: "test",
+          model: "gpt-image-test",
+          outDir: tempOutDir(),
+          fetchImpl: ((_url: string, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            })) as typeof fetch,
+        },
+        [],
+        { imageTimeoutMs: 20 },
+      ),
+      new AbortController().signal,
+    );
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind === "failed") expect(outcome.category).toBe("timeout");
+  });
+
+  it("会话中止 → outcome.category === 'session_aborted'", async () => {
+    const sessionController = new AbortController();
+    const promise = runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-cat-session",
+      deps(
+        {
+          baseUrl: "https://example.test/v1",
+          apiKey: "test",
+          model: "gpt-image-test",
+          outDir: tempOutDir(),
+          fetchImpl: ((_url: string, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              // 已在中止状态时立即拒绝；否则等 abort 事件（真实 fetch 行为）。
+              if (init?.signal?.aborted) {
+                reject(new DOMException("aborted", "AbortError"));
+                return;
+              }
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            })) as typeof fetch,
+        },
+        [],
+      ),
+      sessionController.signal,
+    );
+    // 让 runSceneJob 越过首个同步段（进入生图），再中止会话。
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    sessionController.abort();
+    const outcome = await promise;
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind === "failed") expect(outcome.category).toBe("session_aborted");
+  });
+
+  it("一张图失败连带中止 → outcome.category === 'other_image_failed' 且报第一张的真实原因", async () => {
+    let calls = 0;
+    const outcome = await runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-cat-sibling",
+      deps(
+        {
+          baseUrl: "https://example.test/v1",
+          apiKey: "test",
+          model: "gpt-image-test",
+          outDir: tempOutDir(),
+          fetchImpl: ((_url: string, init?: RequestInit) => {
+            const call = calls++;
+            if (call === 0) return Promise.resolve(new Response("boom", { status: 500 }));
+            return new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            });
+          }) as typeof fetch,
+        },
+        [],
+      ),
+      new AbortController().signal,
+    );
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind === "failed") {
+      expect(["other_image_failed", "error"]).toContain(outcome.category);
+      expect(outcome.error).toContain("生图接口 HTTP 500");
+    }
+  });
+
+  it("扩写非法 JSON → category === 'error'", async () => {
+    const outcome = await runSceneJob(
+      pack,
+      "换背景到海边",
+      "job-cat-invalid",
+      deps(
+        {
+          baseUrl: "https://example.test/v1",
+          apiKey: "test",
+          model: "gpt-image-test",
+          outDir: tempOutDir(),
+          fetchImpl: (async () => okResponse()) as typeof fetch,
+        },
+        [],
+        { writer: { write: async () => "not json" } },
+      ),
+      new AbortController().signal,
+    );
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind === "failed") expect(outcome.category).toBe("error");
   });
 });

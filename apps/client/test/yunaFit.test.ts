@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   FIT_PRESETS,
   fitModel,
+  LIVE_FIT_PRESETS,
   MOBILE_MAX_WIDTH,
   MODEL_BOUNDS,
+  modelBBoxTopPx,
   presetFor,
   type ModelBounds,
 } from "../src/render/live2d/cubism/fit";
@@ -124,6 +126,24 @@ describe("fitModel：属性测试（任意画布宽高比，人物包围盒都�
       ),
       { numRuns: 500 },
     );
+  });
+
+  it("§5.2：手机端顶部安全区下移后，人物包围盒顶部低于标题胶囊底部", () => {
+    // 与 live.css 的 --mobile-top-safe 一致（96px + safe-area-inset-top；Playwright 下 safe-top=0）。
+    const MOBILE_TOP_SAFE_PX = 96;
+    const TITLE_PILL_BOTTOM_PX = 96; // 顶栏 + 标题胶囊底部高度（与 --mobile-top-safe 一致）
+    for (const [w, h] of [[390, 844], [430, 932], [360, 780], [412, 915]] as const) {
+      const canvasH = h - MOBILE_TOP_SAFE_PX;
+      const modelTopInCanvas = modelBBoxTopPx(w, canvasH, MODEL_BOUNDS, LIVE_FIT_PRESETS.liveMobile);
+      const modelTopOnScreen = MOBILE_TOP_SAFE_PX + modelTopInCanvas;
+      expect(modelTopOnScreen, `${w}x${h} 头顶被标题胶囊遮挡`).toBeGreaterThanOrEqual(TITLE_PILL_BOTTOM_PX);
+    }
+  });
+
+  it("modelBBoxTopPx：人物顶部在画布内且非负", () => {
+    const top = modelBBoxTopPx(390, 748, MODEL_BOUNDS, LIVE_FIT_PRESETS.liveMobile);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top).toBeLessThan(748);
   });
 
   it("任意对称包围盒 + 零偏移：映射后中心在原点", () => {

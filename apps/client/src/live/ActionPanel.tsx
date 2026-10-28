@@ -17,7 +17,9 @@ import type { StagePhase } from "../view/useStageViewModel";
 import type { Accent, Emotion } from "@mira/protocol";
 import type { LocalActionId } from "../render/live2d/localActions";
 
-const EMOTIONS = ["calm", "guarded", "sad", "warm", "surprised", "neutral"] as const satisfies readonly Emotion[];
+// §4.4：只列画面上可区分的情绪。`neutral` 与 `calm` 等价（EMOTION_PARAMS 均为空），
+// `surprised` 被 toYunaEmotion 映射到 `calm` → 二者删掉，不再出现在动作表。
+const EMOTIONS = ["calm", "guarded", "sad", "warm"] as const satisfies readonly Emotion[];
 const ACCENTS = [
   "love",
   "heart",
