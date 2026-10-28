@@ -767,10 +767,15 @@ body,
 /*
  * §5.2：手机端 Live2D 画布整体下移（顶部安全区），背景仍铺满全屏不受影响。
  * 画布下移不改构图缩放（渲染器按父容器尺寸算 fit，与位置无关），只把人物推离顶部胶囊。
+ *
+ * freeze-fix7 §2：`<canvas>` 是替换元素，`height: auto` 会取 canvas 固有宽高比，
+ * **不会被 top/bottom 撑开**——画布 CSS 尺寸与渲染器 `resize(clientWidth, clientHeight)` /
+ * `fitModel` 的取景不一致，人物被缩小并错位。改为显式高度：`calc(100% - 顶部安全区)`。
+ * 父容器 `.live-mobile-stage` 是 `inset: 0`（舞台全高），故 100% = 视口高。
  */
 .live-mobile .live-live2d-canvas {
   top: var(--mobile-top-safe);
-  height: auto;
+  height: calc(100% - var(--mobile-top-safe));
   bottom: 0;
 }
 
