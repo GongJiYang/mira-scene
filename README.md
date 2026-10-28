@@ -4,7 +4,7 @@
 
 - 仓库：https://github.com/GongJiYang/mira-scene
 - 演示录屏：⏳ 录制后补链接
-- 演示地址：未部署（部署方案见 `docs/deploy.md`），请按下面的本地启动说明体验
+- 演示地址：未部署（部署方案见 `docs/deploy.md`），请按下面的本地启动说明体验。部署后服务端会配好 Key，访问者打开页面就能直接体验真实模式，不用填 Key
 
 ---
 

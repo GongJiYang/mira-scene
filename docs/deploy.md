@@ -59,7 +59,11 @@ pnpm test && pnpm typecheck             # 可选：确认这台机器上也是�
 
 > 公开演示的建议：先用 `PROVIDER_MODE=mock` 上线验证页面、Live2D、语音播放都正常，再切 `real`。
 
-> 访问者也可在页面设置里填自己的 Key（只在其会话内存中使用）；服务器不配真实 Key 时，默认 Mock。
+> **让访问者直接体验真实模式**：在服务器 `.env` 填好 `DEEPSEEK_API_KEY`、`FISH_API_KEY`（生图再加 `IMAGE_API_KEY`）。访问者什么都不用填，页面默认 `auto`，服务端看到 Key 齐全就走真实模式，用的是这里配置的 Key。Key 的值不会下发到浏览器，也不写日志，前端只知道这次用的是服务端的 Key 还是访问者自己的 Key（D49）。
+>
+> Key 的优先级是：访问者在「设置」里填的 > 服务器 `.env` 的。访问者自己填的 Key 只在他那次会话的内存里用。服务器没配真实 Key、访问者也没填时，走 Mock。
+>
+> 所有访问者共用这里的额度，靠 `SESSION_TURN_LIMIT` / `DAILY_TURN_LIMIT` 限额。
 
 ## 4. 用 systemd 跑服务端
 
