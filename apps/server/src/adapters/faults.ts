@@ -44,6 +44,19 @@ export function parseFaults(raw: string | readonly string[] | undefined | null):
   return [...faults];
 }
 
+/**
+ * freeze-fix2 §2：是否恢复已有会话。
+ * 只有「已有会话的故障」与「本次 hello 请求的故障」按集合相等（与顺序、重复无关）才恢复；
+ * 不相等 → 按新会话处理（让请求的 faults 生效，且不把旧会话的 faults 混进来）。
+ */
+export function shouldResume(existing: readonly Fault[], requested: readonly Fault[]): boolean {
+  const a = new Set(existing);
+  const b = new Set(requested);
+  if (a.size !== b.size) return false;
+  for (const fault of a) if (!b.has(fault)) return false;
+  return true;
+}
+
 /** LLM 首 token 超时（毫秒）；非法值直接抛错，不静默降级。 */
 export function readFirstTokenTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env[FIRST_TOKEN_TIMEOUT_ENV]?.trim();

@@ -6,7 +6,43 @@ import { composeScenePrompt, SCENE_STYLE_LOCK } from "../src/scene/prompt";
 import { admitSceneJob, sceneJobReducer, initialSceneJobState, SCENE_COOLDOWN_MS, SCENE_MAX_JOBS } from "../src/scene/job";
 import { testPack } from "./helpers/pack";
 
-const TRIGGER = /换背景|换场景|换个地方|换个背景|背景换成|背景改成|场景换成|带我去|想看你在|去.{0,6}(吧|呀|看看)/;
+const TRIGGER = testPack("yuna").sceneTriggerPattern;
+
+describe("sceneTriggers 表驱动契约（freeze-fix2 §1）", () => {
+  // 用真实 content.json 编译出的正则（testPack 从 characters/yuna 加载）。
+  const pattern = testPack("yuna").sceneTriggerPattern;
+
+  const mustHit = [
+    "带我去海边吧",
+    "换个背景",
+    "背景换成雪山",
+    "我们去海边吧",
+    "一起去游乐园吧",
+    "去海边看看",
+    "想看你在樱花树下",
+    "换个地方聊",
+  ];
+
+  const mustNotHit = [
+    "嗯，去睡吧",
+    "去睡觉吧",
+    "早点去休息吧",
+    "快去吃饭吧",
+    "去洗澡吧",
+    "你去忙吧",
+    "我去倒杯水",
+    "去吧",
+    "那你去吧",
+  ];
+
+  it.each(mustHit)("必须命中：%s", (text) => {
+    expect(detectSceneRequest(text, pattern).hit).toBe(true);
+  });
+
+  it.each(mustNotHit)("必须不命中：%s", (text) => {
+    expect(detectSceneRequest(text, pattern).hit).toBe(false);
+  });
+});
 
 describe("detectSceneRequest（S6c §1）", () => {
   it("命中关键词", () => {
