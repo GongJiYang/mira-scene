@@ -16,6 +16,7 @@
 | [`architecture/core-truths.md`](architecture/core-truths.md) | 第一性原理：四条不可再分的事实 |
 | [`architecture/quality-scenarios.md`](architecture/quality-scenarios.md) | 质量属性场景 Top 5 |
 | [`architecture/challenges.md`](architecture/challenges.md) | 对两条默认假设的挑战（轮次制、LLM 直接出指令） |
+| [`architecture/后续方向.md`](architecture/后续方向.md) | 交付 v1.1、AI 视频 → Live2D 动作管线（首尾闭环 + 渲染比对拟合）、平台与玩法方向 |
 | [`architecture/live2d-pipeline.md`](architecture/live2d-pipeline.md) | AI 自动化 Live2D 流水线：做法、迭代记录、为什么没有用于交付 |
 | [`deploy.md`](deploy.md) | 部署到服务器（systemd + Caddy） |
 
